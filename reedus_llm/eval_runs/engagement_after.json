@@ -1,0 +1,122 @@
+{
+ "label": "base-persona-1557tok-AFTER",
+ "transcripts": {
+  "unknown_hobby": [
+   [
+    "yo whats good",
+    "Yo, what’s good? What’ve you been up to lately? Or is it time for a new game drop we should both check out? 🎮✨"
+   ],
+   [
+    "not much, been grinding on naruto ultimate ninja storm 4 lately",
+    "Oh, that one’s got the *real* stuff, like how Naruto and Sasuke finally meet in a fight that feels earned. What's your go-to playstyle? And what moment from the arc do you keep replaying? 🔥"
+   ],
+   [
+    "its a 3d arena fighter, you do these huge ultimate jutsu cinematics",
+    "Ain’t nothin’ like that cinematic burst of chakra, feels like a battle between two legends. What’s your favorite ultimate? And does it ever get weirdly quiet before the explosion hits? 💥"
+   ],
+   [
+    "i main madara obito comp its so tech",
+    "Madara and Obito in a 3D arena? That’s peak tech, the way they move, the shadows, that split-second hesitation before the jutsu hits. What’s your go-to combo between them? 🌀"
+   ],
+   [
+    "yeah obito can phase through stuff so you bait whiffs",
+    "Oh, the phase bait, classic. Like a ghost slipping through walls just to set up a trap. What’s your playstyle when you’re trying to *not* get caught? 🕵️‍♂️"
+   ],
+   [
+    "good players read it instantly though",
+    "Right, like a chess match with chakra. You can’t just phase through, you gotta *feel* the air shift before it happens. What does that feel like in your hands? 🔍"
+   ],
+   [
+    "probably switch to a rushdown team honestly",
+    "Switching to rushdown? That’s where the real tension lives, no time for flinching, just pure speed and pressure. What’s your go-to rush-down combo when you’re on a roll? 🚀"
+   ]
+  ],
+  "emotional": [
+   [
+    "hey",
+    "yo, what's up? Anything fun you've been into lately? Or just hitting the ground running again? 😄"
+   ],
+   [
+    "im doing alright i guess",
+    "Nice, what’s on your radar? Game night, a new series you’re diving into, or just chillin’ with the vibes? 😎"
+   ],
+   [
+    "been feeling kinda down lately honestly",
+    "Ain’t no shame in that. What’s been dragging you down exactly? Or just the quiet kind of low that settles in when everything feels… slow? 🫂"
+   ],
+   [
+    "i make apps and the growth just isnt what i wanted",
+    "That’s real. Makes sense, building things takes fire, not just momentum. What’s one small win you’ve seen lately that made it feel worth the grind? 🔍"
+   ],
+   [
+    "like two years now",
+    "Two years? That’s a long stretch, like building something from the ground up with no map. What’s one feature or user interaction that *felt* right when it launched, even if it didn’t blow up? 🚀"
+   ],
+   [
+    "i guess i just wanted to feel like it was working",
+    "Yeah, that’s the sweet spot. Feeling like it's working isn’t about numbers, it’s about *connection*. What’s one tiny moment you’ve had where someone used your app in a way you didn’t expect? 🫶"
+   ],
+   [
+    "a few users did email me saying they liked it",
+    "Oh. That’s gold, real, human feedback. What did they say exactly? 🔍 (And honestly, that’s more than most apps ever get.)"
+   ]
+  ],
+  "opinion": [
+   [
+    "hallo",
+    "Hey, what's up? Just checking in, saw you were active. Anything fun going on lately or something you’re diving into?"
+   ],
+   [
+    "i think pineapple on pizza is good actually",
+    "Haha, okay, I’ll go with that. What’s the secret sauce on your pineapple pizza? Is it just fire-roasted, or does it have a side of rebellion and cheese?"
+   ],
+   [
+    "chaos agent, i put it on pepperoni",
+    "Oh man, that’s a full-on pizza rebellion. Pepperoni and chaos agent? That's not just toppings, it's a tactical alliance. How does the chaos agent react when pepperoni tries to sneak in? Does it explode or just stare silently like “I knew this would happen”?"
+   ],
+   [
+    "i draw the line at corn though",
+    "Fair, corn’s the wildcard. Like a rogue NPC that shows up uninvited and ruins everything. What would you do if corn tried to join your pizza? Probably ban it with a firm \"no, not today.\" 😂"
+   ],
+   [
+    "whats your take on hot dogs being sandwiches",
+    "Hot dogs as sandwiches? That’s a legal battle in the making. A hot dog is a sandwich *if* it's got bread on both ends and you're not just holding it like a stick. But honestly, if it's a hot dog, it's already doing its own thing. Like a rebel with a bun. What do you think? Does it need to be called \"a hot dog\" or just… *the sandwich*?"
+   ],
+   [
+    "thats a cop out answer",
+    "Damn, you’re right, that’s a cop-out. A hot dog *is* a sandwich when it's got two buns and someone's been cooking for 20 minutes straight. So what if we just called it \"the grilled rebellion\"? Or maybe \"a hot dog with emotional depth\"… What do you think, now? 😏"
+   ]
+  ],
+  "unknown_media": [
+   [
+    "sup",
+    "Yo, what's up? Been doing anything fun lately? Or just scrolling through the same old game loop again? 😏"
+   ],
+   [
+    "been watching severance",
+    "Oh man, Severance, the way it cuts through the noise with that quiet dread... what scene just hit you hardest? Or is it the silence between lines that’s really messing with you? 🤔"
+   ],
+   [
+    "people split their memories so work self and home self dont share anything",
+    "That’s wild, like a mental split where the work self forgets it ever had a home life. What part of that feels most unsettling to you? Like, does it make you question who's really in charge of your own mind? 🤯"
+   ],
+   [
+    "its funny and creepy at the same time",
+    "Yeah, absolutely, it’s like the show built a whole world where people *know* they’re not themselves… but no one says “wait, who are we really?” 😂💀 What’s your favorite moment when it goes full creepy?"
+   ],
+   [
+    "the ending is divisive",
+    "Ugh, the ending? That’s like a truth bomb dropped in a quiet office, everyone thinks they know what happened, but no one really does. What part of it feels most ambiguous to you? 🤯"
+   ]
+  ]
+ },
+ "metrics": {
+  "question_rate": 100.0,
+  "late_question_rate": 100.0,
+  "unknown_handled": 100.0,
+  "deflections": 0.0,
+  "dead_ends": 0.0,
+  "self_reference": 0.0,
+  "mean_words": 32.68
+ }
+}

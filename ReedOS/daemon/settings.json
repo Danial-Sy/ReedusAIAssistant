@@ -1,0 +1,8 @@
+{
+  "speedLimit": 70,
+  "watchdogMs": 400,
+  "llmEnabled": true,
+  "chatInput": "type",
+  "chatSpeak": true,
+  "chatRoute": "mobo"
+}

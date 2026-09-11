@@ -1,0 +1,48 @@
+[reedus] router split ON: qwen3-1.7b-Q4_K_M.gguf threads=4 n_ctx=2048 cache=2048MB (+1024MB main = 3072MB of prompt cache)
+
+==========================================================================
+DEV SET  (42 cases, TUNED ON, treat as a floor)
+  6 excluded as few-shot primers
+==========================================================================
+
+  accuracy 32/42 (76%)   precision on 'none' 67%   recall on corrections 100%
+  FALSE POSITIVES (the expensive failure):
+     -> wrong via llm     'sharingan literally means copy wheel eye'
+     -> wrong via llm     'kcm2 literally means kurama chakra mode 2'
+     -> vague via llm     'that makes no sense to me why would he do that'
+     -> vague via llm     'mixing up my arcs lol'
+     -> vague via llm     'anyway you watch jjk?'
+     -> vague via llm     'i mean the war arc one'
+     -> vague via llm     'wait i meant sasuke not itachi'
+     -> tone  via llm     'bro the animation on that'
+  right signal, wrong class:
+     exp wrong got vague via llm  'wait what since when'
+     exp wrong got vague via llm  'huh? since when does he have that'
+
+==========================================================================
+HOLDOUT  (47 cases, NEVER TUNED ON, the real number)
+==========================================================================
+
+  accuracy 37/47 (79%)   precision on 'none' 74%   recall on corrections 90%
+  FALSE POSITIVES (the expensive failure):
+     -> wrong via llm     'bankai literally means final release'
+     -> wrong via llm     'thats from demons souls originally'
+     -> wrong via llm     'those are from the flashback arcs'
+     -> vague via llm     'im mixing up the timelines again'
+     -> vague via llm     'who else did they sign that year'
+     -> vague via llm     'ok but what about the TYBW animation'
+     -> vague via llm     'bro the scadutree grind'
+  missed corrections (cheap, costs one training pair):
+     exp tone  via llm     'youre being weird again'
+     exp vague via llm     'gun to your head'
+  right signal, wrong class:
+     exp wrong got vague via llm  'from all might??'
+
+==========================================================================
+GENERALISATION
+==========================================================================
+  precision on 'none'   dev 67%  ->  holdout 74%
+  recall on corrections dev 100%  ->  holdout 90%
+
+  Generalises, but holdout false positives exist. Each one becomes a bad DPO
+  pair. Fix the prompt, then MOVE those cases into CASES so the holdout stays clean.

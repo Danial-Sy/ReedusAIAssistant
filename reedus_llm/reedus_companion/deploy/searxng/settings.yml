@@ -1,0 +1,73 @@
+# searxng settings template. run_searxng.sh installs it and substitutes a fresh secret_key
+# (never commit a real one here). engines: below is merged into the image defaults by name.
+use_default_settings: true
+
+server:
+  secret_key: "__SECRET_KEY__"
+  # nothing ever asks for thumbnails through the json api
+  image_proxy: false
+  # loopback only, one client. the limiter just 429s a burst of follow-up lookups
+  limiter: false
+
+search:
+  # json is off by default: without this the html UI works and ?format=json returns 403
+  formats:
+    - html
+    - json
+  autocomplete: ""
+  default_lang: "en"
+  safe_search: 0
+
+outgoing:
+  # this sits inside a spoken turn, a slow engine is worse than a missing one
+  request_timeout: 4.0
+  max_request_timeout: 8.0
+  pool_connections: 30
+  pool_maxsize: 15
+
+# names must match the image exactly, an unknown name is silently ignored (marginalia was).
+# `run_searxng.sh engines` cross-checks this file against the instance's /config.
+engines:
+  # off: these refuse a home IP (rate limit / CAPTCHA), and a CAPTCHAing engine holds a
+  # connection until the timeout and delays everyone that would have answered
+  - name: brave
+    disabled: true
+  - name: duckduckgo
+    disabled: true
+  - name: startpage
+    disabled: true
+
+  # off: in the general category so every lookup queries them, but they only answer
+  # translation / currency shapes. four timeouts per search, zero snippets.
+  - name: currency
+    disabled: true
+  - name: dictzone
+    disabled: true
+  - name: lingva
+    disabled: true
+  - name: mymemory translated
+    disabled: true
+
+  # off: all three refused this box (CAPTCHA / suspended)
+  - name: qwant
+    disabled: true
+  - name: yahoo
+    disabled: true
+  - name: yep
+    disabled: true
+
+  # on: measured answering from this box. google cse + bing + duckduckgo web = three
+  # independent snippet sources, which is the whole point. each extra engine is a request the turn waits on.
+  - name: bing
+    disabled: false
+  # scrapes the html endpoint instead of the api, which is why it answers where `duckduckgo` CAPTCHAs
+  - name: duckduckgo web
+    disabled: false
+
+  # returned nothing on test queries but it's an independent index, kept for diversity
+  - name: mojeek
+    disabled: false
+  - name: wikidata
+    disabled: false
+  - name: wikipedia
+    disabled: false

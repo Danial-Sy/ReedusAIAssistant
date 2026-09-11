@@ -1,0 +1,28 @@
+# example systemd unit for the voice loop on the xeon. install after wake mode is verified:
+#   sudo cp reedus-voice.service.example /etc/systemd/system/reedus-voice.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now reedus-llama-main reedus-llama-router reedus-voice
+# logs: journalctl -u reedus-voice -f. needs mic + speaker plugged in and the user in `audio`.
+
+[Unit]
+Description=Reedus companion (wake-word voice loop)
+After=network-online.target sound.target reedus-llama-main.service reedus-llama-router.service
+Wants=network-online.target
+# soft deps, voice still starts if run_llama_servers.sh manages the servers
+Wants=reedus-llama-main.service reedus-llama-router.service
+
+[Service]
+Type=simple
+User=dain
+Group=audio
+WorkingDirectory=/mnt/nvme/reedus/reedus_llm
+Environment=HOME=/home/dain
+# run_voice.sh sources xeon.env and resolves the interpreter via REEDUS_CONDA_ENV, systemd
+# doesn't inherit conda. at boot he asks "local or cloud?", nobody answers, he falls to local.
+ExecStart=/bin/bash /mnt/nvme/reedus/reedus_llm/reedus_companion/deploy/run_voice.sh --wake
+Restart=on-failure
+RestartSec=5
+# keep whisper/kokoro from being OOM-killed first
+OOMScoreAdjust=200
+
+[Install]
+WantedBy=multi-user.target

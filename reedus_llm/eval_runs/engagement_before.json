@@ -1,0 +1,122 @@
+{
+ "label": "base-persona-1720tok-BEFORE",
+ "transcripts": {
+  "unknown_hobby": [
+   [
+    "yo whats good",
+    "What’s good?, just dropped into the zone with a new patch on Elden Ring. How's your run going?"
+   ],
+   [
+    "not much, been grinding on naruto ultimate ninja storm 4 lately",
+    "Naruto: Ultimate Ninja Storm 4, that’s the one with the brutal chakra dash and every fight feels like a personal vendetta. What move combo are you grinding on right now?"
+   ],
+   [
+    "its a 3d arena fighter, you do these huge ultimate jutsu cinematics",
+    "Oh man, the 3D arena fights with those ultimate jutsu cinematics, every explosion feels like a full-blown battle hymn. What’s the most dramatic one you’ve seen?"
+   ],
+   [
+    "i main madara obito comp its so tech",
+    "Madara and Obito in 3D arena fights? That’s peak tech, every move feels like a cursed ritual. What’s the most intense clash you’ve pulled off between them yet?"
+   ],
+   [
+    "yeah obito can phase through stuff so you bait whiffs",
+    "Oh, Obito phasing through stuff to bait whiffs, that’s pure chaos. What’s the exact moment you saw it go *too* smooth? 🤯"
+   ],
+   [
+    "good players read it instantly though",
+    "Right, and the best players turn that into a trap, not just a glitch. What’s your go-to counter when Obito starts phasing? 🎯"
+   ],
+   [
+    "probably switch to a rushdown team honestly",
+    "Switching to a rushdown team? That’s cold precision, turns the phase into a setup. What’s your favorite rushdown character for that playstyle? 🚀"
+   ]
+  ],
+  "emotional": [
+   [
+    "hey",
+    "Hey, what's up? Got something cool going on? 🙃"
+   ],
+   [
+    "im doing alright i guess",
+    "Nice, what’ve you been up to lately? Any good runs or moments that popped out at you? 🎮✨"
+   ],
+   [
+    "been feeling kinda down lately honestly",
+    "Ain't no shame in that. What’s been weighing on you lately? Sometimes just talking helps, or a good distraction, like a solid game run. Want to share what's going on? 💬✨"
+   ],
+   [
+    "i make apps and the growth just isnt what i wanted",
+    "Oh man, that’s real. What’s the app doing? And what kind of growth are you seeing, users, revenue, or just traction? Maybe we can find a way to tweak it together. 🚀"
+   ],
+   [
+    "like two years now",
+    "Two years, that’s a long haul. What kind of app is it? And what does \"growth\" mean exactly, more users, features, or just momentum? Maybe we can spot where it's stuck and fix it together. 🚀"
+   ],
+   [
+    "i guess i just wanted to feel like it was working",
+    "Got it, feeling like it’s working matters more than numbers sometimes. What does “working” mean to you? Like, what would make you feel like the app is finally *doing* something real? 🤔✨"
+   ],
+   [
+    "a few users did email me saying they liked it",
+    "Oh, that’s gold. Real feedback from people actually using it? That means it *is* working, even if slowly. What do they say they like most about it? 🎯"
+   ]
+  ],
+  "opinion": [
+   [
+    "hallo",
+    "yo, what's up? 🙌 Just popped in to see if you're into anything fun. Any games, shows, or weird side quests that just hit your radar today?"
+   ],
+   [
+    "i think pineapple on pizza is good actually",
+    "Haha, yeah, pineapple on pizza? That’s a *wild* combo. What’s the vibe? Like, is it sweet and crispy or just aggressively bold? 🍕🍍"
+   ],
+   [
+    "chaos agent, i put it on pepperoni",
+    "Oh man, chaos agent on pepperoni? That’s a *full* flavor explosion, sweet, spicy, chaotic. What’s the sauce like? Is it more of a chili oil or something that actually dances with the cheese? 🍕🔥"
+   ],
+   [
+    "i draw the line at corn though",
+    "Haha, fair, corn’s the wildcard. I’d say it’s like adding a rogue character to the pizza roster: unexpected, but maybe not for everyone. What about that chaos agent? Does it make you feel like you’re in an action movie or just… weirdly confident? 🎮💥"
+   ],
+   [
+    "whats your take on hot dogs being sandwiches",
+    "Hot dogs as sandwiches? That’s a *full* redefinition, it turns a snack into a statement. Like, if you’re doing it right, the hot dog’s not just \"on\" bread, it's *in* the sandwich like a hero with a mission. What makes your version feel official? 🌮🔥"
+   ],
+   [
+    "thats a cop out answer",
+    "You’re right, I *am* a cop-out. Let’s go hard: hot dogs as sandwiches? That’s not just food, that's a declaration of war on the rules. What if the ketchup is the condiment and the bun is the battlefield? 🌮💥 How do you eat it when you're *really* into it?"
+   ]
+  ],
+  "unknown_media": [
+   [
+    "sup",
+    "Yo, what’s up? Been meaning to check in on that Elden Ring run you’ve been having. Where are you at now?"
+   ],
+   [
+    "been watching severance",
+    "Oh man, the way they handle that corporate silence in Severance, like the office is just a hollow shell. What’s your favorite scene so far?"
+   ],
+   [
+    "people split their memories so work self and home self dont share anything",
+    "That’s wild, like the company didn’t just divide jobs, they split people in half. What’s the first thing you noticed about how that breaks trust or identity?"
+   ],
+   [
+    "its funny and creepy at the same time",
+    "Totally, like a dream where you wake up and forget your own name. What’s the one moment that made it feel both funny *and* cold?"
+   ],
+   [
+    "the ending is divisive",
+    "Yeah, that ending? Feels like a punchline with no punch, everyone walks away with their own truth. What did you think the \"real\" ending was supposed to be?"
+   ]
+  ]
+ },
+ "metrics": {
+  "question_rate": 100.0,
+  "late_question_rate": 100.0,
+  "unknown_handled": 100.0,
+  "deflections": 0.0,
+  "dead_ends": 0.0,
+  "self_reference": 0.0,
+  "mean_words": 29.2
+ }
+}

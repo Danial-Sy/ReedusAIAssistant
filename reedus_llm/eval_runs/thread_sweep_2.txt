@@ -1,0 +1,28 @@
+[0;93m2026-08-10 23:11:21.766783531 [W:onnxruntime:Default, device_discovery.cc:285 GetGpuDevices] Failed to detect devices under "/sys/class/drm/card0": device_discovery.cc:94 ReadFileContents Failed to open file: "/sys/class/drm/card0/device/vendor"[m
+[reedus] llama.cpp[main]: threads=14 n_batch=512 n_ubatch=512 n_ctx=4096 prompt_cache=ram
+[reedus] router split ON: qwen3-1.7b-Q4_K_M.gguf threads=2 n_ctx=2048 cache=2048MB (+1024MB main = 3072MB of prompt cache)
+[reedus] llama.cpp[router]: threads=2 n_batch=512 n_ubatch=512 n_ctx=2048 prompt_cache=ram
+[reedus] router model loaded in 0.5s
+
+model load: 1.3s   embedder: fastembed   warm: 32.7s
+
+=== turn 1: 'who won the world cup'  ->  7.15s
+    model calls: 3   prompt tokens 2581   generated 33   6.39s (89% of turn)
+      call 1: router search-router  prompt=  276 gen=  21    1.05s
+      call 2: main   extract        prompt=  326 gen=   6    1.67s
+      call 3: main   persona        prompt= 1979 gen=   6    3.68s
+    router tier: 1 call(s)  1.05s (15% of turn, 16% of model time)
+    non-inference breakdown:
+      web_search (network)                      678.3 ms  x1
+      prompt assembly (_system)                  66.7 ms  x1
+        · episodic recall (sqlite+cosine)        58.0 ms  x1
+        · embedding (fastembed)                  16.1 ms  x4
+      episodic write (embed+insert)               8.6 ms  x2
+        · bulletin relevance gate                 8.6 ms  x1
+      everything else (python/regex/io)           6.8 ms
+    reply: 'Spain won the World Cup.'
+
+TOTAL 1 turns: 7.1s  (7.1s/turn)
+
+router JSON:
+  search-router     1 ok    0 fail    0.0% fail

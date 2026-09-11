@@ -1,0 +1,8 @@
+WARNING: Ignoring unknown variable 'assembly_mobodeck' in file reedus_chassis.scad, line 549
+Compiling design (CSG Products normalization)...
+Normalized CSG tree has 616 elements
+Geometries in cache: 281
+Geometry cache size in bytes: 3149800
+CGAL Polyhedrons in cache: 1
+CGAL cache size in bytes: 345152
+Total rendering time: 0:00:00.961

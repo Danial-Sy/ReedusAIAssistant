@@ -1,0 +1,106 @@
+Collecting llama-cpp-python==0.3.34
+  Downloading llama_cpp_python-0.3.34.tar.gz (71.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 71.6/71.6 MB 83.7 MB/s  0:00:00
+
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting typing-extensions>=4.5.0 (from llama-cpp-python==0.3.34)
+  Downloading typing_extensions-4.16.0.tar.gz (113 kB)
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting numpy>=1.20.0 (from llama-cpp-python==0.3.34)
+  Downloading numpy-2.4.6.tar.gz (20.7 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 20.7/20.7 MB 84.6 MB/s  0:00:00
+
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting diskcache>=5.6.1 (from llama-cpp-python==0.3.34)
+  Downloading diskcache-5.6.3.tar.gz (67 kB)
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting jinja2>=2.11.3 (from llama-cpp-python==0.3.34)
+  Downloading jinja2-3.1.6.tar.gz (245 kB)
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting MarkupSafe>=2.0 (from jinja2>=2.11.3->llama-cpp-python==0.3.34)
+  Downloading markupsafe-3.0.3.tar.gz (80 kB)
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: llama-cpp-python, diskcache, jinja2, MarkupSafe, numpy, typing-extensions
+  Building wheel for llama-cpp-python (pyproject.toml): started
+  Building wheel for llama-cpp-python (pyproject.toml): finished with status 'done'
+  Created wheel for llama-cpp-python: filename=llama_cpp_python-0.3.34-py3-none-linux_x86_64.whl size=21026207 sha256=5e27b9e9a9ed40dcbb53255618934ab3e3e266580e64bfd9155a6e9f844d0583
+  Stored in directory: /tmp/pip-ephem-wheel-cache-mf6pytql/wheels/57/69/d0/3b788fa4eb5225c45b53bfc5e94b05b8fe62b2b7a94d22ce61
+  Building wheel for diskcache (pyproject.toml): started
+  Building wheel for diskcache (pyproject.toml): finished with status 'done'
+  Created wheel for diskcache: filename=diskcache-5.6.3-py3-none-any.whl size=45632 sha256=f551c0d41948b19167cad97e7739ca9c66073c568738cc8fda5416e671241c77
+  Stored in directory: /tmp/pip-ephem-wheel-cache-mf6pytql/wheels/9a/00/c1/495e13a91a1aca32716607479e4332e310de8db347aa1fe17e
+  Building wheel for jinja2 (pyproject.toml): started
+  Building wheel for jinja2 (pyproject.toml): finished with status 'done'
+  Created wheel for jinja2: filename=jinja2-3.1.6-py3-none-any.whl size=134897 sha256=80b2465f2da07e3e2ad77d5974669a8ffd981bf160c27916ce004c9301a9b137
+  Stored in directory: /tmp/pip-ephem-wheel-cache-mf6pytql/wheels/e3/d7/fa/1ed2e9b22167bafc58ea860c4c86090fb216b0b62386bd19a7
+  Building wheel for MarkupSafe (pyproject.toml): started
+  Building wheel for MarkupSafe (pyproject.toml): finished with status 'done'
+  Created wheel for MarkupSafe: filename=markupsafe-3.0.3-cp311-cp311-linux_x86_64.whl size=12620 sha256=0e915fb79ad741c6e8150740c34db9dc53ceee5285f1f8e6952b742c87ce5b62
+  Stored in directory: /tmp/pip-ephem-wheel-cache-mf6pytql/wheels/ac/90/3a/af03ec78873e5eccd6de1964332caf6a2469f4bd0024a4d724
+  Building wheel for numpy (pyproject.toml): started
+  Building wheel for numpy (pyproject.toml): finished with status 'done'
+  Created wheel for numpy: filename=numpy-2.4.6-cp311-cp311-linux_x86_64.whl size=10354620 sha256=d5676c6dc117c4e471c7b83446410822f26288620886de0a29d5d24315eee4d2
+  Stored in directory: /tmp/pip-ephem-wheel-cache-mf6pytql/wheels/b8/d6/7d/9785cc684f70970b1a3c0ea8a31043c07c55678ec5726afee2
+  Building wheel for typing-extensions (pyproject.toml): started
+  Building wheel for typing-extensions (pyproject.toml): finished with status 'done'
+  Created wheel for typing-extensions: filename=typing_extensions-4.16.0-py3-none-any.whl size=45571 sha256=7b287868219a57c010ead2e806638c6eea0bf44c7575422e31cfca116c2fdf6e
+  Stored in directory: /tmp/pip-ephem-wheel-cache-mf6pytql/wheels/cd/7b/05/8470842dfe947da794e4d91496991cc285240e86c169b201b6
+Successfully built llama-cpp-python diskcache jinja2 MarkupSafe numpy typing-extensions
+Installing collected packages: typing-extensions, numpy, MarkupSafe, diskcache, jinja2, llama-cpp-python
+  Attempting uninstall: typing-extensions
+    Found existing installation: typing_extensions 4.16.0
+    Uninstalling typing_extensions-4.16.0:
+      Successfully uninstalled typing_extensions-4.16.0
+  Attempting uninstall: numpy
+    Found existing installation: numpy 2.4.6
+    Uninstalling numpy-2.4.6:
+      Successfully uninstalled numpy-2.4.6
+  Attempting uninstall: MarkupSafe
+    Found existing installation: MarkupSafe 3.0.3
+    Uninstalling MarkupSafe-3.0.3:
+      Successfully uninstalled MarkupSafe-3.0.3
+  Attempting uninstall: diskcache
+    Found existing installation: diskcache 5.6.3
+    Uninstalling diskcache-5.6.3:
+      Successfully uninstalled diskcache-5.6.3
+  Attempting uninstall: jinja2
+    Found existing installation: Jinja2 3.1.6
+    Uninstalling Jinja2-3.1.6:
+      Successfully uninstalled Jinja2-3.1.6
+  Attempting uninstall: llama-cpp-python
+    Found existing installation: llama_cpp_python 0.3.34
+    Uninstalling llama_cpp_python-0.3.34:
+      Successfully uninstalled llama_cpp_python-0.3.34
+
+
+Successfully installed MarkupSafe-3.0.3 diskcache-5.6.3 jinja2-3.1.6 llama-cpp-python-0.3.34 numpy-2.4.6 typing-extensions-4.16.0

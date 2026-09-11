@@ -1,0 +1,79 @@
+# git shouldn't carry the corpus (30 GB) or the models (31 GB); all of it is regenerable
+# from a build script or a download. only source, prompts and small hand data are tracked.
+
+# corpus + indexes (rebuild: knowledge/build_corpus.py + build_fandom.py)
+reedus_llm/reedus_companion/memory/knowledge/
+reedus_llm/reedus_companion/memory/*.sqlite
+reedus_llm/reedus_companion/memory/*.sqlite-wal
+reedus_llm/reedus_companion/memory/*.sqlite-shm
+reedus_llm/reedus_companion/memory/*.bak-*
+
+# models + build intermediates (rebuild: deploy/export_gguf.sh)
+reedus_llm/reedus_companion/artifacts/
+reedus_llm/merged/
+reedus_llm/weights/
+reedus_llm/gguf/
+reedus_llm/outputs/
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.pth
+
+# fastembed re-fetches these on first use
+reedus_llm/reedus_companion/models/fastembed/
+
+# audition renders are output (voice/audition.py regenerates them); the reference_voices/
+# clips are the inputs and stay tracked
+reedus_llm/reedus_companion/models/voice/
+
+# vector shards / packed data
+*.npy
+*.f32
+*.jsonl.idx
+
+# training data dumps (dpo_sample.py regenerates)
+reedus_llm/data/
+reedus_llm/dpo_samples*.jsonl
+reedus_llm/*.log
+
+# python
+__pycache__/
+*.py[cod]
+.venv*/
+.pytest_cache/
+*.egg-info/
+
+# editor / os
+.DS_Store
+*.swp
+
+# keep these despite the patterns above: small, hand-written
+!reedus_llm/reedus_companion/memory/bulletin.md
+!reedus_llm/reedus_companion/memory/topics.json
+!reedus_llm/dpo_labels.json
+!reedus_llm/data/dpo_prompts*.jsonl
+
+# review tarballs
+_reedus_src_audit*.tgz
+
+# staged for deletion by hand
+_to_delete/
+
+# cloud mode secrets and spend ledger
+xeon.secrets.env
+**/deploy/xeon.secrets.env
+cloud_ledger.json
+
+# wake-word training workdir (20 GB, all regenerable via deploy/train_wakeword.sh). has two
+# nested git checkouts (openWakeWord, piper-sample-generator) that must not become submodules
+reedus_wakeword/
+
+# render scratch (render_views.py regenerates)
+ReedusMech/renders/test*.stl
+
+# tauri build output
+ReedOS/reedos-app/src-tauri/target/
+
+# ReedOS shared passcode, in the clear on the robot's disk
+ReedOS/daemon/auth.json

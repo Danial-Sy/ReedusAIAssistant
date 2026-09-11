@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 160" role="img" aria-label="ReedOS app icon and wordmark lockup">
+  <title>ReedOS, app icon lockup</title>
+  <rect x="32" y="28" width="104" height="104" rx="24" fill="#1F4D3A"/>
+  <path d="M84,118 C68,103 59,84 63,60" stroke="#5E8A69" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M84,118 C97,107 104,92 103,74" stroke="#5E8A69" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+  <path d="M84,118 C83,98 83,80 84,64" stroke="#F2EDDC" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+  <rect x="76.5" y="38" width="15" height="30" rx="7.5" fill="#C9A15C"/>
+  <path d="M84,38 L84,27" stroke="#F2EDDC" stroke-width="3" stroke-linecap="round"/>
+  <text x="168" y="97" font-family="'Trebuchet MS','Segoe UI',Verdana,sans-serif" font-size="58" font-weight="700" letter-spacing="0.5" fill="#1F4D3A">Reed<tspan fill="#6B4226">OS</tspan></text>
+</svg>

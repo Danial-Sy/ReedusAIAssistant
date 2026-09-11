@@ -1,0 +1,4 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+# optional, camera streaming:
+# opencv-python-headless>=4.9

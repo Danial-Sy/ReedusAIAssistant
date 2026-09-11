@@ -1,0 +1,30 @@
+[reedus] router split ON: qwen3-1.7b-Q4_K_M.gguf threads=4 n_ctx=2048 cache=2048MB (+2048MB main = 4096MB of prompt cache)
+[reedus] WARNING: 4096MB of prompt cache across two instances. On the 16 GB box drop REEDUS_PROMPT_CACHE_MB to 1024, the router benefits from cache more than the 4B does.
+warming both tiers…
+
+==============================================================================
+search-router   (14 cases)
+==============================================================================
+  agreement   13/14 = 93%
+  main        accuracy 13/14 = 93%   json-fail 0   median     897 ms
+  router      accuracy 14/14 = 100%   json-fail 0   median     624 ms
+  speedup     1.4x
+
+  DIFF  "what's the latest python version"   (expected True, router is right)
+        4B     -> False
+        router -> True
+        4B raw     : '{"search": false, "query": "latest Python version as of 2026"}'
+        router raw : '<think>\n\n</think>\n\nYES\n{"search": true, "query": "what is the latest python version"}'
+
+==============================================================================
+SUMMARY
+==============================================================================
+  call             agree  4B acc  sm acc    4B ms    sm ms  speedup
+  search-router     93%    93%   100%     897     624     1.4x
+  ONE OF EACH                             897     624     1.4x
+
+  'ONE OF EACH' is the saving on a turn that happens to make every call once. A
+  real turn makes two or three, so it is an upper bound on the win, not a forecast.
+
+router JSON counters (both tiers pooled, the per-tier numbers are above):
+  no router JSON parsed this session

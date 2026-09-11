@@ -1,0 +1,9 @@
+# training on the 3090. install cuda torch first:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+torch>=2.3
+transformers>=4.51        # Qwen3 support
+datasets>=2.19
+peft>=0.11
+bitsandbytes>=0.43
+accelerate>=0.30
+sentencepiece

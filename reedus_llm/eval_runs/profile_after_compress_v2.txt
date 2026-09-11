@@ -1,0 +1,121 @@
+[0;93m2026-08-12 23:45:20.698471014 [W:onnxruntime:Default, device_discovery.cc:285 GetGpuDevices] Failed to detect devices under "/sys/class/drm/card0": device_discovery.cc:94 ReadFileContents Failed to open file: "/sys/class/drm/card0/device/vendor"[m
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] router skipped (no fact/visual signal) -> not searching
+
+[debug] draft-check skipped (nothing checkable in draft)
+[debug] topic already known -> 'Naruto Shippuden: Ultimate Ninja Storm 4' (skipping learn + search)
+[debug] retrieval query -> 'Naruto playing naruto ultimate ninja storm'
+[debug] knowledge compressed 900 -> 142 chars
+
+[debug] grounded cut (WARN ONLY) at sentence 2: 'Rasen Shuriken' is not in the corpus
+
+[debug] asked a question, next 2 turn(s) will not
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Five Kage Summit Arc five kage summit arc crazy'
+[debug] knowledge compressed 965 -> 207 chars
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Five Kage Summit Arc sasuke cold hell arc'
+[debug] sticky knowledge reuse -> 'five kage summit arc' (207 chars)
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Madara Uchiha sasuke cold hell arc madara though'
+[debug] nothing confidently anchored (weak passages injected) -> flagging the turn as ungrounded
+
+[debug] bulletin gate -> 1/2 pins relevant
+
+[debug] asked a question, next 3 turn(s) will not
+
+[debug] draft-check -> '<think>\n\n</think>\n\n{"verify": false, "query": ""}'
+[reedus] llama.cpp[main]: threads=14 n_batch=512 n_ubatch=512 n_ctx=3072 prompt_cache=ram
+[reedus] router split ON: qwen3-1.7b-Q4_K_M.gguf threads=6 n_ctx=1536 cache=768MB (+2048MB main = 2816MB of prompt cache)
+[reedus] llama.cpp[router]: threads=6 n_batch=512 n_ubatch=512 n_ctx=1536 prompt_cache=ram
+[reedus] router model loaded in 0.5s
+
+model load: 1.2s   embedder: fastembed   warm: 34.8s
+
+=== turn 1: 'yo'  ->  3.92s
+    model calls: 1   prompt tokens 1880   generated 9   3.80s (97% of turn)
+      call 1: main   persona        prompt= 1880 gen=   9    3.80s
+    non-inference breakdown:
+        · embedding (fastembed)                  14.6 ms  x3
+      episodic write (embed+insert)               9.2 ms  x2
+        · bulletin relevance gate                 8.8 ms  x1
+      everything else (python/regex/io)         110.1 ms
+    reply: "What's up?"
+
+[knowledge] subject from caller hint: 'naruto shippuden: ultimate ninja storm 4', skipped the subject model call
+[knowledge] entity passes: naruto shippuden: ultimate ninja storm 4
+[knowledge] 6 passages, top=0.84 anchor=0.87 (Naruto Shippūden: Ultimate Ninja Storm 4)
+[knowledge] binding block: Naruto Shippūden: Ultimate Ninja Storm 4, Chikayo Fukuda
+=== turn 2: 'been playing naruto ultimate ninja storm 4'  ->  11.47s
+    model calls: 2   prompt tokens 2331   generated 94   10.76s (94% of turn)
+      call 1: router knowledge-brief prompt=  256 gen=  60    3.11s
+      call 2: main   persona        prompt= 2075 gen=  34    7.65s
+    router tier: 1 call(s)  3.11s (27% of turn, 29% of model time)
+    non-inference breakdown:
+        · episodic recall (sqlite+cosine)        63.7 ms  x1
+        · embedding (fastembed)                  24.2 ms  x6
+      episodic write (embed+insert)              11.5 ms  x2
+        · bulletin relevance gate                 8.5 ms  x1
+      everything else (python/regex/io)         694.4 ms
+    reply: 'Still loving that Naruto Uzumaki showdown? The way you can summon Rasen Shuriken and flip the battlefield, what’s your go-to technique right now?'
+
+[knowledge] subject from caller hint: 'five kage summit arc', skipped the subject model call
+[knowledge] entity passes: five kage summit arc
+[knowledge] 6 passages, top=0.77 anchor=0.78 (Five Kage Summit (Arc))
+[knowledge] binding block: EMPTY, none of ['Five Kage Summit (Arc)', 'Five Kage Summit', 'Naruto Shippūden 3D: The New Era'] classified as a person
+=== turn 3: 'the five kage summit arc was crazy'  ->  11.19s
+    model calls: 2   prompt tokens 2366   generated 85   10.36s (93% of turn)
+      call 1: router knowledge-brief prompt=  254 gen=  50    2.45s
+      call 2: main   persona        prompt= 2112 gen=  35    7.91s
+    router tier: 1 call(s)  2.45s (22% of turn, 24% of model time)
+    non-inference breakdown:
+        · episodic recall (sqlite+cosine)        54.0 ms  x1
+        · embedding (fastembed)                  23.0 ms  x6
+      episodic write (embed+insert)              10.1 ms  x2
+        · bulletin relevance gate                 8.5 ms  x1
+      everything else (python/regex/io)         819.6 ms
+    reply: "That whole arc is peak Sasuke, the walk, the silence, no flinching when he talks about Itachi. He's not angry anymore, he’s decided."
+
+=== turn 4: 'sasuke was cold as hell in that arc'  ->  8.65s
+    model calls: 1   prompt tokens 2182   generated 43   8.59s (99% of turn)
+      call 1: main   persona        prompt= 2182 gen=  43    8.59s
+    non-inference breakdown:
+        · episodic recall (sqlite+cosine)        42.3 ms  x1
+        · embedding (fastembed)                  18.4 ms  x4
+      episodic write (embed+insert)              10.9 ms  x2
+        · bulletin relevance gate                 8.4 ms  x1
+      everything else (python/regex/io)          52.5 ms
+    reply: "That arc is peak Sasuke, the walk, the silence, no flinching when he talks about Itachi. He's not angry anymore, he’s decided. Pure evil in a quiet way."
+
+[knowledge] subject from caller hint: 'madara uchiha', skipped the subject model call
+[knowledge] entity passes: madara uchiha
+[knowledge] 6 passages, top=0.81 anchor=0.57 (FLAME, Characters)
+[knowledge] binding block: Sasuke Uchiha, Naruto Shippūden: Ultimate Ninja Storm 4
+=== turn 5: 'what about madara though'  ->  14.58s
+    model calls: 2   prompt tokens 2720   generated 77   14.16s (97% of turn)
+      call 1: main   persona        prompt= 2446 gen=  63   13.12s
+      call 2: router draft-check    prompt=  274 gen=  14    1.03s
+    router tier: 1 call(s)  1.03s (7% of turn, 7% of model time)
+    non-inference breakdown:
+        · episodic recall (sqlite+cosine)        54.5 ms  x1
+        · embedding (fastembed)                  45.0 ms  x6
+        · bulletin relevance gate                29.3 ms  x1
+      episodic write (embed+insert)              12.4 ms  x2
+      everything else (python/regex/io)         404.6 ms
+    reply: 'Madara’s got that cold, quiet intensity, especially when he goes full Six Paths. But where Sasuke channels it through silence and decisions, Madara just is the storm. Still, I don’t fully get why it feels like he’s not fighting for anything… what do you think?'
+
+TOTAL 5 turns: 49.8s  (10.0s/turn)
+
+router JSON:
+  draft-check       0 ok    1 fail  100.0% fail

@@ -1,0 +1,29 @@
+# native llama-server, main persona model. install on the xeon after build_llama_cpp.sh:
+#   sudo cp reedus-llama-{main,router}.service.example /etc/systemd/system/  (drop .example)
+#   sudo systemctl daemon-reload && sudo systemctl enable --now reedus-llama-main reedus-llama-router
+# use run_llama_servers.sh interactively until it's healthy, then systemd.
+
+[Unit]
+Description=Reedus llama-server (main persona)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dain
+WorkingDirectory=/mnt/nvme/reedus
+EnvironmentFile=-/mnt/nvme/reedus/reedus_llm/reedus_companion/deploy/xeon.env
+Environment=OPENBLAS_NUM_THREADS=1
+# Override paths here if xeon.env is not EnvironmentFile-compatible for all vars.
+ExecStart=/mnt/nvme/reedus/bin/llama-server \
+  --host 127.0.0.1 --port 8080 \
+  -m /mnt/nvme/reedus/gguf/Qwen2.5-3B-Instruct-Q4_K_M.gguf \
+  -c 3072 -t 12 -tb 12 -b 512 -ub 512 \
+  --jinja \
+  --spec-type ngram-simple --parallel 1
+Restart=on-failure
+RestartSec=3
+OOMScoreAdjust=-200
+
+[Install]
+WantedBy=multi-user.target

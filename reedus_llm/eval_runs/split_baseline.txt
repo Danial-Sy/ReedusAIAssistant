@@ -1,0 +1,50 @@
+[0;93m2026-08-10 23:01:42.859789545 [W:onnxruntime:Default, device_discovery.cc:285 GetGpuDevices] Failed to detect devices under "/sys/class/drm/card0": device_discovery.cc:94 ReadFileContents Failed to open file: "/sys/class/drm/card0/device/vendor"[m
+[reedus] llama.cpp[main]: threads=14 n_batch=512 n_ubatch=512 n_ctx=4096 prompt_cache=ram
+
+model load: 1.2s   embedder: fastembed   warm: 28.4s
+
+=== turn 1: 'hey whats up'  ->  1.67s
+    model calls: 1   prompt tokens 1706   generated 18   1.58s (94% of turn)
+      call 1: main   persona        prompt= 1706 gen=  18    1.58s
+    non-inference breakdown:
+        · embedding (fastembed)                  22.4 ms  x3
+      prompt assembly (_system)                  19.8 ms  x1
+        · bulletin relevance gate                19.8 ms  x1
+      episodic write (embed+insert)               9.1 ms  x2
+      everything else (python/regex/io)          65.1 ms
+    reply: 'What’s up? Anything fun or wild you’ve been into lately?'
+
+=== turn 2: 'who won the world cup'  ->  12.80s
+    model calls: 4   prompt tokens 3137   generated 70   11.41s (89% of turn)
+      call 1: main   search-router  prompt=  300 gen=  22    1.58s
+      call 2: main   extract        prompt=  331 gen=   2    1.60s
+      call 3: main   extract        prompt=  469 gen=  23    3.20s
+      call 4: main   persona        prompt= 2037 gen=  23    5.04s
+    non-inference breakdown:
+      web_search (network)                     1324.9 ms  x2
+      prompt assembly (_system)                  57.6 ms  x1
+        · episodic recall (sqlite+cosine)        48.9 ms  x1
+        · embedding (fastembed)                  16.7 ms  x4
+      episodic write (embed+insert)               9.5 ms  x2
+        · bulletin relevance gate                 8.6 ms  x1
+      everything else (python/regex/io)           2.1 ms
+    reply: 'Spain won the 2026 World Cup football championship by defeating Argentina 1–0 after extra time.'
+
+=== turn 3: 'you play elden ring'  ->  10.51s
+    model calls: 2   prompt tokens 2521   generated 27   9.55s (91% of turn)
+      call 1: main   domain-router  prompt=   76 gen=   6    1.00s
+      call 2: main   persona        prompt= 2445 gen=  21    8.55s
+    non-inference breakdown:
+      prompt assembly (_system)                1950.7 ms  x1
+        · embedding (fastembed)                  80.8 ms  x6
+        · bulletin relevance gate                69.2 ms  x1
+        · episodic recall (sqlite+cosine)        36.9 ms  x1
+      episodic write (embed+insert)               8.6 ms  x2
+      everything else (python/regex/io)        -997.5 ms
+    reply: 'I’ve been deep in the Lands Between, you?'
+
+TOTAL 3 turns: 25.0s  (8.3s/turn)
+
+router JSON:
+  domain-router     1 ok    0 fail    0.0% fail
+  search-router     1 ok    0 fail    0.0% fail

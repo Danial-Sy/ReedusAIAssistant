@@ -1,0 +1,124 @@
+Loading Reedus (gguf)…
+[reedus] llama.cpp[main]: threads=14 n_batch=512 n_ubatch=512 n_ctx=4096 prompt_cache=ram
+[reedus] router split ON: qwen3-1.7b-Q4_K_M.gguf threads=4 n_ctx=2048 cache=2048MB (+1024MB main = 3072MB of prompt cache)
+  model loaded in 1.2s
+Warming the prompt cache… [0;93m2026-08-10 23:00:03.807078320 [W:onnxruntime:Default, device_discovery.cc:285 GetGpuDevices] Failed to detect devices under "/sys/class/drm/card0": device_discovery.cc:94 ReadFileContents Failed to open file: "/sys/class/drm/card0/device/vendor"[m
+
+[debug] bulletin gate -> 0/2 pins relevant
+[reedus] llama.cpp[router]: threads=4 n_batch=512 n_ubatch=512 n_ctx=2048 prompt_cache=ram
+[reedus] router model loaded in 0.6s
+25.1s
+
+[1mReedus is up.[0m  /help for commands
+
+[1myou >[0m reedus > 
+[debug] router skipped (no fact/visual signal) -> not searching
+
+[debug] bulletin gate -> 0/2 pins relevant
+hey, what’s up? Anything fun or wild you’ve been into lately? 😄
+[debug] asked a question, next 3 turn(s) will not
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[2m  ^ raw draft; final differs:[0m
+reedus > What’s up? Anything fun or wild you’ve been into lately?
+[2m  [1.7s · 1 call · 0 prompt / 17 gen tok · 95% in model][0m
+[2m      persona          1.59s      0 prompt   17 gen   10.7 tok/s[0m
+
+[1myou >[0m reedus > 
+[debug] router -> {'search': True, 'query': 'who won the world cup 2026'}
+
+[debug] turn mode: live fact -> corpus retrieval skipped (web/camera is the grounding)
+[2m  … hang on, let me look that up[0m
+[search] searxng at http://127.0.0.1:8888: up
+
+[debug] web_search('who won the world cup 2026', 2 results) ->
+Search results for: who won the world cup 2026
+1. 2026 FIFA World Cup - Wikipedia, 6 hours ago ... The tournament began on June 11, 2026, and concluded on July 19 with Spain winning the championship for the second time. ... It was jointly hosted by 16 cities, 11 ...
+2. All World Cup Winners in History (Updated Graphic 2026) - Reddit, Jul 21, 2026 ... It's simply ranked by who got to their respective number first. Italy got 4 before Germany, yet Germany have more 2nd and 3rd as well.
+
+[debug] extracted fact -> Spain won the World Cup in 2026.
+
+Spain won the World Cup in 2026.
+[2m  [8.3s · 3 calls · 2658 prompt / 50 gen tok · 90% in model][0m
+[2m      search-router  router   0.99s    303 prompt   26 gen   26.4 tok/s[0m
+[2m      extract        main     2.00s    321 prompt   12 gen    6.0 tok/s[0m
+[2m      persona        main     4.48s   2034 prompt   12 gen    2.7 tok/s[0m
+
+[1myou >[0m reedus > 
+[debug] personal turn -> search suppressed
+[debug] retrieval query -> 'Elden Ring play elden ring'
+[debug] nothing confidently anchored (weak passages injected) -> flagging the turn as ungrounded
+[knowledge] entity passes: elden ring
+[knowledge] 2 passages, top=0.65 anchor=0.52 (Volume 9, Chapters)
+[knowledge] binding block: Ging Freecss
+Nah, I haven’t touched Elden Ring. What’s the vibe of your run? Any ruins you’ve just walked into that feel like they’re breathing?
+[2m  ^ raw draft; final differs:[0m
+reedus > I haven’t touched Elden Ring.
+[2m  [13.8s · 2 calls · 79 prompt / 45 gen tok · 92% in model][0m
+[2m      domain-router  router   0.76s     79 prompt   12 gen   15.7 tok/s[0m
+[2m      persona        main    11.96s      0 prompt   33 gen    2.8 tok/s[0m
+
+[1myou >[0m reedus > 
+[debug] router -> {'search': True, 'query': 'capital of france'}
+
+[debug] turn mode: live fact -> corpus retrieval skipped (web/camera is the grounding)
+[2m  … let me check that real quick[0m
+
+[debug] web_search('capital of france', 2 results) ->
+Search results for: capital of france
+1. Paris - Wikipedia, Paris[a] is the capital and largest city of France, with an estimated city population of 2.04 million in an area of 105.4 km2 (40.7 sq mi), and a metropolitan population of 13.2 million as of January 2026. [4] Located on the river Seine ...
+2. List of capitals of France - Wikipedia, Learn about the historical and current capitals of France, from Tournai to Paris. See the chronology of changes, the reasons for relocations, and the provisional seats of the government.
+
+[debug] extracted fact -> The capital of France is Paris.
+
+Paris
+[2m  [8.4s · 3 calls · 2903 prompt / 27 gen tok · 86% in model][0m
+[2m      search-router  router   0.91s    354 prompt   19 gen   20.8 tok/s[0m
+[2m      extract        main     1.68s    312 prompt    7 gen    4.2 tok/s[0m
+[2m      persona        main     4.65s   2237 prompt    1 gen    0.2 tok/s[0m
+
+[1myou >[0m reedus > 
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'capital france day going'
+[debug] nothing confidently anchored (weak passages injected) -> flagging the turn as ungrounded
+
+[debug] engagement nudge injected
+[knowledge] llm subjects: (none)  [1530 ms]
+[knowledge] 6 passages, top=0.70 anchor=0.71 (July Revolution)
+[knowledge] binding block: EMPTY, none of ['July Revolution', 'Notre-Dame-des-Champs station', '1764 in France'] classified as a person
+You know, I’ve always thought the best parts of Elden Ring are the quiet moments, like when you’re walking through a forest and suddenly hear something. What’s your favorite part of playing it?
+[debug] asked a question, next 3 turn(s) will not
+
+[debug] draft-check -> '<think>\n\n</think>\n\n{"verify": false, "query": ""}'
+
+[2m  [15.0s · 4 calls · 851 prompt / 76 gen tok · 98% in model][0m
+[2m      domain-router  router   0.42s     75 prompt   12 gen   28.3 tok/s[0m
+[2m      subjects       router   1.53s    520 prompt    9 gen    5.9 tok/s[0m
+[2m      persona        main    12.07s      0 prompt   41 gen    3.4 tok/s[0m
+[2m      draft-check    router   0.76s    256 prompt   14 gen   18.5 tok/s[0m
+
+[1myou >[0m reedus > 
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'day going tell kakashi'
+[knowledge] entity passes: kakashi
+[knowledge] 6 passages, top=0.75 anchor=1.00 (Jōnin Leader, Summary)
+[knowledge] binding block: Jōnin Leader, Jiraiya and Kakashi, kakashi
+Kakashi’s got that quiet intensity, you see it in the way he teaches, like a shadow moving through the trees. His training style is all about team work and not just following rules. And yeah, he still has that dark side, but now he’s trying to make peace with it. What do *you* think of his role as an instructor?
+[debug] draft-check skipped (nothing checkable in draft)
+
+[2m  ^ raw draft; final differs:[0m
+reedus > Kakashi’s got that quiet intensity, you see it in the way he teaches, like a shadow moving through the trees. His training style is all about team work and not just following rules. And yeah, he still has that dark side, but now he’s trying to make peace with it.
+[2m  [15.5s · 2 calls · 76 prompt / 86 gen tok · 97% in model][0m
+[2m      domain-router  router   0.45s     76 prompt   12 gen   26.9 tok/s[0m
+[2m      persona        main    14.59s      0 prompt   74 gen    5.1 tok/s[0m
+
+[1myou >[0m   6 turns, 62.6s total, 10.4s/turn
+  domain-router     3 ok    0 fail    0.0% fail
+  draft-check       0 ok    1 fail  100.0% fail
+  search-router     2 ok    0 fail    0.0% fail
+  subjects          1 ok    0 fail    0.0% fail
+
+[1myou >[0m 
+6 turns, 10.4s/turn average.
+later.

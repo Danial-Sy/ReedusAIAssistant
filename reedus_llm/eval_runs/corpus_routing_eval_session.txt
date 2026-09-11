@@ -1,0 +1,329 @@
+[0;93m2026-08-13 00:31:19.971288339 [W:onnxruntime:Default, device_discovery.cc:285 GetGpuDevices] Failed to detect devices under "/sys/class/drm/card0": device_discovery.cc:94 ReadFileContents Failed to open file: "/sys/class/drm/card0/device/vendor"[m
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] router skipped (no fact/visual signal) -> not searching
+
+[debug] asked a question, next 3 turn(s) will not
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] topic router -> {'topic': 'Naruto Shippuden', 'query': 'Naruto Shippuden anime'}
+[debug] topic 'Naruto Shippuden' resolved to corpus 'Naruto Shippuden' (skipping learn + web brief)
+[debug] retrieval query -> 'Naruto watching naruto fun'
+[debug] nothing confidently anchored (weak passages injected) -> flagging the turn as ungrounded
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Five Kage Summit Arc five kage summit arc good'
+[debug] nothing confidently anchored (nothing injected) -> flagging the turn as ungrounded
+
+[debug] bulletin gate -> 1/2 pins relevant
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] topic router -> {'topic': 'Naruto Shippuden', 'query': 'Naruto Shippuden anime'}
+[debug] topic 'Naruto Shippuden' resolved to corpus 'Naruto Shippuden' (skipping learn + web brief)
+[debug] retrieval query -> 'Naruto watching naruto shippuden'
+[debug] knowledge compressed 967 -> 187 chars
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Five Kage Summit Arc five kage summit arc crazy'
+[debug] sticky knowledge reuse -> 'naruto shippuden' (187 chars)
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] asked a question, next 1 turn(s) will not
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Five Kage Summit Arc nothing like hes nothing sage mode naruto chance over amaterasu'
+[debug] sticky knowledge reuse -> 'naruto shippuden' (187 chars)
+
+[debug] draft-check skipped (nothing checkable in draft)
+[debug] topic already known -> 'Naruto Shippuden: Ultimate Ninja Storm 4' (skipping learn + search)
+[debug] retrieval query -> 'Naruto Shippuden: Ultimate Ninja Storm 4 playing naruto ultimate ninja storm'
+[debug] knowledge compressed 900 -> 90 chars
+
+[debug] asked a question, next 2 turn(s) will not
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Naruto Shippuden: Ultimate Ninja Storm 4 five kage summit arc crazy'
+[debug] sticky knowledge reuse -> 'naruto shippuden: ultimate ninja storm 4' (90 chars)
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Five Kage Summit Arc sasuke cold hell arc'
+[debug] sticky knowledge reuse -> 'naruto shippuden: ultimate ninja storm 4' (90 chars)
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Edo Madara sasuke cold hell arc madara though'
+[debug] sticky knowledge reuse -> 'naruto shippuden: ultimate ninja storm 4' (90 chars)
+
+[debug] bulletin gate -> 1/2 pins relevant
+
+[debug] draft-check -> '<think>\n\n</think>\n\n{"verify": true, "query": "What is the official status of Madara Uchiha in Naruto Shippuden and how does his role compare to Sasuke\'s?"}'
+
+[debug] router skipped (no fact/visual signal) -> not searching
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router -> {'search': True, 'query': 'current weather in woodbridge va'}
+
+[debug] turn mode: live fact -> corpus retrieval skipped (web/camera is the grounding)
+
+[debug] bulletin gate -> 0/2 pins relevant
+[search] searxng at http://127.0.0.1:8888: not reachable, using ddg
+
+[debug] web_search('current weather in woodbridge va 2026', 2 results) ->
+[web_search error: DDGSException: ConnectError: ConnectError('error sending request for url (https://www.mojeek.com/search?q=current+weather+in+woodbridge+va+2026) > client error (Connect) > tunnel error: io error establishing tunnel > Connection reset by peer (os error 104)')]
+
+[debug] extracted fact -> NOT FOUND
+
+[debug] narrow search missed -> widening to 5 results
+[debug] extracted fact (wide) -> NOT FOUND
+
+[debug] snippets exhausted -> fetching page text
+[debug] page fetch returned nothing -> keeping the miss
+
+[debug] asked a question, next 2 turn(s) will not
+
+[debug] router skipped (no fact/visual signal) -> not searching
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router -> {'search': True, 'query': 'USA vs Turkey World Cup 2026 final score'}
+
+[debug] turn mode: live fact -> corpus retrieval skipped (web/camera is the grounding)
+
+[debug] web_search('USA vs Turkey World Cup 2026 final score', 2 results) ->
+[web_search error: DDGSException: ConnectError: ConnectError('error sending request for url (https://www.startpage.com/) > client error (Connect) > tunnel error: io error establishing tunnel > Connection reset by peer (os error 104)')]
+
+[debug] extracted fact -> NOT FOUND
+
+[debug] narrow search missed -> widening to 5 results
+[debug] extracted fact (wide) -> NOT FOUND
+
+[debug] snippets exhausted -> fetching page text
+[debug] page fetch returned nothing -> keeping the miss
+[reedus] llama.cpp[main]: threads=14 n_batch=512 n_ubatch=512 n_ctx=3072 prompt_cache=ram
+[reedus] router split ON: qwen3-1.7b-Q4_K_M.gguf threads=6 n_ctx=1536 cache=768MB (+2048MB main = 2816MB of prompt cache)
+[reedus] llama.cpp[router]: threads=6 n_batch=512 n_ubatch=512 n_ctx=1536 prompt_cache=ram
+[reedus] router model loaded in 0.5s
+
+loaded+warm in 45.5s (warm=44.0s)
+
+========================================================================
+SCENARIO A_anime_watch_not_game: Watching Naruto anime must NOT sticky-steer to Storm 4 game; no web.
+========================================================================
+
+  turn 1: 'yo'
+    wall=5.73s  persona=5.64s  calls=['persona']
+    skip_corpus=False  weak=False  session=''  sticky=''  learned=''
+    anchor=''  new_topics=[]
+    reply='What’s up? Anything fun you’ve been into lately?'
+[knowledge] subject from caller hint: 'naruto shippuden', skipped the subject model call
+[knowledge] entity passes: naruto shippuden
+[knowledge] 6 passages, top=0.85 anchor=0.35 (Naruto: Shippūden)
+[knowledge] binding block: Naruto Shippūden: Ultimate Ninja 5
+
+  turn 2: 'yeah i been watching naruto its so fun'
+    wall=11.65s  persona=10.37s  calls=['topic-router', 'persona']
+    skip_corpus=False  weak=True  session='naruto shippuden'  sticky='naruto shippuden'  learned='Naruto Shippuden'
+    anchor='Naruto'  new_topics=[]
+    reply='Naruto’s still got that fire, especially the Shippūden arc. What part are you on right now? I’m always curious about how it unfolds.'
+[knowledge] subject from caller hint: 'five kage summit arc', skipped the subject model call
+[knowledge] entity passes: five kage summit arc
+[knowledge] 3 passages, top=0.68 anchor=0.51 (Mount Griggs)
+
+  turn 3: 'the five kage summit arc is SO good'
+    wall=14.70s  persona=14.03s  calls=['persona']
+    skip_corpus=False  weak=True  session='naruto shippuden'  sticky='naruto shippuden'  learned=''
+    anchor='Five Kage Summit Arc'  new_topics=[]
+    reply="That whole arc is peak Sasuke, the walk, the silence, no flinching when he talks about Itachi. He's not angry anymore, he’s decided. What does Naruto have in h"
+
+========================================================================
+SCENARIO B_ability_no_web_learn: Sage mode / Amaterasu talk must skip topic-brief web learn.
+========================================================================
+[knowledge] subject from caller hint: 'naruto shippuden', skipped the subject model call
+[knowledge] entity passes: naruto shippuden
+[knowledge] 5 passages, top=0.81 anchor=0.77 (Naruto: Shippuden (season 21))
+[knowledge] binding block: EMPTY, none of ['Naruto: Shippuden (season 21)', 'Naruto (TV series)', 'naruto shippuden'] classified as a person
+
+  turn 1: 'been watching naruto shippuden'
+    wall=11.58s  persona=7.82s  calls=['topic-router', 'knowledge-brief', 'persona']
+    skip_corpus=False  weak=False  session='naruto shippuden'  sticky='naruto shippuden'  learned='Naruto Shippuden'
+    anchor='Naruto'  new_topics=[]
+    reply="Back with the Shippuden! What's the highlight of this rewatch, any new moments that hit you hard? Like when Sasuke finally stands up or Naruto’s team dynamics "
+
+  turn 2: 'the five kage summit arc was crazy'
+    wall=8.33s  persona=8.27s  calls=['persona']
+    skip_corpus=False  weak=False  session='naruto shippuden'  sticky='naruto shippuden'  learned=''
+    anchor='Five Kage Summit Arc'  new_topics=[]
+    reply="That arc is peak Sasuke, the silence, the walk, no flinching when he talks about Itachi. He’s not angry anymore; he's decided. What part hit you hardest?"
+
+  turn 3: 'literally nothing man like hes got nothing on it! sage mode naruto might have a chance but idk if he could get over amaterasu'
+    wall=11.95s  persona=11.86s  calls=['persona']
+    skip_corpus=False  weak=False  session='naruto shippuden'  sticky='naruto shippuden'  learned=''
+    anchor='Five Kage Summit Arc'  new_topics=[]
+    reply='Sage Mode Naruto? Yeah, that’s a beast, chakra flow, the precision. But Amaterasu? That’s not just fire… it’s will.'
+
+========================================================================
+SCENARIO C_sticky_same_subject: Same-subject follow-ups reuse sticky knowledge; no re-retrieve churn.
+========================================================================
+[knowledge] subject from caller hint: 'naruto shippuden: ultimate ninja storm 4', skipped the subject model call
+[knowledge] entity passes: naruto shippuden: ultimate ninja storm 4
+[knowledge] 6 passages, top=0.81 anchor=0.90 (Naruto Shippuden: Ultimate Ninja Storm 4)
+[knowledge] binding block: Chikayo Fukuda, Naruto Shippūden: Ultimate Ninja Storm 4
+
+  turn 1: 'been playing naruto ultimate ninja storm 4'
+    wall=10.17s  persona=7.72s  calls=['knowledge-brief', 'persona']
+    skip_corpus=False  weak=False  session='naruto shippuden: ultimate ninja storm 4'  sticky='naruto shippuden: ultimate ninja storm 4'  learned='Naruto Shippuden: Ultimate Ninja Storm 4'
+    anchor='Naruto Shippuden: Ultimate Ninja Storm 4'  new_topics=[]
+    reply='Still in the middle of Ultimate Ninja Storm 4? That’s peak Naruto energy, every fight feels like a battle from the anime, right down to that final clash with M'
+
+  turn 2: 'the five kage summit arc was crazy'
+    wall=10.34s  persona=10.26s  calls=['persona']
+    skip_corpus=False  weak=False  session='naruto shippuden: ultimate ninja storm 4'  sticky='naruto shippuden: ultimate ninja storm 4'  learned=''
+    anchor='Naruto Shippuden: Ultimate Ninja Storm 4'  new_topics=[]
+    reply='Still thinking about that arc, Sasuke’s silence, the way he walks into Itachi’s room like it’s nothing. Man, that moment when he just… decides to take action? '
+
+  turn 3: 'sasuke was cold as hell in that arc'
+    wall=9.26s  persona=9.18s  calls=['persona']
+    skip_corpus=False  weak=False  session='naruto shippuden: ultimate ninja storm 4'  sticky='naruto shippuden: ultimate ninja storm 4'  learned=''
+    anchor='Five Kage Summit Arc'  new_topics=[]
+    reply='Still thinkin’ about that, the way he just stands there, no flinch when Itachi talks. Not angry. Just… decided. That silence? Broke something deep.'
+
+  turn 4: 'what about madara though'
+    wall=9.92s  persona=8.59s  calls=['persona', 'draft-check']
+    skip_corpus=False  weak=False  session='naruto shippuden: ultimate ninja storm 4'  sticky='naruto shippuden: ultimate ninja storm 4'  learned=''
+    anchor='Edo Madara'  new_topics=[]
+    reply="Probably still takes it one on one, Naruto needed Sasuke there and Madara didn’t need anyone. Six Paths closes the gap but doesn't flip it."
+
+========================================================================
+SCENARIO D_live_weather_search: Live weather MUST web-search (extract ok); corpus skipped.
+========================================================================
+
+  turn 1: 'hey'
+    wall=1.12s  persona=1.10s  calls=['persona']
+    skip_corpus=False  weak=False  session=''  sticky=''  learned=''
+    anchor=''  new_topics=[]
+    reply='What’s up?'
+
+  turn 2: 'whats the weather in woodbridge va today'
+    wall=8.15s  persona=7.34s  calls=['search-router', 'persona']
+    skip_corpus=True  weak=False  session=''  sticky=''  learned=''
+    anchor=''  new_topics=[]
+    reply='Haven’t been able to pull up the weather for Woodbridge, VA today. Guess I’ll have to check back later, what’s your plan for the day?'
+
+========================================================================
+SCENARIO E_score_search: Sports score ask MUST route to search.
+========================================================================
+
+  turn 1: 'yo'
+    wall=1.53s  persona=1.51s  calls=['persona']
+    skip_corpus=False  weak=False  session=''  sticky=''  learned=''
+    anchor=''  new_topics=[]
+    reply='What’s up?'
+
+  turn 2: 'who won the world cup final'
+    wall=9.56s  persona=8.55s  calls=['search-router', 'persona']
+    skip_corpus=True  weak=False  session=''  sticky=''  learned=''
+    anchor=''  new_topics=[]
+    reply="Can't find that info right now. Let me check again, wait, no clear result yet. Maybe it’s not out or I’m missing something."
+[debug] router skipped (no fact/visual signal) -> not searching
+
+[debug] asked a question, next 3 turn(s) will not
+
+[debug] draft-check skipped (nothing checkable in draft)
+[debug] topic already known -> 'Elden Ring' (skipping learn + search)
+[debug] retrieval query -> 'Elden Ring playing elden ring bosses insane'
+[debug] knowledge compressed 997 -> 127 chars
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] grounded cut (WARN ONLY) at sentence 1: 'Spirit Astel' is not in the corpus
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Elden Ring playing elden ring bosses insane malenia hard'
+[debug] sticky knowledge reuse -> 'elden ring' (127 chars)
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+
+========================================================================
+SCENARIO F_new_game_learn_ok: Brand-new titled engagement may topic-route; prefer corpus if held.
+========================================================================
+
+  turn 1: 'whats up'
+    wall=1.97s  persona=1.95s  calls=['persona']
+    skip_corpus=False  weak=False  session=''  sticky=''  learned=''
+    anchor=''  new_topics=[]
+    reply='What’s up? Got anything good you’re digging into lately?'
+[knowledge] subject from caller hint: 'elden ring', skipped the subject model call
+[knowledge] entity passes: elden ring
+[knowledge] 6 passages, top=0.78 anchor=0.76 (Elden Ring)
+[knowledge] binding block: EMPTY, none of ['Elden Ring', 'Bosses', 'Ulcerated Tree Spirit'] classified as a person
+
+  turn 2: 'been playing elden ring the bosses are insane'
+    wall=11.94s  persona=7.95s  calls=['domain-router', 'knowledge-brief', 'persona']
+    skip_corpus=False  weak=False  session='elden ring'  sticky='elden ring'  learned='Elden Ring'
+    anchor='Elden Ring'  new_topics=[]
+    reply="Ancestor Spirit Astel? That one’s got a real vibe, the way he just winks before you even realize what's happening."
+
+  turn 3: 'malenia is so hard man'
+    wall=9.19s  persona=9.11s  calls=['persona']
+    skip_corpus=False  weak=False  session='elden ring'  sticky='elden ring'  learned=''
+    anchor='Elden Ring'  new_topics=[]
+    reply='Malenia’s got that final boss energy, the way she just knows you’re not ready.'
+
+
+########################################################################
+VERDICTS
+########################################################################
+
+A_anime_watch_not_game: 3 turns, 32.1s total, 10.7s/turn
+  t1   5.7s  persona/corpus  | 'yo'
+  t2  11.7s  sticky=naruto shippuden  | 'yeah i been watching naruto its so fun'
+  t3  14.7s  sticky=naruto shippuden  | 'the five kage summit arc is SO good'
+
+B_ability_no_web_learn: 3 turns, 31.9s total, 10.6s/turn
+  t1  11.6s  KNOW_BRIEF  | 'been watching naruto shippuden'
+  t2   8.3s  sticky=naruto shippuden  | 'the five kage summit arc was crazy'
+  t3  12.0s  sticky=naruto shippuden  | 'literally nothing man like hes got nothing on it! sage mode '
+
+C_sticky_same_subject: 4 turns, 39.7s total, 9.9s/turn
+  t1  10.2s  KNOW_BRIEF  | 'been playing naruto ultimate ninja storm 4'
+  t2  10.3s  sticky=naruto shippuden: ultimate ninja storm 4  | 'the five kage summit arc was crazy'
+  t3   9.3s  sticky=naruto shippuden: ultimate ninja storm 4  | 'sasuke was cold as hell in that arc'
+  t4   9.9s  sticky=naruto shippuden: ultimate ninja storm 4  | 'what about madara though'
+
+D_live_weather_search: 2 turns, 9.3s total, 4.6s/turn
+  t1   1.1s  persona/corpus  | 'hey'
+  t2   8.2s  SEARCH_ROUTER,SKIP_CORPUS  | 'whats the weather in woodbridge va today'
+
+E_score_search: 2 turns, 11.1s total, 5.5s/turn
+  t1   1.5s  persona/corpus  | 'yo'
+  t2   9.6s  SEARCH_ROUTER,SKIP_CORPUS  | 'who won the world cup final'
+
+F_new_game_learn_ok: 3 turns, 23.1s total, 7.7s/turn
+  t1   2.0s  persona/corpus  | 'whats up'
+  t2  11.9s  KNOW_BRIEF,sticky=elden ring  | 'been playing elden ring the bosses are insane'
+  t3   9.2s  sticky=elden ring  | 'malenia is so hard man'
+
+ALL SCENARIO CHECKS PASSED (see notes above for soft observations)

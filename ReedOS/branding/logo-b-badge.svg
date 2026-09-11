@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 160" role="img" aria-label="ReedOS logo, badge with cattail and serif wordmark">
+  <title>ReedOS, badge</title>
+  <circle cx="80" cy="80" r="58" fill="#F3EEE3" stroke="#1F4D3A" stroke-width="3"/>
+  <path d="M80,128 C60,112 50,88 55,58 C61,88 70,108 81,123 Z" fill="#1F4D3A"/>
+  <path d="M80,128 C96,115 104,96 102,72 C100,98 92,114 79,125 Z" fill="#1F4D3A"/>
+  <path d="M78.5,128 C78,104 78.2,84 79,62 L81,62 C81.8,84 82,104 81.5,128 Z" fill="#1F4D3A"/>
+  <rect x="73.5" y="34" width="13" height="32" rx="6.5" fill="#6B4226"/>
+  <text x="164" y="99" font-family="Georgia,'Times New Roman',serif" font-size="60" font-weight="700" fill="#1F4D3A">Reed<tspan fill="#6B4226">OS</tspan></text>
+</svg>

@@ -1,0 +1,18 @@
+[Unit]
+Description=reedosd, ReedOS service layer for Reedus
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=reedus
+WorkingDirectory=/opt/reedos/daemon
+ExecStart=/usr/bin/python3 /opt/reedos/daemon/reedosd.py
+Restart=always
+RestartSec=3
+# keep it polite on the shared mobo
+Nice=5
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

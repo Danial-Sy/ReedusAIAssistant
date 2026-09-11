@@ -1,0 +1,23 @@
+# Native llama-server, router / classifier (1.7B).
+
+[Unit]
+Description=Reedus llama-server (router 1.7B)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dain
+WorkingDirectory=/mnt/nvme/reedus
+Environment=OPENBLAS_NUM_THREADS=1
+ExecStart=/mnt/nvme/reedus/bin/llama-server \
+  --host 127.0.0.1 --port 8081 \
+  -m /mnt/nvme/reedus/gguf/qwen3-1.7b-Q4_K_M.gguf \
+  -c 1536 -t 4 -tb 4 -b 512 -ub 512 \
+  --jinja
+Restart=on-failure
+RestartSec=3
+OOMScoreAdjust=-100
+
+[Install]
+WantedBy=multi-user.target

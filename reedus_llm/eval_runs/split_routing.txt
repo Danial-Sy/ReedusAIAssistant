@@ -1,0 +1,88 @@
+[reedus] router split ON: qwen3-1.7b-Q4_K_M.gguf threads=4 n_ctx=2048 cache=2048MB (+1024MB main = 3072MB of prompt cache)
+warming both tiers…
+
+==============================================================================
+search-router   (14 cases)
+==============================================================================
+  agreement   13/14 = 93%
+  main        accuracy 13/14 = 93%   json-fail 0   median     849 ms
+  router      accuracy 14/14 = 100%   json-fail 0   median     614 ms
+  speedup     1.4x
+
+  DIFF  "what's the latest python version"   (expected True, router is right)
+        4B     -> False
+        router -> True
+        4B raw     : '{"search": false, "query": "latest Python version as of 2026"}'
+        router raw : '<think>\n\n</think>\n\nYES\n{"search": true, "query": "what is the latest python version"}'
+
+==============================================================================
+look-router   (9 cases)
+==============================================================================
+  agreement   9/9 = 100%
+  main        accuracy 7/9 = 78%   json-fail 0   median     403 ms
+  router      accuracy 7/9 = 78%   json-fail 0   median     324 ms
+  speedup     1.2x
+
+==============================================================================
+topic-router   (7 cases)
+==============================================================================
+  agreement   7/7 = 100%
+  main        accuracy 7/7 = 100%   json-fail 0   median    1074 ms
+  router      accuracy 7/7 = 100%   json-fail 0   median     713 ms
+  speedup     1.5x
+
+==============================================================================
+subjects   (7 cases)
+==============================================================================
+  agreement   5/7 = 71%
+  main        accuracy 6/7 = 86%   json-fail 0   median     604 ms
+  router      accuracy 5/7 = 71%   json-fail 0   median     522 ms
+  speedup     1.2x
+
+  DIFF  'is madara stronger than hashirama'   (expected ['madara uchiha'], BOTH wrong)
+        4B     -> ['hashirama senju', 'madara uchiha']
+        router -> ['hashirama', 'madara']
+        4B raw     : '{"subjects": ["Madara Uchiha", "Hashirama Senju"]}'
+        router raw : '<think>\n\n</think>\n\n{"subjects": ["Madara", "Hashirama"]}'
+
+  DIFF  'yeah for sure'   (expected [], 4B is right)
+        4B     -> []
+        router -> ['elden ring']
+        4B raw     : '{"subjects": []}'
+        router raw : '<think>\n\n</think>\n\n{"subjects": ["Elden Ring"]}'
+
+==============================================================================
+draft-check   (6 cases)
+==============================================================================
+  agreement   5/6 = 83%
+  main        accuracy 6/6 = 100%   json-fail 0   median     979 ms
+  router      accuracy 5/6 = 83%   json-fail 0   median     652 ms
+  speedup     1.5x
+
+  DIFF  'do you like naruto'   (expected False, 4B is right)
+        4B     -> False
+        router -> True
+        4B raw     : '{"verify": false, "query": ""}'
+        router raw : '<think>\n\n</think>\n\n{"verify": true, "query": "What is the official title of Naruto?"}'
+
+==============================================================================
+SUMMARY
+==============================================================================
+  call             agree  4B acc  sm acc    4B ms    sm ms  speedup
+  search-router     93%    93%   100%     849     614     1.4x
+  look-router      100%    78%    78%     403     324     1.2x
+  topic-router     100%   100%   100%    1074     713     1.5x
+  subjects          71%    86%    71%     604     522     1.2x
+  draft-check       83%   100%    83%     979     652     1.5x
+  ONE OF EACH                            3910    2824     1.4x
+
+  'ONE OF EACH' is the saving on a turn that happens to make every call once. A
+  real turn makes two or three, so it is an upper bound on the win, not a forecast.
+
+router JSON counters (both tiers pooled, the per-tier numbers are above):
+  no router JSON parsed this session
+
+  Lowest agreement is 71%. Before shipping, decide case by case
+  whether those are acceptable, and remember the fallback path: a null
+  decision is not a coin flip, it is the keyword heuristic, which is worse
+  than either model.

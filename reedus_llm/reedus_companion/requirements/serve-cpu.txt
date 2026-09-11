@@ -1,0 +1,6 @@
+# xeon, cpu only. build llama-cpp-python native for this cpu:
+#   CMAKE_ARGS="-DGGML_NATIVE=ON" pip install --no-binary llama-cpp-python llama-cpp-python
+llama-cpp-python>=0.3.2   # GGUF inference + Qwen chat format
+fastembed>=0.3           # memory embeddings (ONNX, CPU-light)
+ddgs>=5.0                # keyless web search
+requests>=2.31           # Brave API (optional)

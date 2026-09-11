@@ -1,0 +1,10 @@
+# voice: whisper + kokoro, both run on cpu.
+#   gpu whisper: cuda torch + REEDUS_STT_DEVICE=cuda REEDUS_STT_COMPUTE=float16
+faster-whisper>=1.0      # STT (CTranslate2)
+kokoro>=0.9              # expressive TTS, ~82M, Apache-2.0 (auto-downloads model on first run)
+soundfile>=0.12          # audio I/O used by kokoro
+librosa>=0.10            # segment silence-trimming (+ pitch-shift fallback)
+praat-parselmouth>=0.4   # PSOLA pitch shift + pitch-range widening (clean, no tin-can)
+sounddevice>=0.4         # mic capture + playback
+numpy>=1.24              # robotize DSP
+# system packages: sudo apt install espeak-ng portaudio19-dev ffmpeg (kokoro needs espeak-ng)

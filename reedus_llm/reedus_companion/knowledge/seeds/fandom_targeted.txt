@@ -1,0 +1,30 @@
+# Targeted first pass, the wikis covering what actually comes up in conversation, so the
+# depth fix can be proven on ~20 wikis before committing to the full curated list.
+#
+# Format: `subdomain domain`. The second column pins every passage from that wiki to one
+# shard domain. Without it the keyword router reads each article cold, and fandom prose
+# routed minecraft pages into music and food_drink on the first attempt.
+#
+# ---- the reason this list exists -------------------------------------------
+naruto anime_manga
+# ---- shonen / power-scaling neighbours -------------------------------------
+onepiece anime_manga
+bleach anime_manga
+dragonball anime_manga
+jujutsu-kaisen anime_manga
+myheroacademia anime_manga
+attackontitan anime_manga
+kimetsu-no-yaiba anime_manga
+hunterxhunter anime_manga
+jojo anime_manga
+onepunchman anime_manga
+chainsaw-man anime_manga
+# ---- games that come up ----------------------------------------------------
+minecraft games
+eldenring games
+zelda games
+supersmashbros games
+tekken games
+streetfighter games
+fortnite games
+gta games

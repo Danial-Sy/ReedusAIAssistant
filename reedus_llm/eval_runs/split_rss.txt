@@ -1,0 +1,18 @@
+ship caches: PROMPT=1024MB ROUTER=2048MB
+physical available at start: 23,104 MB
+
+  [   0.0s] peak RSS        9 MB  avail    23104 MB  start
+  [   0.1s] peak RSS       38 MB  avail    23108 MB  entity index open
+[0;93m2026-08-10 23:14:13.803954083 [W:onnxruntime:Default, device_discovery.cc:285 GetGpuDevices] Failed to detect devices under "/sys/class/drm/card0": device_discovery.cc:94 ReadFileContents Failed to open file: "/sys/class/drm/card0/device/vendor"[m
+  [   0.3s] peak RSS      255 MB  avail    22944 MB  embedder warm
+  [   1.2s] peak RSS      802 MB  avail    22830 MB  corpus retrieval once
+[reedus] router split ON: qwen3-1.7b-Q4_K_M.gguf threads=4 n_ctx=2048 cache=2048MB (+1024MB main = 3072MB of prompt cache)
+  [   2.4s] peak RSS     5430 MB  avail    20548 MB  main model constructed (router lazy)
+  [   2.4s] peak RSS     5430 MB  avail    20548 MB  Reedus constructed
+  [  28.3s] peak RSS     9479 MB  avail    17713 MB  warm() done (25.8s), both caches primed
+  [  39.4s] peak RSS    11872 MB  avail    15770 MB  full reply done (71 chars)
+
+  reply: Spain won the World Cup 2026, defeating Argentina 1-0 after extra time.
+
+PEAK RSS with ship caches + corpus + entity index: 11872 MB
+headroom vs 16 GB box: 4512 MB left for vision/Whisper/Kokoro

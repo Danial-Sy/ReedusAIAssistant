@@ -1,0 +1,471 @@
+[0;93m2026-08-13 01:14:50.885659636 [W:onnxruntime:Default, device_discovery.cc:285 GetGpuDevices] Failed to detect devices under "/sys/class/drm/card0": device_discovery.cc:94 ReadFileContents Failed to open file: "/sys/class/drm/card0/device/vendor"[m
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] topic router -> {'topic': 'Hollow Knight', 'query': 'Hollow Knight game'}
+[debug] topic 'Hollow Knight' resolved to corpus 'Hollow Knight' (skipping learn + web brief)
+[debug] retrieval query -> 'playing hollow knight exploration crazy'
+[debug] knowledge compressed 973 -> 140 chars
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] asked a question, next 3 turn(s) will not
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Hollow fungal wastes annoying navigate'
+[debug] sticky knowledge reuse -> 'hollow knight' (140 chars)
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Hollow fungal wastes annoying navigate radiance though'
+[debug] sticky knowledge reuse -> 'hollow knight' (140 chars)
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Hollow hornet fights go crazy'
+[debug] sticky knowledge reuse -> 'hollow knight' (140 chars)
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] topic router -> {'topic': 'Dark Souls', 'query': 'Dark Souls video game'}
+[debug] topic 'Dark Souls' resolved to corpus 'Dark Souls' (skipping learn + web brief)
+[debug] retrieval query -> 'playing dark souls bosses brutal'
+[debug] knowledge compressed 976 -> 103 chars
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] grounded cut (WARN ONLY) at sentence 4: 'Cursed One' is not in the corpus
+
+[debug] asked a question, next 3 turn(s) will not
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Bleach: Dark Souls anor londo hits different'
+[debug] sticky knowledge reuse -> 'dark souls' (103 chars)
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Bleach: Dark Souls anor londo hits different artorias though'
+[debug] sticky knowledge reuse -> 'dark souls' (103 chars)
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Bleach: Dark Souls ornstein smough rough'
+[debug] sticky knowledge reuse -> 'dark souls' (103 chars)
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] topic router -> {'topic': '', 'query': ''}
+[debug] topic router empty -> regex candidate 'breaking bad'
+[debug] topic 'breaking bad' resolved to corpus 'breaking bad' (skipping learn + web brief)
+[debug] retrieval query -> 'watching breaking bad again'
+[debug] nothing confidently anchored (weak passages injected) -> flagging the turn as ungrounded
+[debug] weak sticky capped 702 -> 318 chars
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] grounded cut (WARN ONLY) at sentence 5: 'Saul Goodman Titan' is not in the corpus
+
+[debug] asked a question, next 2 turn(s) will not
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'early seasons tense'
+[debug] sticky knowledge reuse -> 'breaking bad' (318 chars, weak-but-session-locked)
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'jesse going through'
+[debug] sticky knowledge reuse -> 'breaking bad' (318 chars, weak-but-session-locked)
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'jesse going through gus though'
+[debug] sticky knowledge reuse -> 'breaking bad' (318 chars, weak-but-session-locked)
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] asked a question, next 3 turn(s) will not
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] topic router -> {'topic': 'Persona 5', 'query': 'Persona 5 video game'}
+[debug] topic 'Persona 5' resolved to corpus 'Persona 5' (skipping learn + web brief)
+[debug] retrieval query -> 'playing persona palaces wild'
+[debug] nothing confidently anchored (weak passages injected) -> flagging the turn as ungrounded
+[debug] weak sticky capped 416 -> 314 chars
+
+[debug] bulletin gate -> 1/2 pins relevant
+
+[debug] draft-check skipped (nothing checkable in draft)
+[debug] topic cue ignored, session locked to 'persona 5'
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'mementos grinding slog sometimes'
+[debug] sticky knowledge reuse -> 'persona 5' (314 chars, weak-but-session-locked)
+
+[debug] bulletin gate -> 1/2 pins relevant
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'mementos grinding slog sometimes akechi though'
+[debug] sticky knowledge reuse -> 'persona 5' (314 chars, weak-but-session-locked)
+
+[debug] grounded cut (WARN ONLY) at sentence 3: 'Minato Edo Tensei' is not in the corpus
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'ryuji always cracks up'
+[debug] sticky knowledge reuse -> 'persona 5' (314 chars, weak-but-session-locked)
+
+[debug] asked a question, next 3 turn(s) will not
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] topic router -> {'topic': '', 'query': ''}
+[debug] topic router empty -> regex candidate 'one piece'
+[debug] topic 'one piece' resolved to corpus 'one piece' (skipping learn + web brief)
+[debug] retrieval query -> 'watching one piece long worth'
+[debug] nothing confidently anchored (weak passages injected) -> flagging the turn as ungrounded
+[debug] weak sticky capped 872 -> 315 chars
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] draft-check -> '<think>\n\n</think>\n\n{"verify": true, "query": "What is the current episode number of One Piece?"}'
+[reedus] llama.cpp[main]: threads=14 n_batch=512 n_ubatch=512 n_ctx=3072 prompt_cache=ram
+[reedus] router split ON: qwen3-1.7b-Q4_K_M.gguf threads=6 n_ctx=1536 cache=768MB (+2048MB main = 2816MB of prompt cache)
+[reedus] llama.cpp[router]: threads=6 n_batch=512 n_ubatch=512 n_ctx=1536 prompt_cache=ram
+[reedus] router model loaded in 0.5s
+
+loaded+warm in 45.8s (warm=44.3s)
+
+========================================================================
+SCENARIO HK_hollow_knight
+========================================================================
+[knowledge] subject from caller hint: 'hollow knight', skipped the subject model call
+[knowledge] entity passes: hollow knight
+[knowledge] 6 passages, top=0.70 anchor=0.84 (Hollow)
+[knowledge] binding block: EMPTY, none of ['Hollow', 'Spirited Away Hollow (G.I card)', 'hollow knight exploration crazy'] classified as a person
+
+  turn 1: 'been playing hollow knight man the exploration is crazy'
+    wall=12.05s  persona=6.95s  calls=['topic-router', 'domain-router', 'knowledge-brief', 'persona']
+    session='hollow knight'  sticky='hollow knight'
+    anchor=''  learned='Hollow Knight'
+    reply="Man, the exploration in Hollow Knight is pure magic, every corner feels like it's hiding a secret. What’s your favourite zone right now?"
+
+  turn 2: 'the fungal wastes are so annoying to navigate'
+    wall=7.67s  persona=7.58s  calls=['persona']
+    session='hollow knight'  sticky='hollow knight'
+    anchor='Hollow'  learned=''
+    reply='The Fungal Wastes? Pure hell, slippery paths and that weird silence.'
+
+  turn 3: 'what about the radiance though'
+    wall=8.73s  persona=8.64s  calls=['persona']
+    session='hollow knight'  sticky='hollow knight'
+    anchor='Hollow'  learned=''
+    reply='The radiance fight? Pure art, Gon’s desperation, the way the energy pulses like a heartbeat.'
+
+  turn 4: 'hornet fights go crazy too'
+    wall=8.90s  persona=8.81s  calls=['persona']
+    session='hollow knight'  sticky='hollow knight'
+    anchor='Hollow'  learned=''
+    reply='Hornet fights? Yeah, they go full chaos, like a swarm of tiny, angry bees with zero mercy.'
+
+========================================================================
+SCENARIO DS_dark_souls
+========================================================================
+[knowledge] subject from caller hint: 'dark souls', skipped the subject model call
+[knowledge] entity passes: dark souls
+[knowledge] 6 passages, top=0.69 anchor=0.80 (Bleach: Dark Souls)
+[knowledge] binding block: Rin Tsubokura, Goteitaishi
+
+  turn 1: 'been playing dark souls the bosses are brutal'
+    wall=11.28s  persona=7.48s  calls=['topic-router', 'domain-router', 'knowledge-brief', 'persona']
+    session='dark souls'  sticky='dark souls'
+    anchor=''  learned='Dark Souls'
+    reply='The bosses in Dark Souls? Absolute beast mode. Every one of them has that quiet intensity, you feel it before they even show up. What’s you'
+
+  turn 2: 'anor londo still hits different'
+    wall=8.83s  persona=8.74s  calls=['persona']
+    session='dark souls'  sticky='dark souls'
+    anchor='Bleach: Dark Souls'  learned=''
+    reply='Anor Londo still hits different, that chill, dead-eyed stare when you walk into the courtyard? Pure vibe. You feel like you’re walking into'
+
+  turn 3: 'what about artorias though'
+    wall=9.71s  persona=9.62s  calls=['persona']
+    session='dark souls'  sticky='dark souls'
+    anchor='Bleach: Dark Souls'  learned=''
+    reply='Artorias? That’s the one with the quiet strength and that hauntingly beautiful voice, like he carries the weight of the world in his silenc'
+
+  turn 4: 'ornstein and smough was rough'
+    wall=8.46s  persona=8.37s  calls=['persona']
+    session='dark souls'  sticky='dark souls'
+    anchor='Bleach: Dark Souls'  learned=''
+    reply='Ornstein and Smough? Yeah, that fight’s like a slow-burn storm. You don’t see it coming, then suddenly the world tilts.'
+
+========================================================================
+SCENARIO BB_breaking_bad
+========================================================================
+[knowledge] subject from caller hint: 'breaking bad', skipped the subject model call
+[knowledge] entity passes: breaking bad
+[knowledge] 6 passages, top=0.69 anchor=0.48 (Thaw (Chapter), Trivia)
+[knowledge] binding block: EMPTY, none of ['Thaw (Chapter)', 'Night of the Battle to Retake the Wall (Episode)', 'Hero (Episode)'] classified as a person
+
+  turn 1: 'been watching breaking bad again'
+    wall=9.18s  persona=7.96s  calls=['topic-router', 'domain-router', 'persona']
+    session='breaking bad'  sticky='breaking bad'
+    anchor=''  learned='breaking bad'
+    reply='Breaking bad again? That’s wild. How far in are you now?'
+
+  turn 2: 'the early seasons are so tense'
+    wall=8.09s  persona=8.00s  calls=['persona']
+    session='breaking bad'  sticky='breaking bad'
+    anchor=''  learned=''
+    reply="The early seasons are so tense, like every scene feels like it's holding its breath."
+
+  turn 3: 'jesse was going through it man'
+    wall=7.89s  persona=7.80s  calls=['persona']
+    session='breaking bad'  sticky='breaking bad'
+    anchor=''  learned=''
+    reply='Jesse was going through it, the way he carried that weight, especially in those early scenes.'
+
+  turn 4: 'what about gus though'
+    wall=8.32s  persona=8.23s  calls=['persona']
+    session='breaking bad'  sticky='breaking bad'
+    anchor=''  learned=''
+    reply='Gus… the guy who built his whole life on selling hope. What did you think of him once he started going off-script?'
+
+========================================================================
+SCENARIO P5_persona
+========================================================================
+[knowledge] subject from caller hint: 'persona 5', skipped the subject model call
+[knowledge] entity passes: persona 5
+[knowledge] 1 passages, top=0.67 anchor=0.72 (Persona Chords)
+[knowledge] binding block: EMPTY, none of ['Persona Chords', 'persona palaces'] classified as a person
+
+  turn 1: 'been playing persona 5 the palaces are wild'
+    wall=11.51s  persona=9.79s  calls=['topic-router', 'domain-router', 'persona']
+    session='persona 5'  sticky='persona 5'
+    anchor=''  learned='Persona 5'
+    reply="Palaces are wild, yeah, the whole vibe is like walking into a dream where every corner feels off. What's your favorite palace so far? I’ve "
+
+  turn 2: 'mementos grinding is a slog sometimes'
+    wall=11.01s  persona=10.92s  calls=['persona']
+    session='persona 5'  sticky='persona 5'
+    anchor=''  learned=''
+    reply='Mementos grinding is a slog, like trying to grind through an endless hallway with no exit.'
+
+  turn 3: 'what about akechi though'
+    wall=11.97s  persona=11.89s  calls=['persona']
+    session='persona 5'  sticky='persona 5'
+    anchor=''  learned=''
+    reply='Akechi... Yeah, he’s that quiet guy with the deep vibe and the always-on intensity.'
+
+  turn 4: 'ryuji always cracks me up'
+    wall=11.02s  persona=10.90s  calls=['persona']
+    session='persona 5'  sticky='persona 5'
+    anchor=''  learned=''
+    reply="Ryuji always cracks me up, yeah, that silent smirk and the way he just… exists in a room. Like he’s not part of the story, he's the punchli"
+
+========================================================================
+SCENARIO OP_one_piece
+========================================================================
+[knowledge] subject from caller hint: 'one piece', skipped the subject model call
+[knowledge] entity passes: one piece
+[knowledge] routed to ['anime_manga'] and missed; found it in a wider scan (The Swell Season (film))
+[knowledge] 4 passages, top=0.69 anchor=0.70 (The Swell Season (film))
+[knowledge] binding block: EMPTY, none of ['The Swell Season (film)', 'Line of Duty (series 1)', 'Legend of DUO'] classified as a person
+
+  turn 1: 'been watching one piece lately its so long but worth it'
+    wall=10.75s  persona=8.02s  calls=['topic-router', 'persona', 'draft-check']
+    session='one piece'  sticky='one piece'
+    anchor=''  learned='one piece'
+    reply='One Piece’s got that slow burn, then BAM, a whole new chapter of chaos. What episode are you on? I’m still trying to catch up with the last '
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'enies lobby arc insane'
+[debug] sticky knowledge reuse -> 'one piece' (315 chars, weak-but-session-locked)
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] grounded cut (WARN ONLY) at sentence 1: 'Enemies Lobby' is not in the corpus
+
+[debug] dropped 1 ungrounded quoted line(s) from the draft
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'luffy vs lucci goes crazy'
+[debug] sticky knowledge reuse -> 'one piece' (315 chars, weak-but-session-locked)
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'luffy vs lucci goes crazy zoro though'
+[debug] sticky knowledge reuse -> 'one piece' (315 chars, weak-but-session-locked)
+
+[debug] asked a question, next 1 turn(s) will not
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] topic router -> {'topic': 'Hollow Knight', 'query': 'Hollow Knight video game'}
+[debug] topic 'Hollow Knight' resolved to corpus 'Hollow Knight' (skipping learn + web brief)
+[debug] retrieval query -> 'playing hollow knight'
+[debug] knowledge compressed 973 -> 140 chars
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Hollow radiance fight beautiful'
+[debug] sticky knowledge reuse -> 'hollow knight' (140 chars)
+
+[debug] asked a question, next 2 turn(s) will not
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] topic router -> {'topic': '', 'query': ''}
+[debug] topic router empty -> regex candidate 'breaking bad'
+[debug] topic 'breaking bad' resolved to corpus 'breaking bad' (skipping learn + web brief)
+[debug] session subject 'hollow knight' -> 'breaking bad' (sticky cleared)
+[debug] retrieval query -> 'Hollow anyway watching breaking bad instead'
+[debug] nothing confidently anchored (weak passages injected) -> flagging the turn as ungrounded
+[debug] weak sticky capped 407 -> 318 chars
+
+[debug] bulletin gate -> 1/2 pins relevant
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Hollow jesse pinkman else'
+[debug] sticky knowledge reuse -> 'breaking bad' (318 chars, weak-but-session-locked)
+
+[debug] bulletin gate -> 1/2 pins relevant
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+
+  turn 2: 'the enies lobby arc was insane'
+    wall=10.17s  persona=10.08s  calls=['persona']
+    session='one piece'  sticky='one piece'
+    anchor=''  learned=''
+    reply='What was it exactly you found wild? The tension or the way they all just… stood there like nothing had changed?'
+
+  turn 3: 'luffy vs lucci goes crazy'
+    wall=10.51s  persona=10.42s  calls=['persona']
+    session='one piece'  sticky='one piece'
+    anchor=''  learned=''
+    reply='Luffy vs Lucci? That fight’s pure chaos, like a storm in a bottle. The way Luffy just goes full speed and doesn’t care about the rules… wha'
+
+  turn 4: 'what about zoro though'
+    wall=10.30s  persona=10.23s  calls=['persona']
+    session='one piece'  sticky='one piece'
+    anchor=''  learned=''
+    reply="Zoro’s got that silent intensity, like he’s not fighting, he’s just… existing in the moment. What's your favorite fight scene with him?"
+
+========================================================================
+SCENARIO PIVOT_hk_to_bb
+========================================================================
+[knowledge] entity passes: hollow knight
+[knowledge] 6 passages, top=0.70 anchor=0.84 (Hollow)
+[knowledge] binding block: EMPTY, none of ['Hollow', 'Spirited Away Hollow (G.I card)', 'hollow knight'] classified as a person
+
+  turn 1: 'been playing hollow knight'
+    wall=9.10s  persona=6.60s  calls=['topic-router', 'domain-router', 'knowledge-brief', 'persona']
+    session='hollow knight'  sticky='hollow knight'
+    anchor=''  learned='Hollow Knight'
+    reply='Still digging through Hollow Knight, the exploration’s wild, and those tunnels? Absolute art.'
+
+  turn 2: 'the radiance fight is beautiful'
+    wall=9.10s  persona=9.00s  calls=['persona']
+    session='hollow knight'  sticky='hollow knight'
+    anchor='Hollow'  learned=''
+    reply='The Radiance fight, that moment when everything stills and the lighting cuts through it. Like a silent scream in motion. What about it make'
+[knowledge] subject from caller hint: 'breaking bad', skipped the subject model call
+[knowledge] entity passes: breaking bad
+[knowledge] routed to ['anime_manga'] and missed; found it in a wider scan (Hate-watching)
+[knowledge] 1 passages, top=0.63 anchor=0.59 (Hate-watching)
+[knowledge] binding block: EMPTY, none of ['Hate-watching', 'hollow'] classified as a person
+
+  turn 3: 'anyway been watching breaking bad instead'
+    wall=11.36s  persona=9.03s  calls=['topic-router', 'domain-router', 'persona']
+    session='breaking bad'  sticky='breaking bad'
+    anchor='Hollow'  learned='breaking bad'
+    reply='Still locked in on Breaking Bad, that slow burn, the way every choice feels like a knife to the gut.'
+
+  turn 4: 'jesse pinkman is something else'
+    wall=9.84s  persona=9.75s  calls=['persona']
+    session='breaking bad'  sticky='breaking bad'
+    anchor='Hollow'  learned=''
+    reply='Jesse was going through it man, that quiet breakdown in the background, the way he just… stopped. Like his whole world cracked and no one s'
+
+
+########################################################################
+VERDICTS
+########################################################################
+
+HK_hollow_knight: 4 turns, 37.4s total, 9.3s/turn
+  t1  12.0s  KNOW_BRIEF  | 'been playing hollow knight man the exploration is crazy'
+  t2   7.7s  sticky_reuse  | 'the fungal wastes are so annoying to navigate'
+  t3   8.7s  sticky_reuse  | 'what about the radiance though'
+  t4   8.9s  sticky_reuse  | 'hornet fights go crazy too'
+  latency: follow-ups avg=8.4s  worst=t4 8.9s
+
+DS_dark_souls: 4 turns, 38.3s total, 9.6s/turn
+  t1  11.3s  KNOW_BRIEF  | 'been playing dark souls the bosses are brutal'
+  t2   8.8s  sticky_reuse  | 'anor londo still hits different'
+  t3   9.7s  sticky_reuse  | 'what about artorias though'
+  t4   8.5s  sticky_reuse  | 'ornstein and smough was rough'
+  latency: follow-ups avg=9.0s  worst=t3 9.7s
+
+BB_breaking_bad: 4 turns, 33.5s total, 8.4s/turn
+  t1   9.2s  persona/corpus  | 'been watching breaking bad again'
+  t2   8.1s  sticky_reuse  | 'the early seasons are so tense'
+  t3   7.9s  sticky_reuse  | 'jesse was going through it man'
+  t4   8.3s  sticky_reuse  | 'what about gus though'
+  latency: follow-ups avg=8.1s  worst=t4 8.3s
+
+P5_persona: 4 turns, 45.5s total, 11.4s/turn
+  t1  11.5s  persona/corpus  | 'been playing persona 5 the palaces are wild'
+  t2  11.0s  sticky_reuse  | 'mementos grinding is a slog sometimes'
+  t3  12.0s  sticky_reuse  | 'what about akechi though'
+  t4  11.0s  sticky_reuse  | 'ryuji always cracks me up'
+  latency: follow-ups avg=11.3s  worst=t3 12.0s
+
+OP_one_piece: 4 turns, 41.7s total, 10.4s/turn
+  t1  10.8s  persona/corpus  | 'been watching one piece lately its so long but worth it'
+  t2  10.2s  sticky_reuse  | 'the enies lobby arc was insane'
+  t3  10.5s  sticky_reuse  | 'luffy vs lucci goes crazy'
+  t4  10.3s  sticky_reuse  | 'what about zoro though'
+  latency: follow-ups avg=10.3s  worst=t3 10.5s
+
+PIVOT_hk_to_bb: 4 turns, 39.4s total, 9.9s/turn
+  t1   9.1s  KNOW_BRIEF  | 'been playing hollow knight'
+  t2   9.1s  sticky_reuse  | 'the radiance fight is beautiful'
+  t3  11.4s  sticky_reuse  | 'anyway been watching breaking bad instead'
+  t4   9.8s  sticky_reuse  | 'jesse pinkman is something else'
+  latency: follow-ups avg=9.5s  worst=t4 9.8s
+
+ALL SESSION-STICKY CHECKS PASSED

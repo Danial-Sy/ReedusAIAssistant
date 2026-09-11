@@ -1,0 +1,131 @@
+{
+    "type": "process",
+    "name": "Reedus TPU Tire 0.20 @BBL X2D",
+    "inherits": "0.20mm Standard @BBL X2D",
+    "from": "User",
+    "instantiation": "true",
+    "is_custom_defined": "0",
+    "print_settings_id": "Reedus TPU Tire 0.20 @BBL X2D",
+    "version": "1.0.0",
+    "description": "Slow TPU profile for Reedus knobby tires on X2D. 3 walls, 20% gyroid, ~20 mm/s.",
+    "compatible_printers": [
+        "Bambu Lab X2D 0.4 nozzle"
+    ],
+    "wall_loops": [
+        "3"
+    ],
+    "sparse_infill_density": [
+        "20%"
+    ],
+    "sparse_infill_pattern": "gyroid",
+    "enable_support": "0",
+    "brim_type": "no_brim",
+    "initial_layer_speed": [
+        "20",
+        "20",
+        "20",
+        "20"
+    ],
+    "initial_layer_infill_speed": [
+        "20",
+        "20",
+        "20",
+        "20"
+    ],
+    "outer_wall_speed": [
+        "18",
+        "18",
+        "18",
+        "18"
+    ],
+    "inner_wall_speed": [
+        "20",
+        "20",
+        "20",
+        "20"
+    ],
+    "sparse_infill_speed": [
+        "20",
+        "20",
+        "20",
+        "20"
+    ],
+    "internal_solid_infill_speed": [
+        "20",
+        "20",
+        "20",
+        "20"
+    ],
+    "top_surface_speed": [
+        "20",
+        "20",
+        "20",
+        "20"
+    ],
+    "bridge_speed": [
+        "20",
+        "20",
+        "20",
+        "20"
+    ],
+    "gap_infill_speed": [
+        "20",
+        "20",
+        "20",
+        "20"
+    ],
+    "default_acceleration": [
+        "500",
+        "500",
+        "500",
+        "500"
+    ],
+    "outer_wall_acceleration": [
+        "500",
+        "500",
+        "500",
+        "500"
+    ],
+    "initial_layer_acceleration": [
+        "300",
+        "300",
+        "300",
+        "300"
+    ],
+    "enable_overhang_speed": [
+        "1",
+        "1",
+        "1",
+        "1"
+    ],
+    "overhang_1_4_speed": [
+        "18",
+        "18",
+        "18",
+        "18"
+    ],
+    "overhang_2_4_speed": [
+        "15",
+        "15",
+        "15",
+        "15"
+    ],
+    "overhang_3_4_speed": [
+        "10",
+        "10",
+        "10",
+        "10"
+    ],
+    "overhang_4_4_speed": [
+        "10",
+        "10",
+        "10",
+        "10"
+    ],
+    "overhang_totally_speed": [
+        "10",
+        "10",
+        "10",
+        "10"
+    ]
+}

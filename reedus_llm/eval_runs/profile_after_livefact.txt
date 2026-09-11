@@ -1,0 +1,111 @@
+[0;93m2026-08-12 23:40:01.605801622 [W:onnxruntime:Default, device_discovery.cc:285 GetGpuDevices] Failed to detect devices under "/sys/class/drm/card0": device_discovery.cc:94 ReadFileContents Failed to open file: "/sys/class/drm/card0/device/vendor"[m
+
+[debug] bulletin gate -> 0/2 pins relevant
+
+[debug] router skipped (no fact/visual signal) -> not searching
+
+[debug] draft-check skipped (nothing checkable in draft)
+[debug] topic already known -> 'Naruto Shippuden: Ultimate Ninja Storm 4' (skipping learn + search)
+[debug] retrieval query -> 'Naruto playing naruto ultimate ninja storm'
+
+[debug] asked a question, next 3 turn(s) will not
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Five Kage Summit Arc five kage summit arc crazy'
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Five Kage Summit Arc sasuke cold hell arc'
+[debug] sticky knowledge reuse -> 'five kage summit arc' (1300 chars)
+
+[debug] draft-check skipped (nothing checkable in draft)
+
+[debug] router skipped (no fact/visual signal) -> not searching
+[debug] retrieval query -> 'Madara Uchiha sasuke cold hell arc madara though'
+[debug] nothing confidently anchored (weak passages injected) -> flagging the turn as ungrounded
+
+[debug] bulletin gate -> 1/2 pins relevant
+
+[debug] grounded cut (WARN ONLY) at sentence 3: 'Edo Tensei' is not in the corpus
+
+[debug] draft-check skipped (nothing checkable in draft)
+[reedus] llama.cpp[main]: threads=14 n_batch=512 n_ubatch=512 n_ctx=3072 prompt_cache=ram
+[reedus] router split ON: qwen3-1.7b-Q4_K_M.gguf threads=6 n_ctx=1536 cache=768MB (+2048MB main = 2816MB of prompt cache)
+[reedus] llama.cpp[router]: threads=6 n_batch=512 n_ubatch=512 n_ctx=1536 prompt_cache=ram
+[reedus] router model loaded in 1.3s
+
+model load: 3.1s   embedder: fastembed   warm: 35.9s
+
+=== turn 1: 'yo'  ->  3.92s
+    model calls: 1   prompt tokens 1880   generated 9   3.83s (98% of turn)
+      call 1: main   persona        prompt= 1880 gen=   9    3.83s
+    non-inference breakdown:
+        · embedding (fastembed)                  13.6 ms  x3
+        · bulletin relevance gate                 9.4 ms  x1
+      episodic write (embed+insert)               9.3 ms  x2
+      everything else (python/regex/io)          79.7 ms
+    reply: "What's up?"
+
+[knowledge] subject from caller hint: 'naruto shippuden: ultimate ninja storm 4', skipped the subject model call
+[knowledge] entity passes: naruto shippuden: ultimate ninja storm 4
+[knowledge] 6 passages, top=0.84 anchor=0.87 (Naruto Shippūden: Ultimate Ninja Storm 4)
+[knowledge] binding block: Naruto Shippūden: Ultimate Ninja Storm 4, Chikayo Fukuda
+=== turn 2: 'been playing naruto ultimate ninja storm 4'  ->  12.05s
+    model calls: 1   prompt tokens 2367   generated 33   11.31s (94% of turn)
+      call 1: main   persona        prompt= 2367 gen=  33   11.31s
+    non-inference breakdown:
+        · episodic recall (sqlite+cosine)        60.0 ms  x1
+        · embedding (fastembed)                  49.7 ms  x6
+        · bulletin relevance gate                27.2 ms  x1
+      episodic write (embed+insert)              17.8 ms  x2
+      everything else (python/regex/io)         717.4 ms
+    reply: 'Still deep in the Naruto Ultimate Ninja Storm 4 trenches, huh? That Road to Boruto mode, what’s your favorite jutsu or character so far?'
+
+[knowledge] subject from caller hint: 'five kage summit arc', skipped the subject model call
+[knowledge] entity passes: five kage summit arc
+[knowledge] 6 passages, top=0.77 anchor=0.78 (Five Kage Summit (Arc))
+[knowledge] binding block: EMPTY, none of ['Five Kage Summit (Arc)', 'Five Kage Summit', 'Naruto Shippūden 3D: The New Era'] classified as a person
+=== turn 3: 'the five kage summit arc was crazy'  ->  13.21s
+    model calls: 1   prompt tokens 2381   generated 43   12.19s (92% of turn)
+      call 1: main   persona        prompt= 2381 gen=  43   12.19s
+    non-inference breakdown:
+        · embedding (fastembed)                  94.7 ms  x6
+        · bulletin relevance gate                74.4 ms  x1
+        · episodic recall (sqlite+cosine)        39.6 ms  x1
+      episodic write (embed+insert)              10.6 ms  x2
+      everything else (python/regex/io)        1010.7 ms
+    reply: "That whole arc is peak Sasuke, the walk, the silence, no flinching when he talks about Itachi. He's not angry anymore, he's decided."
+
+=== turn 4: 'sasuke was cold as hell in that arc'  ->  12.51s
+    model calls: 1   prompt tokens 2449   generated 37   12.44s (99% of turn)
+      call 1: main   persona        prompt= 2449 gen=  37   12.44s
+    non-inference breakdown:
+        · episodic recall (sqlite+cosine)        53.4 ms  x1
+        · embedding (fastembed)                  17.9 ms  x4
+      episodic write (embed+insert)              10.6 ms  x2
+        · bulletin relevance gate                 8.3 ms  x1
+      everything else (python/regex/io)          63.5 ms
+    reply: "That whole arc is peak Sasuke, the walk, the silence, no flinching when he talks about Itachi. He's not angry anymore, he's decided."
+
+[knowledge] subject from caller hint: 'madara uchiha', skipped the subject model call
+[knowledge] entity passes: madara uchiha
+[knowledge] 6 passages, top=0.81 anchor=0.57 (FLAME, Characters)
+[knowledge] binding block: Sasuke Uchiha, Naruto Shippūden: Ultimate Ninja Storm 4
+=== turn 5: 'what about madara though'  ->  16.94s
+    model calls: 1   prompt tokens 2642   generated 75   16.45s (97% of turn)
+      call 1: main   persona        prompt= 2642 gen=  75   16.45s
+    non-inference breakdown:
+        · episodic recall (sqlite+cosine)        53.2 ms  x1
+        · embedding (fastembed)                  29.9 ms  x6
+        · bulletin relevance gate                13.7 ms  x1
+      episodic write (embed+insert)              12.1 ms  x2
+      everything else (python/regex/io)         485.6 ms
+    reply: "Madara's got that cold, calculating vibe, especially in the anime and manga. I love how he doesn’t rush into fights; it’s like every move is a statement. In game, his Edo Tensei version? So powerful with those Susano’o attacks, feels wild, almost unstoppable."
+
+TOTAL 5 turns: 58.6s  (11.7s/turn)
+
+router JSON:
+  no router JSON parsed this session

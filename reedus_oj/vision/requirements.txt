@@ -1,0 +1,11 @@
+# install torch cpu wheels FIRST or you pull ~2 GB of cuda libs the xeon can't use:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+ultralytics>=8.3.0          # YOLO-World v2 + export pipeline
+onnx>=1.15.0                # ONNX export
+onnxruntime>=1.17.0         # ONNX CPU runtime (fallback backend)
+openvino>=2024.0.0          # Intel CPU acceleration (recommended on Xeon)
+nncf>=2.9.0                 # needed by ultralytics for OpenVINO INT8 quantization
+numpy>=1.24
+pillow>=10.0
+opencv-python-headless>=4.8 # frame capture/decoding without GUI deps

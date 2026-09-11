@@ -1,0 +1,40 @@
+[reedus] router split ON: qwen3-1.7b-Q4_K_M.gguf threads=4 n_ctx=2048 cache=2048MB (+1024MB main = 3072MB of prompt cache)
+
+========================================================================
+DEV SET  (20 cases, TUNED ON, a floor)
+========================================================================
+
+  accuracy 12/20 (60%)   silence precision 75%   wrong 1   missed 5
+     FALSE SUBJECT -> ['elden ring'] for 'nah im good but that makes sense for sure though'
+     FALSE SUBJECT -> ['naruto'] for 'it was great man excellent conclusion'
+     WRONG -> ['kakashi vs itachi'] want ['itachi', 'itachi uchiha', 'kakashi', 'kakashi hatake']  'kakashi vs itachi who takes it'
+     missed (falls back to _entities) ['elden ring']  'uh thats not quite right... theres not drago'
+     missed (falls back to _entities) ['naruto']  'whats your favorite naruto team comp'
+     missed (falls back to _entities) ['naruto', 'naruto shippuden', 'naruto: shippuden']  'im just rewatching naruto shippuden god its '
+     missed (falls back to _entities) ['hollow knight', 'hollow knight silksong', 'hollow knight: silksong']  'yo you ever play hollow knight silksong'
+     missed (falls back to _entities) ['rinnegan', 'sasuke', 'sasuke uchiha']  'man i love rinnegan sasuke'
+
+========================================================================
+HOLDOUT  (15 cases, NEVER TUNED ON, the real number)
+========================================================================
+
+  accuracy 7/15 (47%)   silence precision 50%   wrong 0   missed 4
+     FALSE SUBJECT -> ['bleach'] for 'yooo no way'
+     FALSE SUBJECT -> ['one piece'] for 'yeah true honestly'
+     FALSE SUBJECT -> ['naruto'] for 'ok that actually makes sense now'
+     FALSE SUBJECT -> ['elden ring'] for 'fair enough'
+     missed (falls back to _entities) ["baldur's gate", "baldur's gate 3", 'baldurs gate 3']  'you ever mess with baldurs gate 3'
+     missed (falls back to _entities) ['gear 5', 'luffy', 'monkey d. luffy']  'bro luffy gear 5 is insane'
+     missed (falls back to _entities) ['aizen', 'kyoka suigetsu', 'sosuke aizen']  'whats the deal with aizens shikai'
+     missed (falls back to _entities) ['sekiro', 'sekiro: shadows die twice']  'i been grinding sekiro again'
+
+========================================================================
+GENERALISATION
+========================================================================
+  silence precision   dev 75%  ->  holdout 50%
+  wrong subjects      dev 1     ->  holdout 0
+
+  verdict:
+    No wrong subjects; the misses are it repeating the running topic on a turn
+    that needed nothing. Costs a shard search, does not corrupt the reply.
+    Acceptable to ship; worth another prompt pass if turns feel slow.

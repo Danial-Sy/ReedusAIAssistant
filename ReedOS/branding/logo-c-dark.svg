@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 170" role="img" aria-label="ReedOS logo, dark variant with gold cattail swipe">
+  <title>ReedOS, dark</title>
+  <rect x="0" y="0" width="520" height="170" rx="20" fill="#14231B"/>
+  <text x="48" y="94" font-family="'Trebuchet MS','Segoe UI',Verdana,sans-serif" font-size="66" font-weight="700" letter-spacing="1" fill="#F2EDDC">Reed<tspan fill="#C9A15C">OS</tspan></text>
+  <path d="M52,119 C37,111 27,98 25,83 C34,97 45,107 57,113 Z" fill="#5E8A69"/>
+  <path d="M50,122 C175,138 318,134 388,116 L388,109 C318,125 175,129 52,114 Z" fill="#C9A15C"/>
+  <g transform="rotate(-9 408 109)">
+    <rect x="384" y="102" width="48" height="14" rx="7" fill="#8A5A33"/>
+  </g>
+  <path d="M432,100 L468,90 L469,94 L433,105 Z" fill="#C9A15C"/>
+</svg>

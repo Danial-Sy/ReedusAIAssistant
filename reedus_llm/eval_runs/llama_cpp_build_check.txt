@@ -1,0 +1,13 @@
+# llama-cpp build check, 2026-08-11 (PERSONA_LATENCY_ANALYSIS §C.1)
+# Env: conda reedusquant, llama-cpp-python 0.3.34
+
+llama_print_system_info():
+CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 |
+
+Findings:
+- AVX2 = 1, FMA = 1, OPENMP = 1, SIMD path is present
+- NO BLAS flag in system info (BLAS = 0), stock wheel, no OpenBLAS/MKL
+- Analysis estimate still stands: a native+BLAS rebuild may up to ~2x CPU prefill
+- No rebuild performed this pass (plan: report only unless asked)
+
+Prefill rate: not re-measured here (analysis baseline ~72 tok/s cache-off on build box).

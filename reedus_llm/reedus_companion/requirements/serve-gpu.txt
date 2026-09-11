@@ -1,0 +1,9 @@
+# gpu inference on the build box, for testing before the xeon. install cuda torch first.
+torch>=2.3
+transformers>=4.51
+peft>=0.11
+bitsandbytes>=0.43        # for 4-bit loading of base+adapter
+accelerate>=0.30
+fastembed>=0.3            # memory embeddings
+ddgs>=5.0                 # web search
+requests>=2.31

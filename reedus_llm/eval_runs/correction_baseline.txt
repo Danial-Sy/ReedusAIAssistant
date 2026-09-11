@@ -1,0 +1,39 @@
+
+==========================================================================
+DEV SET  (42 cases, TUNED ON, treat as a floor)
+  6 excluded as few-shot primers
+==========================================================================
+
+  accuracy 37/42 (88%)   precision on 'none' 92%   recall on corrections 89%
+  FALSE POSITIVES (the expensive failure):
+     -> wrong via llm     'kcm2 literally means kurama chakra mode 2'
+     -> tone  via llm     'bro the animation on that'
+  missed corrections (cheap, costs one training pair):
+     exp wrong via llm     'wait what since when'
+     exp wrong via llm     'thats bleach lol'
+  right signal, wrong class:
+     exp wrong got vague via llm  'limitless. void is the domain'
+
+==========================================================================
+HOLDOUT  (47 cases, NEVER TUNED ON, the real number)
+==========================================================================
+
+  accuracy 41/47 (87%)   precision on 'none' 93%   recall on corrections 85%
+  FALSE POSITIVES (the expensive failure):
+     -> vague via llm     'ok but what about the TYBW animation'
+     -> vague via llm     'bungee gum possesses the properties of both rubber and gum'
+  missed corrections (cheap, costs one training pair):
+     exp wrong via llm     'pochita'
+     exp vague via llm     'gun to your head'
+     exp vague via llm     'and'
+  right signal, wrong class:
+     exp wrong got vague via llm  'from all might??'
+
+==========================================================================
+GENERALISATION
+==========================================================================
+  precision on 'none'   dev 92%  ->  holdout 93%
+  recall on corrections dev 89%  ->  holdout 85%
+
+  Generalises, but holdout false positives exist. Each one becomes a bad DPO
+  pair. Fix the prompt, then MOVE those cases into CASES so the holdout stays clean.
