@@ -1,0 +1,28 @@
+# example systemd unit for the Reedus Lite link on the xeon (run INSTEAD of reedus-voice, they share the brain + port 8766):
+#   sudo cp reedus-lite.service.example /etc/systemd/system/reedus-lite.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now reedus-llama-main reedus-llama-router reedus-lite
+# logs: journalctl -u reedus-lite -f. the Lite connects over wifi to :8767, open it in the firewall.
+
+[Unit]
+Description=Reedus Lite (voice loop over the network)
+After=network-online.target reedus-llama-main.service reedus-llama-router.service
+Wants=network-online.target
+# soft deps, voice still starts if run_llama_servers.sh manages the servers
+Wants=reedus-llama-main.service reedus-llama-router.service
+
+[Service]
+Type=simple
+User=dain
+Group=audio
+WorkingDirectory=/mnt/nvme/reedus/reedus_llm
+Environment=HOME=/home/dain
+# run_voice.sh sources xeon.env and resolves the interpreter via REEDUS_CONDA_ENV, systemd
+# doesn't inherit conda. run_lite.sh defaults to cloud mode, so nobody is asked at boot.
+ExecStart=/bin/bash /mnt/nvme/reedus/reedus_llm/reedus_companion/deploy/run_lite.sh --no-wait
+Restart=on-failure
+RestartSec=5
+# keep whisper/kokoro from being OOM-killed first
+OOMScoreAdjust=200
+
+[Install]
+WantedBy=multi-user.target

@@ -86,7 +86,8 @@ class VoiceLoopHooks(Hooks):
             "brain": rt.get("reedus") is not None,
             "voice": rt.get("speaker") is not None,
             "busy": rt.get("busy"),
-            "micOwner": "voiceloop",
+            "micOwner": "lite" if rt.get("lite") is not None else "voiceloop",
+            "lite": rt["lite"].snapshot() if rt.get("lite") is not None else None,
             "budget": budget_info(),
             "cloud": cloud_ready(),
         }

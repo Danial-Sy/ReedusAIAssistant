@@ -7,6 +7,7 @@ from typing import Optional
 import numpy as np
 
 from reedus_companion import config
+from reedus_companion.voice import events
 from reedus_companion.voice.wakeword import FRAME_SAMPLES, WakeWordDetector, shared_detector
 
 
@@ -39,6 +40,8 @@ class WakeListener:
                     return None
                 block, _of = stream.read(FRAME_SAMPLES)
                 if self.det.feed(block[:, 0]):
+                    events.emit("wake")
+                    events.emit("state", state="listening")
                     break
                 time.sleep(0)          # yield, the read already paces us
 

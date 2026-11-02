@@ -11,7 +11,7 @@ IN PROGRESS (core hardware and AI stack complete, ~2 months of integration left)
 
 ## Project Overview
 
-Reedus is a mobile AI assistant: a fully 3D-printed differential-drive robot with a local, offline conversational brain, intent-based object detection, and a hands-free voice interface. This repository holds the chassis CAD and Pico W drive firmware (`ReedusMech/`), the LLM serving stack, knowledge corpus and voice pipeline (`reedus_llm/`), the vision module (`reedus_oj/`), and ReedOS, the control app that runs on the robot and on any phone or laptop on the network (`ReedOS/`).
+Reedus is a mobile AI assistant: a fully 3D-printed differential-drive robot with a local, offline conversational brain, intent-based object detection, and a hands-free voice interface. This repository holds the chassis CAD and Pico W drive firmware (`ReedusMech/`), the LLM serving stack, knowledge corpus and voice pipeline (`reedus_llm/`), the vision module (`reedus_oj/`), Reedus Lite, a desk-sized body that shares the same brain (`ReedusLite/`), and ReedOS, the control app that runs on the robot and on any phone or laptop on the network (`ReedOS/`).
 
 The brain is a base Qwen2.5-3B-Instruct model running on a CPU-only Xeon inside the robot through llama.cpp. Reedus's personality lives in a system prompt (no fine-tune because the fine-tune route (Mistral-7B LoRA, then QLoRA + DPO on Qwen3-4B) was built and measured, and it degraded the model more than it helped, so it was dropped). Around the base model sits a local sharded Wikipedia/Fandom retrieval corpus, a search router backed by self-hosted SearXNG, a fact-verification layer, persistent memory, and a correction-capture loop. An optional cloud mode swaps the LLM for Gemini and the voice for Inworld.
 
@@ -44,6 +44,7 @@ Most importantly, this project contributes to my growth as a student by pushing 
 - [ ] Link object detection to the LLM on the robot end to end
 - [ ] Run vision + LLM + voice together on the PID-tuned chassis
 - [ ] Post-completion: modular attachment system and forklift arm
+- [ ] Reedus Lite: desk body on the same brain (firmware + link written, hardware arriving)
 
 ## Design Decisions
 

@@ -77,3 +77,7 @@ ReedOS/reedos-app/src-tauri/target/
 
 # ReedOS shared passcode, in the clear on the robot's disk
 ReedOS/daemon/auth.json
+
+# Reedus Lite firmware: wifi + token, and the PlatformIO build dir
+ReedusLite/firmware/src/secrets.h
+ReedusLite/firmware/.pio/
