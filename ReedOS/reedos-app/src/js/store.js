@@ -16,10 +16,28 @@ const Store = (() => {
     return /\/\/(127\.0\.0\.1|localhost|\[::1\])[:/]/.test(url || "");
   }
 
+  /* what people type: "192.168.1.20", "reedus-box:8765", "http://x/" -> ws://host:port/ws.
+     a phone app has no page origin to guess from, so this is how it finds the run box */
+  function normalizeDaemon(raw) {
+    let v = String(raw || "").trim();
+    if (!v) return derivedDaemonUrl();
+    if (/^https?:\/\//i.test(v)) v = v.replace(/^http/i, "ws");
+    if (!/^wss?:\/\//i.test(v)) v = "ws://" + v;
+    try {
+      const u = new URL(v);
+      if (!u.port && u.protocol === "ws:") u.port = String(DAEMON_PORT);
+      if (u.pathname === "/" || !u.pathname) u.pathname = "/ws";
+      return u.toString();
+    } catch {
+      return derivedDaemonUrl();
+    }
+  }
+
   const defaults = {
     app: {
-      theme: "night",
+      theme: "auto",          // "auto" follows the phone/OS, or "night" | "day"
       fullAnimations: true,
+      tab: "reedus",          // "reedus" | "lite" | "chat" | "settings"
       daemonUrl: derivedDaemonUrl(),
       ttsInChat: true,        // is the answer said out loud at all
       chatInput: "type",      // "type" | "talk"
@@ -94,9 +112,9 @@ const Store = (() => {
     }
   }
 
-  function persist() {
+  function persist(robotChanged) {
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* storage full/blocked: run in-memory */ }
-    if (window.Link) Link.pushSettings(state.robot);
+    if (robotChanged && typeof Link !== "undefined") Link.pushSettings(state.robot);
   }
 
   return {
@@ -105,7 +123,7 @@ const Store = (() => {
     get routines() { return state.routines; },
 
     setApp(k, v) { state.app[k] = v; persist(); },
-    setRobot(k, v) { state.robot[k] = v; persist(); },
+    setRobot(k, v) { state.robot[k] = v; persist(true); },
 
     saveRoutine(routine) {
       const i = state.routines.findIndex(r => r.id === routine.id);
@@ -121,6 +139,7 @@ const Store = (() => {
       const r = state.routines.find(r => r.id === id);
       if (r) { r.lastRun = Date.now(); persist(); }
     },
+    normalizeDaemon,
     newId() {
       return "r-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7);
     },

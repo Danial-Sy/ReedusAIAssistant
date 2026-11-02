@@ -57,6 +57,9 @@ class Hooks:
     def set_mode(self, target: str) -> dict:
         raise NotImplementedError
 
+    def lite(self, req: dict) -> dict:
+        return {"error": "this brain has no Reedus Lite (start it with run_lite.sh)"}
+
 
 def _resolve_target(target: str) -> tuple[str, str]:
     """('cloud'|'local', '') or ('', reason)."""
@@ -86,7 +89,8 @@ class VoiceLoopHooks(Hooks):
             "brain": rt.get("reedus") is not None,
             "voice": rt.get("speaker") is not None,
             "busy": rt.get("busy"),
-            "micOwner": "voiceloop",
+            "micOwner": "lite" if rt.get("lite") is not None else "voiceloop",
+            "lite": rt["lite"].snapshot() if rt.get("lite") is not None else None,
             "budget": budget_info(),
             "cloud": cloud_ready(),
         }
@@ -148,6 +152,14 @@ class VoiceLoopHooks(Hooks):
             "pending": want,
             "note": "queued, applies before his next turn",
         }
+
+    def lite(self, req: dict) -> dict:
+        hub = self.rt.get("lite")
+        if hub is None:
+            return {"error": "the brain is driving the robot right now, not Reedus Lite"}
+        out = hub.control(req or {})
+        out["lite"] = hub.snapshot()
+        return out
 
 
 class StandaloneHooks(Hooks):
@@ -307,6 +319,10 @@ INDEX = """Reedus control API, he is {mode} right now.
   POST /api/chat    {{"text":"...","speak":false}}
   POST /api/speak   {{"text":"..."}}
   POST /api/listen  {{"speak":false}}
+  GET  /api/lite                   Reedus Lite link, battery, face
+  POST /api/lite    {{"volume":70,"brightness":80,"look":30,"expr":"wink"}}
+  GET  /api/connections            Spotify + MCP servers (Composio, Zapier, Home Assistant…)
+  POST /api/connections {{"action":"add","preset":"composio","key":"ck_…"}}
 
 ReedOS talks to this through reedosd; curl works too:
   curl -s localhost:{port}/api/health
@@ -372,6 +388,13 @@ class _Handler(BaseHTTPRequestHandler):
             s = h.snapshot()
             return self._send({k: s.get(k) for k in
                                ("mode", "pending", "switching", "budget", "cloud")})
+        if path == "/api/connections":
+            from reedus_companion.connect.manager import manager
+            return self._send(manager().status())
+        if path == "/api/lite":
+            lite = h.snapshot().get("lite")
+            return self._send({"lite": lite} if lite is not None else
+                              {"error": "no Reedus Lite on this brain", "lite": None}, 200)
         return self._send({"error": "no such endpoint"}, 404)
 
     def do_POST(self):                                           # noqa: N802
@@ -398,6 +421,13 @@ class _Handler(BaseHTTPRequestHandler):
             if path == "/api/mode":
                 out = h.set_mode(str(data.get("mode") or "toggle"))
                 return self._send(out, 200 if out.get("accepted") else 409)
+            if path == "/api/lite":
+                out = h.lite(data)
+                return self._send(out, 409 if out.get("error") else 200)
+            if path == "/api/connections":
+                from reedus_companion.connect.manager import manager
+                out = manager().act(data)
+                return self._send(out, 409 if out.get("error") else 200)
         except Exception as e:                                   # noqa: BLE001
             traceback.print_exc()
             return self._send({"error": f"{type(e).__name__}: {e}"}, 500)

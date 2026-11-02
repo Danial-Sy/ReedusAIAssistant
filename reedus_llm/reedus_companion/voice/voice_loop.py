@@ -9,6 +9,7 @@ from typing import Callable, List, Optional
 from reedus_companion import config
 from reedus_companion.serve.core import Reedus
 from reedus_companion import mode as mode_mod
+from reedus_companion.voice import events
 
 DIM, RESET = "\033[2m", "\033[0m"
 
@@ -193,6 +194,8 @@ def _do_turn_inner(reedus, speaker, text: str, backend: str, on_token) -> tuple[
     if speaker is not None:
         speaker.reset()
     reedus.on_token = on_token if speaker is not None else None
+    events.emit("heard", text=text)
+    events.emit("state", state="thinking")
     cancel = threading.Event()
     reedus._cancel = cancel
     from reedus_companion.voice.barge import ThinkCancelWatcher
@@ -202,6 +205,7 @@ def _do_turn_inner(reedus, speaker, text: str, backend: str, on_token) -> tuple[
         on_hit=lambda: (
             print(f"{DIM}  [interrupted think, listening]{RESET}", flush=True),
             _release_speaker(speaker),
+            events.emit("wake"),
         ),
     )
     think_w.start()
@@ -215,16 +219,20 @@ def _do_turn_inner(reedus, speaker, text: str, backend: str, on_token) -> tuple[
     if reedus.cancelled or cancel.is_set():
         _release_speaker(speaker)
         print(f"{DIM}  (generation cancelled){RESET}")
+        events.emit("state", state="listening")
         return "", think_s, 0.0, ThinkCancel(getattr(think_w, "audio", None))
 
     print(f"reedus> {reply}")
+    events.emit("reply", text=reply)
     speak_s = 0.0
     barge_audio = None
     if speaker is not None:
         from reedus_companion.voice.barge import BargeWatcher
-        watcher = BargeWatcher(speaker, on_barge=lambda: print(
-            f"{DIM}  [interrupted, listening]{RESET}", flush=True))
+        watcher = BargeWatcher(speaker, on_barge=lambda: (
+            print(f"{DIM}  [interrupted, listening]{RESET}", flush=True),
+            events.emit("wake")))
         watcher.start()
+        events.emit("state", state="speaking")
         t2 = time.perf_counter()
         speaker.finish(reply)
         speak_s = time.perf_counter() - t2
@@ -254,6 +262,7 @@ def run_always_on(reedus, stt, speaker, backend: str, hear: Callable,
     print("\nReedus is listening. Just talk. (Ctrl-C to quit)\n")
     while True:
         speaker, backend = _apply_pending(reedus, speaker, backend)
+        events.emit("state", state="listening")
         audio = hear()
         if getattr(audio, "size", 1) == 0:
             continue
@@ -297,6 +306,7 @@ def _consume_interruption(reedus, speaker, stt, session, backend: str, on_token,
             pass
     bev = session.on_transcript(btext)
     if bev.action == "stop":
+        events.emit("session_end")
         print(f"{DIM}  [{bev.note}]{RESET}")
         _play_ui(bev.jingle, jingled, speaker)
         print(f"{DIM}  asleep again. Say Hey Reedus when you want me back.{RESET}\n")
@@ -355,6 +365,8 @@ def run_wake_loop(reedus, stt, speaker, backend: str, hear: Callable,
         speaker, backend = _apply_pending(reedus, speaker, backend)
         state = "SESSION" if session.active else "IDLE"
         print(f"{DIM}  … {state}{RESET}", flush=True)
+        events.emit("state", state="listening" if session.active else "idle")
+        was_active = session.active
         # idle + a wake model: nothing is transcribed until the name is said, so a room full
         # of talking costs ~5% of a core instead of a whisper pass per noise. the name is
         # re-attached as text so the session state machine runs unchanged.
@@ -376,6 +388,7 @@ def run_wake_loop(reedus, stt, speaker, backend: str, hear: Callable,
             elif getattr(audio, "size", 0) == 0:
                 ev = session.on_transcript("")
                 if ev.action == "stop":
+                    events.emit("session_end")
                     print(f"{DIM}  [{ev.note}]{RESET}")
                     _play_ui(ev.jingle, jingled, speaker)
                     print(f"{DIM}  asleep again.{RESET}\n")
@@ -401,6 +414,10 @@ def run_wake_loop(reedus, stt, speaker, backend: str, hear: Callable,
                 print(f"you   > {text}")
 
         ev = session.on_transcript(text or "")
+        if session.active and not was_active:
+            events.emit("wake")
+        if ev.action == "stop":
+            events.emit("session_end")
         if ev.action == "ignore":
             if ev.note == "no wake":
                 print(f"{DIM}  (ignored, say Hey Reedus){RESET}\n")

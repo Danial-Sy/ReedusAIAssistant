@@ -4,7 +4,7 @@ const Auth = (() => {
   try { token = localStorage.getItem(KEY) || ""; } catch { /* private mode */ }
 
   function base() {
-    const ws = (window.Store && Store.app.daemonUrl) || "";
+    const ws = (typeof Store !== "undefined" && Store.app.daemonUrl) || "";
     try {
       const u = new URL(ws);
       return `${u.protocol === "wss:" ? "https:" : "http:"}//${u.host}`;
@@ -25,8 +25,12 @@ const Auth = (() => {
 
   async function status() {
     try {
-      const r = await fetch(withKey(base() + "/api/auth"), { credentials: "include" });
-      if (!r.ok) return { reachable: true, required: true, authed: false };
+      const r = await fetch(withKey(base() + "/api/auth"), {
+        credentials: "include",
+        signal: AbortSignal.timeout ? AbortSignal.timeout(3000) : undefined,
+      });
+      if (r.status === 401) return { reachable: true, required: true, authed: false };
+      if (!r.ok) return { reachable: false, required: false, authed: true };   // not reedosd
       return { reachable: true, ...(await r.json()) };
     } catch {
       return { reachable: false, required: false, authed: true };   // no daemon → mock mode

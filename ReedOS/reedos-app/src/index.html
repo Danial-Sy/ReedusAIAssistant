@@ -15,7 +15,28 @@
 <title>ReedOS</title>
 <link rel="stylesheet" href="css/reedos.css">
 </head>
-<body data-theme="night">
+<body data-theme="night" data-tab="reedus">
+
+<!-- the badge, drawn once and <use>d everywhere -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="badge" viewBox="14 14 132 132">
+      <circle cx="80" cy="80" r="58" fill="#F3EEE3" stroke="#1F4D3A" stroke-width="4"/>
+      <path d="M80,128 C60,112 50,88 55,58 C61,88 70,108 81,123 Z" fill="#1F4D3A"/>
+      <path d="M80,128 C96,115 104,96 102,72 C100,98 92,114 79,125 Z" fill="#1F4D3A"/>
+      <path d="M78.5,128 C78,104 78.2,84 79,62 L81,62 C81.8,84 82,104 81.5,128 Z" fill="#1F4D3A"/>
+      <rect x="73.5" y="34" width="13" height="32" rx="6.5" fill="#6B4226"/>
+    </symbol>
+    <symbol id="i-robot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9.3" cy="13.4" r="1.6" fill="currentColor"/><circle cx="14.7" cy="13.4" r="1.6" fill="currentColor"/><path d="M12 8V4.6M9.6 4.4h4.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-lite" viewBox="0 0 24 24"><path d="M5.2 9.2 4.4 3.6l4.8 3M18.8 9.2l.8-5.6-4.8 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><rect x="3.6" y="7" width="16.8" height="13" rx="4.4" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="8" y="11.4" width="1.9" height="3.2" rx=".9" fill="currentColor"/><rect x="14.1" y="11.4" width="1.9" height="3.2" rx=".9" fill="currentColor"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M5 5h14a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-7.6L7 21v-3.5H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="8.5" cy="11.3" r="1.2" fill="currentColor"/><circle cx="12" cy="11.3" r="1.2" fill="currentColor"/><circle cx="15.5" cy="11.3" r="1.2" fill="currentColor"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.9 1.9M16.6 16.6l1.9 1.9M18.5 5.5l-1.9 1.9M7.4 16.6l-1.9 1.9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v4M15 3v4M6.5 7h11v3.5a5.5 5.5 0 0 1-11 0zM12 16v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-spotify" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M7 9.4c3.6-1 7.4-.7 10.4 1M7.6 12.5c3-.8 6-.5 8.5.9M8.2 15.4c2.4-.6 4.6-.4 6.6.7" fill="none" stroke="var(--sp-ink, #0C1510)" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9.5 5.5 6.5 6.5-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
 
 <!-- splash -->
 <div id="splash" aria-hidden="true">
@@ -34,300 +55,536 @@
   </div>
 </div>
 
-<!-- shell -->
 <div id="shell" hidden>
   <!-- passcode gate. shown before the daemon is known and again if the socket closes 4401 -->
   <div id="lock" hidden>
     <form id="lock-form" class="lock-card">
-      <svg class="lock-badge" viewBox="14 14 132 132" aria-hidden="true">
-        <circle cx="80" cy="80" r="58" fill="#F3EEE3" stroke="#1F4D3A" stroke-width="4"/>
-        <path d="M80,128 C60,112 50,88 55,58 C61,88 70,108 81,123 Z" fill="#1F4D3A"/>
-        <path d="M80,128 C96,115 104,96 102,72 C100,98 92,114 79,125 Z" fill="#1F4D3A"/>
-        <path d="M78.5,128 C78,104 78.2,84 79,62 L81,62 C81.8,84 82,104 81.5,128 Z" fill="#1F4D3A"/>
-        <rect x="73.5" y="34" width="13" height="32" rx="6.5" fill="#6B4226"/>
-      </svg>
-      <h2>Reedus is locked</h2>
-      <p class="hint">Enter the passcode to drive him.</p>
+      <svg class="lock-badge" aria-hidden="true"><use href="#badge"/></svg>
+      <h2>ReedOS is locked</h2>
+      <p class="hint">Enter the passcode to get in.</p>
       <input id="lock-code" type="password" inputmode="text" autocomplete="current-password"
-             placeholder="passcode" maxlength="64" autofocus>
+             placeholder="passcode" maxlength="64">
       <button class="cta" type="submit" id="lock-go">Unlock</button>
       <p class="lock-err" id="lock-err"></p>
     </form>
   </div>
 
-  <header id="topbar">
-    <button id="brand" class="brand" title="Home">
-      <svg class="brand-badge" viewBox="14 14 132 132" aria-hidden="true">
-        <circle cx="80" cy="80" r="58" fill="#F3EEE3" stroke="#1F4D3A" stroke-width="4"/>
-        <path d="M80,128 C60,112 50,88 55,58 C61,88 70,108 81,123 Z" fill="#1F4D3A"/>
-        <path d="M80,128 C96,115 104,96 102,72 C100,98 92,114 79,125 Z" fill="#1F4D3A"/>
-        <path d="M78.5,128 C78,104 78.2,84 79,62 L81,62 C81.8,84 82,104 81.5,128 Z" fill="#1F4D3A"/>
-        <rect x="73.5" y="34" width="13" height="32" rx="6.5" fill="#6B4226"/>
-      </svg>
+  <!-- tabs: a rail on desktop, a bottom bar on a phone -->
+  <nav id="nav" aria-label="Sections">
+    <button class="nav-brand" data-tab-go="reedus" title="ReedOS">
+      <svg class="brand-badge" aria-hidden="true"><use href="#badge"/></svg>
       <span class="brand-word">Reed<span class="gold">OS</span></span>
     </button>
-    <div id="clock" aria-label="clock">--:--</div>
-    <div id="mode-switch" class="seg mode-seg" data-mode="local" title="Which brain answers: the Xeon's own model, or Gemini in the cloud">
-      <button type="button" class="seg-btn on" data-mode="local">Local</button>
-      <button type="button" class="seg-btn" data-mode="cloud">Cloud</button>
-      <span class="seg-note" id="mode-note"></span>
+    <div class="nav-tabs" role="tablist">
+      <span class="nav-ind" aria-hidden="true"></span>
+      <button class="nav-tab" role="tab" data-tab-go="reedus">
+        <span class="nt-icon"><svg><use href="#i-robot"/></svg><i class="nt-dot" id="dot-reedus"></i></span>
+        <span class="nt-label">Reedus</span><span class="nt-sub">the robot</span>
+      </button>
+      <button class="nav-tab" role="tab" data-tab-go="lite">
+        <span class="nt-icon"><svg><use href="#i-lite"/></svg><i class="nt-dot" id="dot-lite"></i></span>
+        <span class="nt-label">Lite</span><span class="nt-sub">desk buddy</span>
+      </button>
+      <span class="nav-sep" aria-hidden="true"><span>Shared</span></span>
+      <button class="nav-tab" role="tab" data-tab-go="chat">
+        <span class="nt-icon"><svg><use href="#i-chat"/></svg><i class="nt-dot" id="dot-chat"></i></span>
+        <span class="nt-label">Chat</span><span class="nt-sub">one brain</span>
+      </button>
+      <button class="nav-tab" role="tab" data-tab-go="settings">
+        <span class="nt-icon"><svg><use href="#i-gear"/></svg></span>
+        <span class="nt-label">Settings</span><span class="nt-sub">brain &amp; app</span>
+      </button>
     </div>
-    <div id="pills">
-      <span class="pill" id="pill-robot" data-state="off"><i class="dot"></i>Reedus</span>
-      <span class="pill" id="pill-phone" data-state="off"><i class="dot"></i>Phone</span>
-      <span class="pill" id="pill-chat"  data-state="off"><i class="dot"></i>Model</span>
+    <div class="nav-foot">
+      <span class="conn" id="conn"><i></i><span id="conn-text">connecting…</span></span>
     </div>
-  </header>
+  </nav>
 
-  <main id="viewport">
-
-    <!-- home -->
-    <section class="view is-active" id="view-home" data-title="Home">
-      <div class="tile-grid" id="tile-grid">
-        <button class="tile tile-wide accent" data-nav="routines">
-          <svg class="t-icon" viewBox="0 0 48 48"><rect x="6" y="8" width="26" height="9" rx="3.5"/><rect x="12" y="20" width="26" height="9" rx="3.5"/><rect x="6" y="32" width="26" height="9" rx="3.5"/><path class="thin" d="M36 12.5h4M42 24.5h-4M36 36.5h4" stroke-linecap="round"/></svg>
-          <span class="t-name">Routines</span>
-          <span class="t-sub" id="tile-sub-routines">Build &amp; run sequences</span>
-        </button>
-        <button class="tile" data-nav="remote">
-          <svg class="t-icon" viewBox="0 0 48 48"><circle cx="24" cy="24" r="17" class="thin"/><circle cx="24" cy="24" r="7"/><path class="thin" d="M24 7v6M24 35v6M7 24h6M35 24h6" stroke-linecap="round"/></svg>
-          <span class="t-name">Remote</span>
-          <span class="t-sub" id="tile-sub-remote">Drive Reedus live</span>
-        </button>
-        <button class="tile" data-nav="camera">
-          <svg class="t-icon" viewBox="0 0 48 48"><rect x="5" y="12" width="30" height="24" rx="5" class="thin"/><circle cx="20" cy="24" r="7"/><path d="M35 19l8-5v20l-8-5z"/></svg>
-          <span class="t-name">Camera</span>
-          <span class="t-sub" id="tile-sub-camera">See what Reedus sees</span>
-        </button>
-        <button class="tile" data-nav="chat">
-          <svg class="t-icon" viewBox="0 0 48 48"><path class="thin" d="M8 10h32a3 3 0 013 3v18a3 3 0 01-3 3H20l-9 8v-8H8a3 3 0 01-3-3V13a3 3 0 013-3z"/><circle cx="17" cy="22" r="2.6"/><circle cx="25" cy="22" r="2.6"/><circle cx="33" cy="22" r="2.6"/></svg>
-          <span class="t-name">Chat</span>
-          <span class="t-sub" id="tile-sub-chat">Talk with Reedus</span>
-        </button>
-        <button class="tile" data-nav="robot-settings">
-          <svg class="t-icon" viewBox="0 0 48 48"><rect x="10" y="16" width="28" height="20" rx="6" class="thin"/><circle cx="19" cy="26" r="3.4"/><circle cx="29" cy="26" r="3.4"/><path class="thin" d="M24 16v-6M20 10h8" stroke-linecap="round"/></svg>
-          <span class="t-name">Robot settings</span>
-          <span class="t-sub">Voice, drive, behavior</span>
-        </button>
-        <button class="tile" data-nav="diagnostics">
-          <svg class="t-icon" viewBox="0 0 48 48"><path class="thin" d="M5 30h9l4-14 6 22 5-16 3 8h11" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span class="t-name">Diagnostics</span>
-          <span class="t-sub" id="tile-sub-diag">Telemetry &amp; logs</span>
-        </button>
-        <button class="tile" data-nav="app-settings">
-          <svg class="t-icon" viewBox="0 0 48 48"><circle cx="24" cy="24" r="8" class="thin"/><path class="thin" d="M24 6v6M24 36v6M6 24h6M36 24h6M11 11l4.4 4.4M32.6 32.6L37 37M37 11l-4.4 4.4M15.4 32.6L11 37" stroke-linecap="round"/></svg>
-          <span class="t-name">App settings</span>
-          <span class="t-sub">Theme, network, pairing</span>
-        </button>
-        <button class="tile" data-nav="power">
-          <svg class="t-icon" viewBox="0 0 48 48"><path class="thin" d="M24 8v14" stroke-linecap="round"/><path class="thin" d="M15 13a15 15 0 1018 0" stroke-linecap="round"/></svg>
-          <span class="t-name">Power</span>
-          <span class="t-sub">Sleep, restart, quit</span>
-        </button>
+  <div id="main">
+    <header id="topbar">
+      <svg class="top-badge" aria-hidden="true"><use href="#badge"/></svg>
+      <span class="crumb" id="crumb">Reedus</span>
+      <button class="demo-pill" id="demo-pill" hidden title="reedosd wasn't found, everything here is simulated">Demo</button>
+      <span id="clock" aria-label="clock">--:--</span>
+      <div id="mode-switch" class="seg mode-seg" data-mode="local" title="Which brain answers: the Xeon's own model, or Gemini in the cloud">
+        <span class="seg-ind" aria-hidden="true"></span>
+        <button type="button" class="seg-btn on" data-mode="local">Local</button>
+        <button type="button" class="seg-btn" data-mode="cloud">Cloud</button>
       </div>
-    </section>
+    </header>
 
-    <!-- remote -->
-    <section class="view" id="view-remote" data-title="Remote control">
-      <div class="view-head"><button class="back" data-nav="home">&#8592;</button><h2>Remote control</h2><span class="head-note" id="remote-mode-note"></span></div>
-      <div class="remote-layout">
-        <div class="pad-wrap card">
-          <div id="joypad"><div id="joyknob"></div></div>
-          <p class="hint">drag to drive &middot; WASD or arrow keys &middot; space stops</p>
-          <p class="hint" id="loop-note">closed-loop: speed held by the robot's PID</p>
-        </div>
-        <div class="remote-side">
-          <div class="card">
-            <h3>Live telemetry</h3>
-            <div class="telem-row"><span>Left wheel</span><div class="meter"><div class="meter-fill" id="rpm-l-bar"></div></div><b id="rpm-l">0</b><small>rpm</small></div>
-            <div class="telem-row"><span>Right wheel</span><div class="meter"><div class="meter-fill" id="rpm-r-bar"></div></div><b id="rpm-r">0</b><small>rpm</small></div>
-            <div class="telem-row"><span>Heading</span><div class="meter"><div class="meter-fill gold" id="head-bar"></div></div><b id="head-deg">0.0</b><small>&deg;</small></div>
-            <div class="telem-row"><span>Latency</span><div class="meter"><div class="meter-fill gold" id="lat-bar"></div></div><b id="lat">--</b><small>ms</small></div>
-          </div>
-          <div class="card">
-            <h3>Drive tuning</h3>
-            <label class="field"><span>Max speed <b id="maxspeed-val">60%</b></span><input type="range" id="maxspeed" min="10" max="100" value="60"></label>
-            <label class="field"><span>Turn sensitivity <b id="turnsens-val">70%</b></span><input type="range" id="turnsens" min="10" max="100" value="70"></label>
-          </div>
-          <button id="estop" class="danger-btn">EMERGENCY STOP</button>
-        </div>
-      </div>
-    </section>
+    <main id="viewport">
 
-    <!-- routines -->
-    <section class="view" id="view-routines" data-title="Routines">
-      <div class="view-head"><button class="back" data-nav="home">&#8592;</button><h2>Routines</h2><button class="cta" id="routine-new">+ New routine</button></div>
-      <div id="routine-list" class="routine-list"></div>
-      <div id="routine-editor" hidden>
-        <div class="editor-bar">
-          <input id="routine-name" class="name-input" placeholder="Routine name" maxlength="40">
-          <div class="editor-actions">
-            <button class="ghost-btn" id="routine-cancel">Cancel</button>
-            <button class="cta" id="routine-save">Save</button>
-            <button class="cta gold" id="routine-run">&#9654; Run</button>
+      <!-- ================= REEDUS (robot) ================= -->
+      <section class="view is-active" id="view-reedus" data-tab="reedus" data-title="Reedus">
+        <div class="page">
+          <div class="hero hero-reedus stagger">
+            <div class="hero-art">
+              <svg viewBox="0 0 120 120" class="robot-art" aria-hidden="true">
+                <ellipse cx="60" cy="104" rx="38" ry="6" class="shadow"/>
+                <g class="robot-bob">
+                  <path d="M60 22v-9" class="ra-line"/><circle cx="60" cy="11" r="4" class="ra-tip"/>
+                  <rect x="22" y="22" width="76" height="58" rx="18" class="ra-body"/>
+                  <rect x="31" y="32" width="58" height="34" rx="11" class="ra-screen"/>
+                  <g class="ra-eyes"><rect x="44" y="42" width="8" height="12" rx="4"/><rect x="68" y="42" width="8" height="12" rx="4"/></g>
+                  <rect x="20" y="78" width="80" height="14" rx="6" class="ra-deck"/>
+                  <circle cx="34" cy="96" r="8" class="ra-wheel"/><circle cx="86" cy="96" r="8" class="ra-wheel"/>
+                </g>
+              </svg>
+            </div>
+            <div class="hero-body">
+              <span class="eyebrow">Robot</span>
+              <h1>Reedus</h1>
+              <p class="hero-line" id="reedus-line">Looking for the robot…</p>
+              <div class="chips">
+                <span class="chip" id="chip-drive" data-state="off"><i></i>Drive link</span>
+                <span class="chip" id="chip-brain" data-state="off"><i></i>Brain</span>
+                <span class="chip" id="chip-cam" data-state="off"><i></i>Camera</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="tile-grid stagger">
+            <button class="tile tile-wide accent" data-nav="remote">
+              <svg class="t-icon" viewBox="0 0 48 48"><circle cx="24" cy="24" r="17" class="thin"/><circle cx="24" cy="24" r="7"/><path class="thin" d="M24 7v6M24 35v6M7 24h6M35 24h6" stroke-linecap="round"/></svg>
+              <span class="t-name">Drive</span>
+              <span class="t-sub" id="tile-sub-remote">Joystick, keys, live wheel speeds</span>
+              <svg class="t-chev"><use href="#i-chev"/></svg>
+            </button>
+            <button class="tile" data-nav="routines">
+              <svg class="t-icon" viewBox="0 0 48 48"><rect x="6" y="8" width="26" height="9" rx="3.5"/><rect x="12" y="20" width="26" height="9" rx="3.5"/><rect x="6" y="32" width="26" height="9" rx="3.5"/></svg>
+              <span class="t-name">Routines</span>
+              <span class="t-sub" id="tile-sub-routines">Build &amp; run sequences</span>
+            </button>
+            <button class="tile" data-nav="camera">
+              <svg class="t-icon" viewBox="0 0 48 48"><rect x="5" y="12" width="30" height="24" rx="5" class="thin"/><circle cx="20" cy="24" r="7"/><path d="M35 19l8-5v20l-8-5z"/></svg>
+              <span class="t-name">Camera</span>
+              <span class="t-sub" id="tile-sub-camera">See what he sees</span>
+            </button>
+            <button class="tile" data-nav="robot-settings">
+              <svg class="t-icon" viewBox="0 0 48 48"><path class="thin" d="M8 14h20M36 14h4M8 34h6M22 34h18" stroke-linecap="round"/><circle cx="32" cy="14" r="4.5"/><circle cx="18" cy="34" r="4.5"/></svg>
+              <span class="t-name">Robot settings</span>
+              <span class="t-sub">Drive, safety, behavior</span>
+            </button>
+            <button class="tile" data-nav="diagnostics">
+              <svg class="t-icon" viewBox="0 0 48 48"><path class="thin" d="M5 30h9l4-14 6 22 5-16 3 8h11" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span class="t-name">Diagnostics</span>
+              <span class="t-sub" id="tile-sub-diag">Telemetry &amp; logs</span>
+            </button>
+            <button class="tile" data-nav="power">
+              <svg class="t-icon" viewBox="0 0 48 48"><path class="thin" d="M24 8v14" stroke-linecap="round"/><path class="thin" d="M15 13a15 15 0 1018 0" stroke-linecap="round"/></svg>
+              <span class="t-name">Power</span>
+              <span class="t-sub">Sleep, reboot</span>
+            </button>
           </div>
         </div>
-        <div class="editor-cols">
-          <div class="steps-col card"><h3>Steps</h3><ol id="steps-list" class="steps-list"></ol><p class="hint" id="steps-empty">Tap a block to add it &#8594;</p></div>
-          <div class="palette-col card"><h3>Blocks</h3><div id="block-palette" class="block-palette"></div></div>
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <!-- camera -->
-    <section class="view" id="view-camera" data-title="Camera">
-      <div class="view-head"><button class="back" data-nav="home">&#8592;</button><h2>Camera</h2><span class="head-note" id="cam-note"></span></div>
-      <div class="cam-stage card" id="cam-stage">
-        <img id="cam-stream" alt="Reedus camera stream" hidden>
-        <div id="cam-offline">
-          <svg viewBox="14 14 132 132" class="cam-badge"><circle cx="80" cy="80" r="58" fill="none" stroke="#4C7A5A" stroke-width="3" opacity=".5"/><path d="M80,128 C60,112 50,88 55,58 C61,88 70,108 81,123 Z" fill="#4C7A5A" opacity=".5"/><path d="M80,128 C96,115 104,96 102,72 C100,98 92,114 79,125 Z" fill="#4C7A5A" opacity=".5"/><path d="M78.5,128 C78,104 78.2,84 79,62 L81,62 C81.8,84 82,104 81.5,128 Z" fill="#4C7A5A" opacity=".5"/><rect x="73.5" y="34" width="13" height="32" rx="6.5" fill="#8A5A33" opacity=".6"/></svg>
-          <p>Camera offline</p><small>Stream starts when reedosd is running with a camera attached.</small>
+      <!-- remote -->
+      <section class="view" id="view-remote" data-tab="reedus" data-title="Drive">
+        <div class="page">
+          <div class="view-head"><button class="back" data-nav="reedus" aria-label="Back"><svg><use href="#i-back"/></svg></button><h2>Drive</h2><span class="head-note" id="remote-mode-note"></span></div>
+          <div class="remote-layout stagger">
+            <div class="pad-wrap card">
+              <div id="joypad"><span class="jp-ring"></span><span class="jp-ring r2"></span><div id="joyknob"></div></div>
+              <p class="hint center">drag to drive &middot; WASD or arrows &middot; space stops</p>
+            </div>
+            <div class="remote-side">
+              <div class="card">
+                <h3>Live telemetry</h3>
+                <div class="telem-row"><span>Left wheel</span><div class="meter"><div class="meter-fill" id="rpm-l-bar"></div></div><b id="rpm-l">0</b><small>rpm</small></div>
+                <div class="telem-row"><span>Right wheel</span><div class="meter"><div class="meter-fill" id="rpm-r-bar"></div></div><b id="rpm-r">0</b><small>rpm</small></div>
+                <div class="telem-row"><span>Heading</span><div class="meter"><div class="meter-fill gold" id="head-bar"></div></div><b id="head-deg">0.0</b><small>&deg;</small></div>
+                <div class="telem-row"><span>Latency</span><div class="meter"><div class="meter-fill gold" id="lat-bar"></div></div><b id="lat">--</b><small>ms</small></div>
+              </div>
+              <div class="card">
+                <h3>Feel</h3>
+                <label class="field"><span>Max speed <b id="maxspeed-val">60%</b></span><input type="range" id="maxspeed" min="10" max="100" value="60"></label>
+                <label class="field"><span>Turn sensitivity <b id="turnsens-val">70%</b></span><input type="range" id="turnsens" min="10" max="100" value="70"></label>
+              </div>
+              <button id="estop" class="danger-btn">STOP</button>
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="cam-controls">
-        <button class="ghost-btn" id="cam-snap">Snapshot</button>
-        <button class="ghost-btn" id="cam-full">Fullscreen</button>
-      </div>
-    </section>
+      </section>
 
-    <!-- chat -->
-    <section class="view" id="view-chat" data-title="Chat">
-      <div class="view-head">
-        <button class="back" data-nav="home">&#8592;</button><h2>Chat with Reedus</h2>
-        <label class="switch head-note"><input type="checkbox" id="chat-tts" checked><span class="track"></span><span class="sw-label">Speak</span></label>
-      </div>
-      <div class="chat-bar">
-        <!-- how you talk to him -->
-        <div class="seg" id="chat-input-seg" data-val="type">
-          <button type="button" class="seg-btn on" data-val="type">Type</button>
-          <button type="button" class="seg-btn" data-val="talk">Talk</button>
+      <!-- routines -->
+      <section class="view" id="view-routines" data-tab="reedus" data-title="Routines">
+        <div class="page">
+          <div class="view-head"><button class="back" data-nav="reedus" aria-label="Back"><svg><use href="#i-back"/></svg></button><h2>Routines</h2><button class="cta head-act" id="routine-new">+ New</button></div>
+          <div id="routine-list" class="routine-list"></div>
+          <div id="routine-editor" hidden>
+            <div class="editor-bar">
+              <input id="routine-name" class="name-input" placeholder="Routine name" maxlength="40">
+              <div class="editor-actions">
+                <button class="ghost-btn" id="routine-cancel">Cancel</button>
+                <button class="cta" id="routine-save">Save</button>
+                <button class="cta gold" id="routine-run">&#9654; Run</button>
+              </div>
+            </div>
+            <div class="editor-cols">
+              <div class="steps-col card"><h3>Steps</h3><ol id="steps-list" class="steps-list"></ol><p class="hint" id="steps-empty">Tap a block to add it.</p></div>
+              <div class="palette-col card"><h3>Blocks</h3><div id="block-palette" class="block-palette"></div></div>
+            </div>
+          </div>
         </div>
-        <!-- whose ears and speakers: "Reedus" = his usb mic + box speakers in his real voice,
-             "This device" = browser mic + browser TTS -->
-        <div class="seg" id="chat-route-seg" data-val="mobo">
-          <button type="button" class="seg-btn" data-val="device">This device</button>
-          <button type="button" class="seg-btn on" data-val="mobo">Reedus</button>
-        </div>
-        <span class="chat-hint" id="chat-hint"></span>
-      </div>
-      <div class="chat-notice" id="chat-notice">Offline model not connected, canned test replies active.</div>
-      <div id="chat-thread" class="chat-thread"></div>
-      <form id="chat-form" class="chat-form" autocomplete="off">
-        <button class="mic-btn" id="chat-mic" type="button" title="talk" hidden>&#127908;</button>
-        <input id="chat-input" placeholder="Say something to Reedus" maxlength="500">
-        <button class="cta" type="submit">Send</button>
-      </form>
-    </section>
+      </section>
 
-    <!-- robot settings -->
-    <section class="view" id="view-robot-settings" data-title="Robot settings">
-      <div class="view-head"><button class="back" data-nav="home">&#8592;</button><h2>Robot settings</h2><span class="head-note" id="rs-sync"></span></div>
-      <div class="settings-grid">
-        <div class="card">
-          <h3>Voice</h3>
-          <label class="field"><span>Voice profile</span>
-            <select id="rs-voice"><option value="classic">Reedus classic</option><option value="chirpy">Chirpy</option><option value="lowfi">Low-fi hum</option><option value="whisper">Whisper</option></select></label>
-          <label class="field"><span>Expressiveness <b id="rs-expr-val">65%</b></span><input type="range" id="rs-expr" min="0" max="100" value="65"></label>
-          <label class="field"><span>Speech rate <b id="rs-rate-val">100%</b></span><input type="range" id="rs-rate" min="50" max="150" value="100"></label>
-          <label class="field"><span>Volume <b id="rs-vol-val">80%</b></span><input type="range" id="rs-vol" min="0" max="100" value="80"></label>
+      <!-- camera -->
+      <section class="view" id="view-camera" data-tab="reedus" data-title="Camera">
+        <div class="page">
+          <div class="view-head"><button class="back" data-nav="reedus" aria-label="Back"><svg><use href="#i-back"/></svg></button><h2>Camera</h2><span class="head-note" id="cam-note"></span></div>
+          <div class="cam-stage card" id="cam-stage">
+            <img id="cam-stream" alt="Reedus camera stream" hidden>
+            <div id="cam-offline">
+              <svg class="cam-badge" aria-hidden="true"><use href="#badge"/></svg>
+              <p>Camera offline</p><small>The stream starts when reedosd runs with a camera attached.</small>
+            </div>
+          </div>
+          <div class="cam-controls">
+            <button class="ghost-btn" id="cam-snap">Snapshot</button>
+            <button class="ghost-btn" id="cam-full">Fullscreen</button>
+          </div>
         </div>
-        <div class="card" id="brain-card">
-          <h3>Brain</h3>
-          <div class="kv"><span>Mode</span><b id="bc-mode">, </b></div>
-          <div class="kv"><span>Backend</span><b id="bc-backend">, </b></div>
-          <div class="kv"><span>Voice</span><b id="bc-voice">, </b></div>
-          <div class="kv"><span>Cloud spend</span><b id="bc-budget">, </b></div>
-          <p class="card-note" id="bc-note">The Local / Cloud switch is in the top bar, it moves the
-            robot's real mode, the same one "switch to cloud mode" does out loud.</p>
-        </div>
-        <div class="card">
-          <h3>Behavior</h3>
-          <label class="switch row"><input type="checkbox" id="rs-llm" checked><span class="track"></span><span class="sw-label">LLM brain enabled</span></label>
-          <label class="switch row"><input type="checkbox" id="rs-noises" checked><span class="track"></span><span class="sw-label">Robot noises</span></label>
-          <label class="switch row"><input type="checkbox" id="rs-idle"><span class="track"></span><span class="sw-label">Idle wandering</span></label>
-          <label class="field"><span>Wake word</span><input type="text" id="rs-wake" value="hey reedus" maxlength="24"></label>
-        </div>
-        <div class="card">
-          <h3>Drive</h3>
-          <label class="field"><span>Speed limit <b id="rs-speed-val">70%</b></span><input type="range" id="rs-speed" min="10" max="100" value="70"></label>
-          <label class="field"><span>Acceleration ramp <b id="rs-accel-val">40%</b></span><input type="range" id="rs-accel" min="0" max="100" value="40"></label>
-        </div>
-        <div class="card">
-          <h3>Safety</h3>
-          <label class="field"><span>Watchdog timeout <b id="rs-wd-val">400 ms</b></span><input type="range" id="rs-wd" min="100" max="2000" step="50" value="400"></label>
-          <label class="switch row"><input type="checkbox" id="rs-tipstop" checked><span class="track"></span><span class="sw-label">Stop if tipped</span></label>
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <!-- diagnostics -->
-    <section class="view" id="view-diagnostics" data-title="Diagnostics">
-      <div class="view-head"><button class="back" data-nav="home">&#8592;</button><h2>Diagnostics</h2><button class="ghost-btn" id="diag-selftest">Run motor self-test</button></div>
-      <div class="diag-grid">
-        <div class="stat card"><span class="s-label">Link latency</span><b class="s-val" id="d-lat">--</b><small>ms</small></div>
-        <div class="stat card"><span class="s-label">Packets / s</span><b class="s-val" id="d-pps">--</b></div>
-        <div class="stat card"><span class="s-label">Left counts</span><b class="s-val" id="d-cl">0</b></div>
-        <div class="stat card"><span class="s-label">Right counts</span><b class="s-val" id="d-cr">0</b></div>
-        <div class="stat card"><span class="s-label">Uptime</span><b class="s-val" id="d-up">--</b></div>
-        <div class="stat card"><span class="s-label">Link mode</span><b class="s-val" id="d-mode">mock</b></div>
-      </div>
-      <div class="card chart-card"><h3>Wheel RPM</h3><canvas id="rpm-chart" height="120"></canvas></div>
-      <div class="card log-card"><h3>Log</h3><div id="log-console" class="log-console"></div></div>
-    </section>
+      <!-- robot settings -->
+      <section class="view" id="view-robot-settings" data-tab="reedus" data-title="Robot settings">
+        <div class="page">
+          <div class="view-head"><button class="back" data-nav="reedus" aria-label="Back"><svg><use href="#i-back"/></svg></button><h2>Robot settings</h2><span class="head-note" id="rs-sync"></span></div>
+          <div class="settings-grid stagger">
+            <div class="card">
+              <h3>Drive</h3>
+              <label class="field"><span>Speed limit <b id="rs-speed-val">70%</b></span><input type="range" id="rs-speed" min="10" max="100" value="70"></label>
+              <label class="field"><span>Acceleration ramp <b id="rs-accel-val">40%</b></span><input type="range" id="rs-accel" min="0" max="100" value="40"></label>
+            </div>
+            <div class="card">
+              <h3>Safety</h3>
+              <label class="field"><span>Watchdog timeout <b id="rs-wd-val">400 ms</b></span><input type="range" id="rs-wd" min="100" max="2000" step="50" value="400"></label>
+              <label class="switch row"><input type="checkbox" id="rs-tipstop" checked><span class="track"></span><span class="sw-label">Stop if tipped</span></label>
+            </div>
+            <div class="card">
+              <h3>Behavior</h3>
+              <label class="switch row"><input type="checkbox" id="rs-noises" checked><span class="track"></span><span class="sw-label">Robot noises</span></label>
+              <label class="switch row"><input type="checkbox" id="rs-idle"><span class="track"></span><span class="sw-label">Idle wandering</span></label>
+              <p class="card-note">Voice, wake word and the brain are shared with Lite, they live in Settings.</p>
+            </div>
+          </div>
+        </div>
+      </section>
 
-    <!-- app settings -->
-    <section class="view" id="view-app-settings" data-title="App settings">
-      <div class="view-head"><button class="back" data-nav="home">&#8592;</button><h2>App settings</h2></div>
-      <div class="settings-grid">
-        <div class="card">
-          <h3>Appearance</h3>
-          <label class="field"><span>Theme</span><select id="as-theme"><option value="night">Dark</option><option value="day">Light</option></select></label>
-          <label class="switch row"><input type="checkbox" id="as-anim" checked><span class="track"></span><span class="sw-label">Full animations</span></label>
+      <!-- diagnostics -->
+      <section class="view" id="view-diagnostics" data-tab="reedus" data-title="Diagnostics">
+        <div class="page">
+          <div class="view-head"><button class="back" data-nav="reedus" aria-label="Back"><svg><use href="#i-back"/></svg></button><h2>Diagnostics</h2><button class="ghost-btn head-act" id="diag-selftest">Motor self-test</button></div>
+          <div class="diag-grid stagger">
+            <div class="stat card"><span class="s-label">Link latency</span><b class="s-val" id="d-lat">--</b><small>ms</small></div>
+            <div class="stat card"><span class="s-label">Packets / s</span><b class="s-val" id="d-pps">--</b></div>
+            <div class="stat card"><span class="s-label">Left counts</span><b class="s-val" id="d-cl">0</b></div>
+            <div class="stat card"><span class="s-label">Right counts</span><b class="s-val" id="d-cr">0</b></div>
+            <div class="stat card"><span class="s-label">Uptime</span><b class="s-val" id="d-up">--</b></div>
+            <div class="stat card"><span class="s-label">Link</span><b class="s-val" id="d-mode">demo</b></div>
+          </div>
+          <div class="card chart-card"><h3>Wheel RPM <span class="legend"><i class="lg-l"></i>left <i class="lg-r"></i>right</span></h3><canvas id="rpm-chart" height="120"></canvas></div>
+          <div class="card log-card"><h3>Log</h3><div id="log-console" class="log-console"></div></div>
         </div>
-        <div class="card">
-          <h3>Connection</h3>
-          <label class="field"><span>reedosd address</span><input type="text" id="as-daemon" placeholder="auto, same host that served this page"></label>
-          <button class="ghost-btn" id="as-reconnect">Reconnect</button>
-          <p class="hint" id="as-conn-state">mock mode</p>
-        </div>
-        <div class="card">
-          <h3>Access</h3>
-          <p class="hint">Open this on any device on the network:</p>
-          <p class="pair-code" id="as-pair">http://<span id="as-ip">this-machine</span>:8765/</p>
-          <p class="hint" id="as-lock-state">checking…</p>
-          <label class="field"><span>Shared passcode</span>
-            <input type="text" id="as-passcode" placeholder="anyone who knows it gets in" maxlength="64"></label>
-          <button class="ghost-btn" id="as-passcode-save">Set passcode</button>
-          <p class="hint" id="as-passcode-note">Leave it empty and press Set to remove the passcode.
-            Changing it signs every other device out.</p>
-        </div>
-        <div class="card">
-          <h3>About</h3>
-          <p class="hint">ReedOS 0.1.0, light as a reed.<br>Built for Reedus.</p>
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <!-- power -->
-    <section class="view" id="view-power" data-title="Power">
-      <div class="view-head"><button class="back" data-nav="home">&#8592;</button><h2>Power</h2></div>
-      <div class="power-grid">
-        <button class="power-btn card" id="pw-sleep"><b>Sleep Reedus</b><span>Motors off, low power, stays paired</span></button>
-        <button class="power-btn card" id="pw-reboot"><b>Reboot robot</b><span>Restart the Pico link agent</span></button>
-        <button class="power-btn card" id="pw-daemon"><b>Restart reedosd</b><span>Restart the service layer</span></button>
-        <button class="power-btn card danger" id="pw-quit"><b>Quit ReedOS</b><span>Close this app</span></button>
-      </div>
-    </section>
+      <!-- power -->
+      <section class="view" id="view-power" data-tab="reedus" data-title="Power">
+        <div class="page">
+          <div class="view-head"><button class="back" data-nav="reedus" aria-label="Back"><svg><use href="#i-back"/></svg></button><h2>Power</h2></div>
+          <div class="power-grid stagger">
+            <button class="power-btn card" id="pw-sleep"><b>Sleep Reedus</b><span>Motors off, stays paired</span></button>
+            <button class="power-btn card" id="pw-reboot"><b>Reboot robot</b><span>Restart the Pico link agent</span></button>
+            <button class="power-btn card" id="pw-daemon"><b>Restart reedosd</b><span>Restart the service layer</span></button>
+          </div>
+        </div>
+      </section>
 
-  </main>
-  <div id="toasts"></div>
+      <!-- ================= REEDUS LITE ================= -->
+      <section class="view" id="view-lite" data-tab="lite" data-title="Reedus Lite">
+        <div class="page">
+          <div class="hero hero-lite stagger">
+            <div class="hero-art">
+              <div class="lite-face">
+                <span class="ear l"></span><span class="ear r"></span>
+                <canvas id="lite-face" width="160" height="160" aria-label="Lite's face, live"></canvas>
+              </div>
+            </div>
+            <div class="hero-body">
+              <span class="eyebrow">Desk buddy</span>
+              <h1>Reedus Lite</h1>
+              <p class="hero-line" id="lite-line">Looking for Lite…</p>
+              <div class="chips">
+                <span class="chip" id="chip-lite-link" data-state="off"><i></i>Link</span>
+                <span class="chip" id="chip-lite-batt" data-state="off"><i></i><span>Battery</span></span>
+                <span class="chip" id="chip-lite-wifi" data-state="off"><i></i><span>Wi-Fi</span></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="lite-help card" id="lite-help" hidden>
+            <h3 id="lite-help-title">Lite isn't awake</h3>
+            <p id="lite-help-body"></p>
+          </div>
+
+          <div class="lite-grid stagger">
+            <div class="card lite-card" id="lite-expr-card">
+              <h3>Expressions <small>tap to play on the face</small></h3>
+              <div class="expr-grid" id="expr-grid"></div>
+            </div>
+
+            <div class="card lite-card" id="lite-head-card">
+              <h3>Head <small id="head-read">centered</small></h3>
+              <div class="dial-wrap">
+                <svg id="look-dial" viewBox="0 0 260 150" aria-label="Tap where Lite should look">
+                  <path class="dial-track" d="M20 130 A110 110 0 0 1 240 130"/>
+                  <g id="dial-ticks"></g>
+                  <circle class="dial-doa" id="dial-doa" cx="130" cy="20" r="7" opacity="0"/>
+                  <g id="dial-target" opacity="0"><circle cx="130" cy="20" r="9" class="dial-tgt"/></g>
+                  <g id="dial-needle"><path class="dial-needle" d="M130 130 L130 34"/><circle cx="130" cy="34" r="5" class="dial-tip"/></g>
+                  <g class="dial-lite"><path d="M114 120l-3-12 9 5M146 120l3-12-9 5"/><rect x="110" y="114" width="40" height="28" rx="9"/></g>
+                  <text x="22" y="148" class="dial-lab">left</text><text x="238" y="148" class="dial-lab end">right</text><text x="130" y="12" class="dial-lab mid">front</text>
+                </svg>
+              </div>
+              <div class="row-btns">
+                <button class="ghost-btn" id="look-center">Center</button>
+                <button class="ghost-btn" id="look-voice" disabled>Face the last voice</button>
+              </div>
+            </div>
+
+            <div class="card lite-card" id="lite-knobs-card">
+              <h3>Speaker &amp; face</h3>
+              <label class="field"><span>Volume <b id="lite-vol-val">70%</b></span><input type="range" id="lite-vol" min="0" max="100" value="70"></label>
+              <label class="field"><span>Face brightness <b id="lite-bri-val">100%</b></span><input type="range" id="lite-bri" min="5" max="100" value="100"></label>
+              <p class="card-note">The firmware still caps brightness for the battery.</p>
+            </div>
+
+            <div class="card lite-card" id="lite-status-card">
+              <h3>Status</h3>
+              <div class="kv"><span>State</span><b id="ls-state">-</b></div>
+              <div class="kv"><span>Battery</span><b id="ls-batt">-</b></div>
+              <div class="kv"><span>Wi-Fi</span><b id="ls-wifi">-</b></div>
+              <div class="kv"><span>Uptime</span><b id="ls-up">-</b></div>
+              <div class="kv"><span>Speaker buffer</span><b id="ls-buf">-</b></div>
+              <div class="kv"><span>Underruns / mic drops</span><b id="ls-drops">-</b></div>
+              <div class="kv"><span>Firmware</span><b id="ls-fw">-</b></div>
+              <div class="kv"><span>Address</span><b id="ls-peer">-</b></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= CHAT (shared) ================= -->
+      <section class="view" id="view-chat" data-tab="chat" data-title="Chat">
+        <div class="chat-page">
+          <div class="chat-top">
+            <div class="chat-who">
+              <span class="avatar big"><svg><use href="#badge"/></svg></span>
+              <div><b>Reedus</b><small id="chat-body">same brain as &ldquo;hey Reedus&rdquo;</small></div>
+            </div>
+            <label class="switch"><input type="checkbox" id="chat-tts" checked><span class="track"></span><span class="sw-label">Speak</span></label>
+          </div>
+          <div class="chat-bar">
+            <div class="seg" id="chat-input-seg" data-val="type">
+              <span class="seg-ind" aria-hidden="true"></span>
+              <button type="button" class="seg-btn on" data-val="type">Type</button>
+              <button type="button" class="seg-btn" data-val="talk">Talk</button>
+            </div>
+            <div class="seg" id="chat-route-seg" data-val="mobo" title="Whose mic and speaker">
+              <span class="seg-ind" aria-hidden="true"></span>
+              <button type="button" class="seg-btn" data-val="device">This device</button>
+              <button type="button" class="seg-btn on" data-val="mobo" id="route-body">His speaker</button>
+            </div>
+          </div>
+          <p class="chat-hint" id="chat-hint"></p>
+          <div class="chat-notice" id="chat-notice" hidden></div>
+          <div id="chat-thread" class="chat-thread">
+            <div class="chat-empty" id="chat-empty">
+              <svg aria-hidden="true"><use href="#badge"/></svg>
+              <p>Typed messages go to the same brain that answers out loud, whichever body it's in.</p>
+            </div>
+          </div>
+          <form id="chat-form" class="chat-form" autocomplete="off">
+            <button class="mic-btn" id="chat-mic" type="button" title="talk" hidden>
+              <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+            <input id="chat-input" placeholder="Say something to Reedus" maxlength="500" enterkeyhint="send">
+            <button class="send-btn" type="submit" aria-label="Send"><svg viewBox="0 0 24 24"><path d="M4 12 20 4l-4 16-4-7z" fill="currentColor"/></svg></button>
+          </form>
+        </div>
+      </section>
+
+      <!-- ================= SETTINGS (shared) ================= -->
+      <section class="view" id="view-settings" data-tab="settings" data-title="Settings">
+        <div class="page">
+          <div class="view-head"><h2>Settings</h2><span class="head-note" id="set-sync"></span></div>
+
+          <button class="link-card" data-nav="connections">
+            <span class="lc-icon"><svg><use href="#i-plug"/></svg></span>
+            <span class="lc-body"><b>Connections</b><small id="conn-sub">Spotify, Gmail, Calendar, smart home…</small></span>
+            <svg class="t-chev"><use href="#i-chev"/></svg>
+          </button>
+
+          <h4 class="group-label">Shared by Reedus &amp; Lite</h4>
+          <div class="settings-grid stagger">
+            <div class="card" id="brain-card">
+              <h3>Brain</h3>
+              <div class="body-pick" id="body-pick">
+                <span class="bp" data-body="robot"><svg><use href="#i-robot"/></svg>Reedus</span>
+                <span class="bp-line"></span>
+                <span class="bp-brain"><svg><use href="#badge"/></svg></span>
+                <span class="bp-line"></span>
+                <span class="bp" data-body="lite"><svg><use href="#i-lite"/></svg>Lite</span>
+              </div>
+              <p class="card-note center" id="bc-body">The brain lives in one body at a time.</p>
+              <div class="kv"><span>Mode</span><b id="bc-mode">-</b></div>
+              <div class="kv"><span>Backend</span><b id="bc-backend">-</b></div>
+              <div class="kv"><span>Voice</span><b id="bc-voice">-</b></div>
+              <div class="kv"><span>Cloud spend</span><b id="bc-budget">-</b></div>
+              <p class="card-note" id="bc-note">Local / Cloud is in the top bar. It moves the real mode, the same as saying "switch to cloud mode".</p>
+            </div>
+            <div class="card">
+              <h3>Voice</h3>
+              <label class="field"><span>Voice profile</span>
+                <select id="rs-voice"><option value="classic">Reedus classic</option><option value="chirpy">Chirpy</option><option value="lowfi">Low-fi hum</option><option value="whisper">Whisper</option></select></label>
+              <label class="field"><span>Expressiveness <b id="rs-expr-val">65%</b></span><input type="range" id="rs-expr" min="0" max="100" value="65"></label>
+              <label class="field"><span>Speech rate <b id="rs-rate-val">100%</b></span><input type="range" id="rs-rate" min="50" max="150" value="100"></label>
+              <label class="field"><span>Volume <b id="rs-vol-val">80%</b></span><input type="range" id="rs-vol" min="0" max="100" value="80"></label>
+            </div>
+            <div class="card">
+              <h3>Listening</h3>
+              <label class="field"><span>Wake word</span><input type="text" id="rs-wake" value="hey reedus" maxlength="24"></label>
+              <label class="switch row"><input type="checkbox" id="rs-llm" checked><span class="track"></span><span class="sw-label">LLM brain enabled</span></label>
+            </div>
+          </div>
+
+          <h4 class="group-label">This app</h4>
+          <div class="settings-grid stagger">
+            <div class="card">
+              <h3>Appearance</h3>
+              <div class="field"><span>Theme</span>
+                <div class="seg wide" id="as-theme">
+                  <span class="seg-ind" aria-hidden="true"></span>
+                  <button type="button" class="seg-btn" data-val="auto">Auto</button>
+                  <button type="button" class="seg-btn" data-val="night">Dark</button>
+                  <button type="button" class="seg-btn" data-val="day">Light</button>
+                </div>
+              </div>
+              <label class="switch row"><input type="checkbox" id="as-anim" checked><span class="track"></span><span class="sw-label">Full animations</span></label>
+            </div>
+            <div class="card">
+              <h3>Connection</h3>
+              <label class="field"><span>Run box address</span><input type="text" id="as-daemon" placeholder="e.g. 192.168.1.20" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"></label>
+              <div class="row-btns"><button class="ghost-btn" id="as-reconnect">Connect</button></div>
+              <p class="hint" id="as-conn-state">demo mode</p>
+            </div>
+            <div class="card">
+              <h3>Access</h3>
+              <p class="hint">Open this on any device on the network:</p>
+              <p class="pair-code" id="as-pair">http://<span id="as-ip">this-machine</span>:8765/</p>
+              <p class="hint" id="as-lock-state">checking…</p>
+              <label class="field"><span>Shared passcode</span>
+                <input type="text" id="as-passcode" placeholder="anyone who knows it gets in" maxlength="64" autocapitalize="off"></label>
+              <button class="ghost-btn" id="as-passcode-save">Set passcode</button>
+              <p class="card-note">Leave it empty and press Set to remove the passcode. Changing it signs every other device out.</p>
+            </div>
+            <div class="card">
+              <h3>About</h3>
+              <p class="hint">ReedOS 0.2.0, light as a reed. One app for Reedus and Reedus Lite.</p>
+              <button class="ghost-btn danger-ghost" id="pw-quit">Quit ReedOS</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- connections (shared: they live in the brain) -->
+      <section class="view" id="view-connections" data-tab="settings" data-title="Connections">
+        <div class="page">
+          <div class="view-head"><button class="back" data-nav="settings" aria-label="Back"><svg><use href="#i-back"/></svg></button><h2>Connections</h2><span class="head-note" id="cx-note"></span></div>
+          <p class="lead">Reedus can act in your apps, from either body. Just ask out loud:
+            <q>play Blinding Lights</q>, <q>skip</q>, <q>add dentist Friday at 3 to my calendar</q>.</p>
+
+          <div class="cx-offline card" id="cx-offline" hidden>
+            <h3>The brain isn't running</h3>
+            <p>Connections live in Reedus's brain. Start the voice loop or <code>run_lite.sh</code> on the run box, then come back.</p>
+          </div>
+
+          <!-- Spotify -->
+          <div class="card sp-card" id="sp-card">
+            <div class="sp-head">
+              <svg class="sp-logo"><use href="#i-spotify"/></svg>
+              <div><h3>Spotify</h3><small id="sp-state">Not connected</small></div>
+              <button class="ghost-btn sp-dis" id="sp-disconnect" hidden>Disconnect</button>
+            </div>
+
+            <div id="sp-setup">
+              <ol class="steps">
+                <li>Make an app at <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a> (tick <b>Web API</b>). Spotify now needs the app owner to have <b>Premium</b>.</li>
+                <li>Add this as its Redirect URI:
+                  <span class="copy-row"><code id="sp-redirect">http://127.0.0.1:8765/connect/callback/spotify</code><button class="ghost-btn small" id="sp-copy">Copy</button></span></li>
+                <li>Paste the app's Client ID and connect:
+                  <span class="copy-row"><input type="text" id="sp-client" placeholder="Client ID (32 characters)" autocapitalize="off" spellcheck="false" maxlength="40"><button class="cta sp-go" id="sp-start">Connect</button></span></li>
+              </ol>
+              <div class="sp-finish" id="sp-finish" hidden>
+                <p>After you log in, Spotify sends you to <code>127.0.0.1</code>. On the run box that just works. On a phone that page won't load: copy its address from the address bar and paste it here.</p>
+                <span class="copy-row"><input type="text" id="sp-paste" placeholder="http://127.0.0.1:8765/connect/callback/spotify?code=…" autocapitalize="off" spellcheck="false"><button class="cta" id="sp-finish-go">Finish</button></span>
+              </div>
+            </div>
+
+            <div id="sp-live" hidden>
+              <div class="np" id="sp-np">
+                <div class="np-art" id="np-art"></div>
+                <div class="np-text"><b id="np-track">Nothing playing</b><small id="np-artist">Open Spotify on any device</small><small class="np-dev" id="np-dev"></small></div>
+              </div>
+              <div class="np-bar"><i id="np-prog"></i></div>
+              <div class="np-ctrl">
+                <button class="np-btn" data-sp="previous" aria-label="Previous"><svg viewBox="0 0 24 24"><path d="M6 5v14M19 5 9 12l10 7z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
+                <button class="np-btn main" data-sp="toggle" id="np-toggle" aria-label="Play or pause"><svg viewBox="0 0 24 24" id="np-icon"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></button>
+                <button class="np-btn" data-sp="next" aria-label="Next"><svg viewBox="0 0 24 24"><path d="M18 5v14M5 5l10 7-10 7z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
+              </div>
+              <label class="field"><span>Volume <b id="np-vol-val">-</b></span><input type="range" id="np-vol" min="0" max="100" value="50"></label>
+              <form class="try-row" id="sp-try">
+                <input type="text" id="sp-try-text" placeholder="Try a command: play daft punk" autocapitalize="off">
+                <button class="ghost-btn" type="submit">Try</button>
+              </form>
+              <p class="card-note" id="sp-try-out"></p>
+            </div>
+          </div>
+
+          <!-- MCP hubs -->
+          <h4 class="group-label">App hubs <small>one key, hundreds of apps</small></h4>
+          <div class="hub-list" id="hub-list"></div>
+          <div class="preset-grid stagger" id="preset-grid"></div>
+
+          <div class="hub-form card" id="hub-form" hidden>
+            <h3 id="hf-title">Add</h3>
+            <p class="hint" id="hf-blurb"></p>
+            <label class="field" id="hf-name-row"><span>Name</span><input type="text" id="hf-name" maxlength="40" placeholder="e.g. Notion"></label>
+            <label class="field" id="hf-url-row"><span>Server address</span><input type="text" id="hf-url" autocapitalize="off" spellcheck="false" inputmode="url"></label>
+            <label class="field" id="hf-header-row"><span>Header</span><input type="text" id="hf-header" autocapitalize="off" spellcheck="false"></label>
+            <label class="field"><span id="hf-key-label">Key</span><input type="password" id="hf-key" autocapitalize="off" spellcheck="false" autocomplete="off"></label>
+            <div class="row-btns"><button class="ghost-btn" id="hf-cancel" type="button">Cancel</button><button class="cta" id="hf-add" type="button">Connect</button></div>
+            <p class="card-note" id="hf-out"></p>
+          </div>
+          <p class="card-note">Keys and tokens stay on the run box (<code>memory/connections.json</code>), never in this app.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+  <div id="toasts" aria-live="polite"></div>
 </div>
 
 <script src="js/auth.js"></script>
-  <script src="js/store.js"></script>
+<script src="js/store.js"></script>
 <script src="js/link.js"></script>
 <script src="js/routines.js"></script>
+<script src="js/face.js"></script>
 <script src="js/views.js"></script>
+<script src="js/lite.js"></script>
+<script src="js/connections.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

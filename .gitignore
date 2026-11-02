@@ -7,6 +7,12 @@ reedus_llm/reedus_companion/memory/*.sqlite
 reedus_llm/reedus_companion/memory/*.sqlite-wal
 reedus_llm/reedus_companion/memory/*.sqlite-shm
 reedus_llm/reedus_companion/memory/*.bak-*
+# hole-by-hole build diagram, kept local; ReedusLite/WIRING.md is the tracked pin map
+ReedusLite/wiring_diagram.html
+
+# app tokens and hub keys (connect/manager.py)
+reedus_llm/reedus_companion/memory/connections.json
+reedus_llm/reedus_companion/memory/connections.tmp
 
 # models + build intermediates (rebuild: deploy/export_gguf.sh)
 reedus_llm/reedus_companion/artifacts/
@@ -77,3 +83,7 @@ ReedOS/reedos-app/src-tauri/target/
 
 # ReedOS shared passcode, in the clear on the robot's disk
 ReedOS/daemon/auth.json
+
+# Reedus Lite firmware: wifi + token, and the PlatformIO build dir
+ReedusLite/firmware/src/secrets.h
+ReedusLite/firmware/.pio/

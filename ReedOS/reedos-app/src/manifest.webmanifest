@@ -1,7 +1,7 @@
 {
   "name": "ReedOS, Reedus control",
   "short_name": "ReedOS",
-  "description": "Drive Reedus, talk to him, build routines, from any device on the network.",
+  "description": "One app for Reedus and Reedus Lite: drive, chat, faces, routines, from any device on the network.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

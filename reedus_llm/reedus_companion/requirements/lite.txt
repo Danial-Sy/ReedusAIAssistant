@@ -1,0 +1,2 @@
+# Reedus Lite link (lite/hub.py), on top of voice.txt (+ cloud.txt for gemini/inworld)
+websockets>=12

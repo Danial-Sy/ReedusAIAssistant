@@ -39,6 +39,8 @@ import importlib.util as u, os, sys
 need = ["numpy", "sounddevice", "faster_whisper"]
 if os.environ.get("REEDUS_MODE") == "cloud":
     need += ["google.genai", "requests"]
+if "lite" in os.environ.get("REEDUS_ENTRY", ""):
+    need += ["websockets"]
 missing = [m for m in need if u.find_spec(m) is None]
 print(f"[reedus] python: {sys.executable}")
 if missing:
@@ -50,6 +52,8 @@ if missing:
 PYCHECK
 
 CAM="${REEDUS_CAM:-0}"
+# run_lite.sh points this at the Reedus Lite launcher; same brain, network audio
+ENTRY="${REEDUS_ENTRY:-reedus_companion.voice.voice_loop}"
 MAIN_DEFAULT="$ROOT/gguf/base-qwen3-4b-Q4_K_M.gguf"
 MAIN="${REEDUS_MAIN_GGUF:-$MAIN_DEFAULT}"
 ROUTER="${REEDUS_ROUTER_MODEL:-$ROOT/gguf/qwen3-1.7b-Q4_K_M.gguf}"
@@ -90,7 +94,7 @@ if [[ "$BACKEND" == "server" ]]; then
   echo "[reedus] backend: native llama-server"
   echo "[reedus] main URL: $MAIN_URL"
   echo "[reedus] router URL: ${REEDUS_ROUTER_URL:-(none)}"
-  exec "$PY" -m reedus_companion.voice.voice_loop --backend server \
+  exec "$PY" -m "$ENTRY" --backend server \
     --cam "$CAM" \
     "$@"
 fi
@@ -102,7 +106,7 @@ echo "[reedus] backend: llama-cpp-python (in-process)"
 echo "[reedus] main GGUF: $MAIN"
 echo "[reedus] router GGUF: $ROUTER"
 
-exec "$PY" -m reedus_companion.voice.voice_loop --backend gguf \
+exec "$PY" -m "$ENTRY" --backend gguf \
   --gguf "$MAIN" \
   --router-gguf "$ROUTER" \
   --cam "$CAM" \

@@ -86,6 +86,7 @@ class BrainLink:
             "budget": h.get("budget") or {},
             "cloudReady": (h.get("cloud") or {}).get("ok"),
             "cloudWhy": (h.get("cloud") or {}).get("why") or "",
+            "lite": h.get("lite"),          # None: the brain is the robot's (or offline)
         }
 
     def ask(self, text: str, speak: bool = False) -> dict:
@@ -102,5 +103,18 @@ class BrainLink:
 
     def set_mode(self, target: str) -> dict:
         out = self._call("/api/mode", {"mode": target}, timeout=MODE_TIMEOUT)
+        self._cache_at = 0.0
+        return out
+
+    def connections(self, req: dict | None = None) -> dict:
+        """App connections live in the brain: GET the list, or POST an action."""
+        if req is None:
+            return self._call("/api/connections", timeout=10.0)
+        # adding a hub lists its tools before saving, a slow hub can take a while
+        return self._call("/api/connections", req, timeout=45.0)
+
+    def lite(self, req: dict) -> dict:
+        """Reedus Lite knobs: volume, brightness, look, expr. Only when the brain runs Lite."""
+        out = self._call("/api/lite", req, timeout=5.0)
         self._cache_at = 0.0
         return out

@@ -47,16 +47,29 @@ def render_tools_block() -> str:
         "even if you think you know the answer.\n"
         "- remember(fact): pin a durable fact to your bulletin, things about the user, and "
         "corrected/confirmed facts after a dispute, so you never contradict them again."
+        + _apps_line()
     )
 
 
+def _apps_line() -> str:
+    """The connected-apps tool, only while something is connected (connect/manager.py)."""
+    try:
+        from reedus_companion.connect.manager import manager
+        line = manager().persona_line()
+    except Exception:                                            # noqa: BLE001
+        return ""
+    return "\n" + line if line else ""
+
+
 class ToolRegistry:
-    def __init__(self, memory=None):
+    def __init__(self, memory=None, apps: Callable[[str], str] = None):
         self._fns: Dict[str, Callable[..., str]] = {
             "web_search": lambda query="", **_: web_search(query),
         }
         if memory is not None:
             self._fns["remember"] = lambda fact="", **_: memory.remember(fact)
+        if apps is not None:
+            self._fns["apps"] = lambda request="", **_: apps(request)
 
     def run(self, name: str, arguments: Dict[str, Any]) -> str:
         fn = self._fns.get(name)

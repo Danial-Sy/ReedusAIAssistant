@@ -10,7 +10,7 @@ import time
 from typing import Optional
 
 from reedus_companion import config
-from reedus_companion.voice import speech_text
+from reedus_companion.voice import events, speech_text
 
 _SENT_END = re.compile(r"[.!?…]+[\"')\]]*(?=\s|$)")
 
@@ -203,6 +203,9 @@ class StreamSpeaker:
 
     def stop(self) -> None:
         """Hard-stop synth + playback (barge-in). Safe to call from another thread."""
+        if self._pb is not None or self._pending > 0:
+            # audio was mid-flight: a network speaker has some buffered, tell it to drop it
+            events.emit("speech_abort")
         self._abort.set()
         # unblock workers waiting on queues
         try:

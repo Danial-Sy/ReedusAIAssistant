@@ -1184,6 +1184,14 @@ _CORPUS_ACKS = (
 _last_ack = {"v": ""}
 
 
+_APP_ACKS = (
+    "on it",
+    "one sec",
+    "doing that now",
+    "give me a second",
+)
+
+
 def _ack(pool: tuple) -> str:
     """Pick an ack, never the same one twice in a row (that's what makes canned lines feel canned)."""
     import random
@@ -2038,11 +2046,22 @@ def _corpus_verdict(decision: dict, *, date_q: bool, looked: bool, look_failed: 
     return _CORPUS_BY_REASON.get(decision.get("why") or "", CORPUS_MAYBE)
 
 
+def _app_fast_path(user_msg: str) -> Optional[str]:
+    try:
+        from reedus_companion.connect.manager import manager
+        return manager().fast_path(user_msg)
+    except Exception as e:                                       # noqa: BLE001
+        if DEBUG:
+            print(f"\n[debug] app fast path failed: {e!r}", file=sys.stderr)
+        return None
+
+
 class Reedus:
     def __init__(self, backend: "Backend"):
         self.backend = backend
         self.mem = Memory()
-        self.tools = toolmod.ToolRegistry(memory=self.mem)
+        # `apps` follows self.backend, which a live local/cloud switch replaces
+        self.tools = toolmod.ToolRegistry(memory=self.mem, apps=self._run_apps)
         self.history: List[Dict[str, str]] = []
         self.last_search_query: Optional[str] = None
         self.last_fact: Optional[str] = None
@@ -2131,6 +2150,10 @@ class Reedus:
         """Factual thread and this message is still about it."""
         return bool(self._context_is_factual() and _CONTINUATION.search(user_msg)
                     and not _is_checkin(user_msg))
+
+    def _run_apps(self, request: str) -> str:
+        from reedus_companion.connect.manager import manager
+        return manager().run_request(request, self.backend)
 
     def _status(self, msg: str) -> None:
         """Fire the status hook. A UI callback must never break a turn."""
@@ -2890,6 +2913,19 @@ class Reedus:
                 print(f"\n[debug] arithmetic fast path -> {arithmetic!r}", file=sys.stderr)
             return arithmetic
 
+        # music commands go straight to Spotify: a pause shouldn't wait on a language model
+        app_said = _app_fast_path(user_msg)
+        if app_said is not None:
+            self._skip_corpus = True
+            self._corpus_unsure = False
+            self._knowledge_weak = False
+            self._learned_topic = ""
+            self.history += [{"role": "user", "content": user_msg},
+                             {"role": "assistant", "content": app_said}]
+            if DEBUG:
+                print(f"\n[debug] app fast path -> {app_said!r}", file=sys.stderr)
+            return app_said
+
         date_q = bool(_DATE_Q.search(user_msg))
         personal = _suppress_fact_machinery(user_msg)
         factual = _looks_factual(user_msg)
@@ -3193,6 +3229,8 @@ class Reedus:
             # model-driven tools, mainly `remember`
             messages.append({"role": "assistant", "content": raw})
             for call in calls:
+                if call["name"] == "apps":
+                    self._status(_ack(_APP_ACKS))       # app work takes seconds, say so first
                 result = self.tools.run(call["name"], call.get("arguments", {}))
                 messages.append({"role": "user",
                                  "content": f"[tool result, {call['name']}]\n{result}\n"

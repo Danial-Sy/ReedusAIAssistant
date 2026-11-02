@@ -2,6 +2,7 @@
 """reedosd, the ReedOS service layer."""
 
 import asyncio
+import html
 import json
 import logging
 import pathlib
@@ -241,6 +242,23 @@ async def handle_message(ws: WebSocket, m: dict):
                                 {"level": "info", "msg": f"mode → {out.get('pending')} (queued)"})
         await push_status()
 
+    elif t == "lite.set":
+        keep = ("volume", "brightness", "look", "expr", "hold")
+        out = await asyncio.to_thread(brain.lite, {k: data[k] for k in keep if k in data})
+        if out.get("offline"):
+            out = {"error": "Reedus's brain isn't running, start run_lite.sh on the box."}
+        await ws.send_text(json.dumps({"type": "lite.reply", "id": mid, "data": out}))
+        if out.get("error"):
+            await hub.broadcast("log", {"level": "warn", "msg": f"lite: {out['error']}"})
+        await push_status()
+
+    elif t == "connections":
+        # no action = list them. tokens and keys stay in the brain, never in this reply
+        out = await asyncio.to_thread(brain.connections, data if data.get("action") else None)
+        if out.get("offline"):
+            out = {"error": "Reedus's brain isn't running, app connections live there."}
+        await ws.send_text(json.dumps({"type": "connections.reply", "id": mid, "data": out}))
+
     elif t == "routine.run":
         asyncio.create_task(engine.run(data, hub))
 
@@ -353,6 +371,27 @@ async def api_set_mode(req: Request):
 @app.get("/api/settings")
 async def api_settings():
     return JSONResponse(settings)
+
+
+@app.get("/connect/callback/spotify")
+async def spotify_callback(req: Request):
+    """Spotify sends the browser here after login. Not behind the passcode: Spotify can't
+    send one, and the brain checks the one-time `state` from the login it started."""
+    out = await asyncio.to_thread(brain.connections,
+                                  {"action": "finish", "id": "spotify", "url": str(req.url)})
+    ok = out.get("ok")
+    msg = (f"Connected as {html.escape(str(out.get('account') or 'you'))}."
+           + ("" if out.get("product") in (None, "premium") else
+              " Heads up: Spotify only lets Premium accounts control playback.")) if ok else \
+        html.escape(str(out.get("error") or "Something went wrong."))
+    page = f"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spotify · ReedOS</title>
+<body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#0C1510;color:#F2EDDC;font:16px system-ui,sans-serif;text-align:center;padding:24px">
+<div><div style="font-size:44px">{'🎵' if ok else '⚠️'}</div>
+<h2 style="font-family:Georgia,serif;margin:10px 0 6px">{'Spotify is connected' if ok else 'Spotify did not connect'}</h2>
+<p style="color:#A9B2A2;max-width:340px">{msg}</p>
+<p><a href="/#connections" style="color:#7FB68F">Back to ReedOS</a></p></div></body>"""
+    return Response(page, media_type="text/html", status_code=200 if ok else 400)
 
 
 @app.get("/camera/stream")
