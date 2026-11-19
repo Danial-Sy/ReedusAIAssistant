@@ -79,12 +79,40 @@ def _save(data: Dict) -> None:
         pass                                # fail open
 
 
+def _price(model: str) -> Dict[str, float]:
+    if model in PRICES:
+        return PRICES[model]
+    try:
+        from reedus_companion.cloud import providers
+        return providers.price(model)
+    except Exception:
+        return {"input": 5.00, "output": 25.00}
+
+
+def record_searches(provider: str, n: int) -> float:
+    """Bill web searches a non-Gemini brain ran inside its reply (Claude, OpenAI)."""
+    try:
+        from reedus_companion.cloud import providers
+        per = providers.SEARCH_PER_1000.get(provider, 10.00)
+    except Exception:
+        per = 10.00
+    n = max(0, int(n))
+    cost = n * per / 1000.0
+    with _LOCK:
+        data = _load()
+        data["usd"] = float(data.get("usd", 0.0)) + cost
+        data["searches"] = int(data.get("searches", 0)) + n
+        by = data.setdefault("by_model", {})
+        row = by.setdefault(f"{provider}-web-search", {"usd": 0.0, "chars": 0})
+        row["usd"] += cost
+        _save(data)
+        return float(data["usd"])
+
+
 def record_tokens(model: str, prompt_tokens: int, completion_tokens: int,
                   grounded: bool = False) -> float:
     """Bill one LLM call. Returns the month-to-date total in USD."""
-    price = PRICES.get(model)
-    if price is None:
-        price = max(PRICES.values(), key=lambda d: d.get("output", 0.0))
+    price = _price(model)
     cost = (prompt_tokens / 1e6) * price.get("input", 0.0) \
          + (completion_tokens / 1e6) * price.get("output", 0.0)
     with _LOCK:

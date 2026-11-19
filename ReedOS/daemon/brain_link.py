@@ -87,6 +87,8 @@ class BrainLink:
             "cloudReady": (h.get("cloud") or {}).get("ok"),
             "cloudWhy": (h.get("cloud") or {}).get("why") or "",
             "lite": h.get("lite"),          # None: the brain is the robot's (or offline)
+            "assist": h.get("assist"),      # running timers/alarms and anything ringing
+            "llm": h.get("llm"),            # the cloud brain: provider, model, label
         }
 
     def ask(self, text: str, speak: bool = False) -> dict:
@@ -112,6 +114,23 @@ class BrainLink:
             return self._call("/api/connections", timeout=10.0)
         # adding a hub lists its tools before saving, a slow hub can take a while
         return self._call("/api/connections", req, timeout=45.0)
+
+    def llm(self, req: dict | None = None) -> dict:
+        """Settings → Cloud brain (cloud/llm.py): GET the picture, or POST an action."""
+        if req is None:
+            return self._call("/api/llm", timeout=10.0)
+        # "key" and "test" make a real call to the provider; "set" may wait out a turn in progress
+        out = self._call("/api/llm", req, timeout=100.0)
+        self._cache_at = 0.0
+        return out
+
+    def assist(self, req: dict | None = None) -> dict:
+        """Timers, alarms, reminders, lists, calendars (assist/api.py): GET, or POST an action."""
+        if req is None:
+            return self._call("/api/assist", timeout=10.0)
+        out = self._call("/api/assist", req, timeout=30.0)   # adding a calendar fetches it first
+        self._cache_at = 0.0
+        return out
 
     def lite(self, req: dict) -> dict:
         """Reedus Lite knobs: volume, brightness, look, expr. Only when the brain runs Lite."""

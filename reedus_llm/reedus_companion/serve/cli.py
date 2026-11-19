@@ -11,9 +11,11 @@ DIM, RESET, BOLD = "\033[2m", "\033[0m", "\033[1m"
 
 
 def build_backend(args):
-    if args.backend == "gemini":
-        from reedus_companion.cloud.gemini_backend import GeminiBackend
-        return GeminiBackend()
+    if args.backend in ("cloud", "gemini"):
+        from reedus_companion import mode
+        from reedus_companion.cloud import llm
+        mode.set_current(mode.CLOUD)
+        return llm.build()
     if args.backend == "hf":
         from reedus_companion.serve.backend_hf import HFBackend
         return HFBackend(adapter_dir=args.adapter, merged_dir=args.merged,
@@ -27,9 +29,10 @@ def build_backend(args):
 
 def _profile_rows(args):
     """Per-call profile rows for the last turn, if the backend records them."""
-    if args.backend == "gemini":
+    if args.backend in ("cloud", "gemini"):
+        from reedus_companion.cloud.base import CloudBackend
         from reedus_companion.cloud.gemini_backend import GeminiBackend
-        return list(GeminiBackend.PROFILE)
+        return list(GeminiBackend.PROFILE) + list(CloudBackend.PROFILE)
     if args.backend == "gguf":
         from reedus_companion.serve.backend_llamacpp import LlamaCppBackend
         return list(LlamaCppBackend.PROFILE)
@@ -80,8 +83,9 @@ def _clear_profile(args):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--backend", choices=["hf", "gguf", "server", "gemini"], default="gguf",
-                    help="gemini = cloud mode (needs GEMINI_API_KEY)")
+    ap.add_argument("--backend", choices=["hf", "gguf", "server", "cloud", "gemini"], default="gguf",
+                    help="cloud = the cloud brain from Settings → Cloud brain / REEDUS_LLM_PROVIDER "
+                         "(Gemini by default; gemini is an old alias)")
     ap.add_argument("--adapter", default=None, help="LoRA adapter dir (hf backend)")
     ap.add_argument("--merged", default=None, help="merged fp16 dir (hf backend)")
     ap.add_argument("--gguf", default=None, help="GGUF path (gguf backend)")

@@ -54,6 +54,7 @@ _DISMISS = re.compile(
     rf"{_STOP_LEAD}{_DISMISS_CORE}\s*[.!?]?\s*$"
 )
 _DISMISS_ANY = re.compile(rf"(?is)\b{_DISMISS_CORE}\b")
+_NAMES_A_THING = re.compile(r"(?is)\b(?:timers?|alarms?|reminders?|list|order|subscription|meeting|appointment)\b")
 _DISMISS_MAX_WORDS = 8
 _STOP = re.compile(
     rf"(?is)^\s*(?:(?:hey|hi|yo|okay|ok)[\s,]+)?(?:reedus[\s,]+)?"
@@ -180,6 +181,8 @@ def is_dismiss(text: str) -> bool:
     t = (text or "").strip()
     if not t:
         return False
+    if _NAMES_A_THING.search(t):
+        return False            # "cancel the timer" is a command for assist/, not a never-mind
     if _DISMISS.match(t):
         return True
     rest = strip_wake(t) if has_wake(t) else t

@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reedus Lite Wiring</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  color-scheme: light;
+  --paper:#eef1f3; --sheet:#ffffff; --ink:#15191e; --muted:#5a6470; --rule:#d3d9df; --accent:#0d7f72;
+  --v5:#d7262b; --gnd:#24272c; --warn:#b42318;
+  --display:"Unbounded","Arial Rounded MT Bold",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.55}
+.wrap{max-width:1100px;margin:0 auto;padding:28px max(16px,env(safe-area-inset-right,0px)) 80px max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:30px}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(28px,4.4vw,44px);line-height:1.05;margin:6px 0 10px}
+h1 span{color:var(--accent)}
+h2{font-family:var(--display);font-weight:500;font-size:20px;margin:0}
+h3{font-size:16px;margin:14px 0 6px}
+p{margin:0 0 10px}
+.lede{color:var(--muted);max-width:70ch}
+nav.toc{display:flex;flex-wrap:wrap;gap:8px}
+nav.toc a{font-size:13px;padding:6px 11px;border-radius:999px;border:1px solid var(--rule);background:var(--sheet);color:var(--ink);text-decoration:none}
+nav.toc a:hover{border-color:var(--ink)}
+section.card{background:var(--sheet);border:1px solid var(--rule);border-radius:14px;padding:22px 22px 18px}
+.step-head{display:flex;align-items:baseline;gap:14px;margin-bottom:10px}
+.num{font-family:var(--display);font-weight:700;font-size:15px;color:#fff;background:var(--accent);border-radius:9px;min-width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.fig{margin:12px 0 6px;border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:#fff;cursor:zoom-in}
+.fig img{display:block;width:100%;height:auto}
+.cap{font-size:13px;color:var(--muted);margin:0 0 6px}
+ol.do,ul.do{margin:6px 0 4px;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:7px}
+ol.do li,ul.do li{display:flex;gap:10px;align-items:flex-start}
+ol.do input,ul.do input{margin-top:5px;width:17px;height:17px;flex:none;accent-color:var(--accent)}
+li.done span{color:var(--muted);text-decoration:line-through;text-decoration-color:#9aa3ab}
+code{font-family:var(--mono);font-size:.9em;background:#eef2f4;padding:1px 5px;border-radius:4px;white-space:nowrap}
+.warn{border-left:4px solid var(--warn);background:#fdf1f0;padding:10px 14px;border-radius:0 8px 8px 0;font-size:15px;margin:10px 0}
+.tip{border-left:4px solid var(--accent);background:#eef8f6;padding:10px 14px;border-radius:0 8px 8px 0;font-size:15px;margin:10px 0}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.tablewrap{overflow-x:auto}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:4px 28px}
+.progress{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.fig{position:relative}
+.fig::after{content:"Tap to zoom";position:absolute;right:10px;bottom:10px;font:600 12px var(--body);color:#fff;background:rgba(21,25,30,.78);padding:5px 10px;border-radius:999px;pointer-events:none}
+#viewer{position:fixed;inset:0;z-index:20;background:#0e1114;display:none;flex-direction:column}
+#viewer.open{display:flex}
+#vstage{position:relative;flex:1;overflow:hidden;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+#vstage.drag{cursor:grabbing}
+#vimg{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform;background:#fff;max-width:none;-webkit-user-drag:none;user-select:none}
+#vbar{display:flex;align-items:center;gap:6px;padding:8px max(10px,env(safe-area-inset-right,0px)) calc(8px + env(safe-area-inset-bottom,0px)) max(10px,env(safe-area-inset-left,0px));background:#15191e;color:#e9edf0;flex-wrap:wrap}
+#vbar button{all:unset;box-sizing:border-box;min-width:40px;height:38px;padding:0 12px;border-radius:9px;background:#262c33;color:#fff;font:600 15px var(--body);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+#vbar button:hover{background:#323a43}
+#vbar button:focus-visible{outline:2px solid #4fd1bd}
+#vtitle{flex:1;min-width:120px;font:600 14px var(--body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 6px}
+#vpct{font:600 13px var(--mono);min-width:54px;text-align:center;color:#b9c2c9}
+#vhint{position:absolute;left:50%;top:12px;transform:translateX(-50%);font:500 12.5px var(--body);color:#e9edf0;background:rgba(21,25,30,.8);padding:6px 12px;border-radius:999px;pointer-events:none;transition:opacity .6s}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Reedus Lite · wiring + soldering walkthrough · matches firmware/src/config.h</div>
+    <h1>Reedus Lite Wiring<span>.</span></h1>
+    <p class="lede">Two solderable breadboards, four neck wires plus the extended speaker lead, every hole named. An ElectroCookie <b>half</b> (30 rows, with rails) goes in the head behind the face. An ElectroCookie <b>mini</b> (17 rows, no rails) goes on the base floor. Tap any picture to open the zoom viewer: pinch or scroll to zoom, drag to move, double-tap to jump in, arrows to flip between diagrams. Tick boxes as you go; your phone remembers them.</p>
+    <p class="progress" id="progress"></p>
+  </header>
+
+  <nav class="toc">
+    <a href="#overview">Overview</a><a href="#parts">What you need</a><a href="#cut">Cut list</a>
+    <a href="#s1">1 · Head board</a><a href="#s2">2 · Base board</a><a href="#s3">3 · reSpeaker pads</a>
+    <a href="#s4">4 · Harness</a><a href="#s5">5 · UPS + switch</a><a href="#s6">6 · Head install</a>
+    <a href="#s7">7 · Neck</a><a href="#s8">8 · Base install</a><a href="#s9">9 · Checks</a><a href="#s10">10 · First power</a>
+  </nav>
+
+  <section class="card" id="overview">
+    <h2>The whole thing at a glance</h2>
+    <div class="fig"><img src="img/00_overview.png" alt="Block diagram: reSpeaker, head board and LED matrix in the head; four neck wires plus the speaker lead; base board, UPS, rocker, servo and speaker in the base"></div>
+    <p class="cap">The pins are the firmware's: <code>D0</code> LED data, <code>D2</code> servo, <code>D3</code> battery sense. Wire it like this and nothing in <code>config.h</code> changes.</p>
+  </section>
+
+  <section class="card" id="parts">
+    <h2>What you need on the bench</h2>
+    <div class="grid2">
+      <div>
+        <h3>Parts</h3>
+        <ul class="do">
+          <li><input type="checkbox"><span>1× ElectroCookie half (30 rows, rails) · head</span></li>
+          <li><input type="checkbox"><span>1× ElectroCookie mini (17 rows) · base</span></li>
+          <li><input type="checkbox"><span>SN74AHCT125N (check the chip says <b>AHCT</b>125, not HC125). Soldered straight in, no socket</span></li>
+          <li><input type="checkbox"><span>Resistors: 1× 330 Ω (orange-orange-brown), 2× 100 kΩ (brown-black-yellow)</span></li>
+          <li><input type="checkbox"><span>Ceramic caps: 2× 100 nF (marked 104)</span></li>
+          <li><input type="checkbox"><span>Electrolytics: 1× 1000 µF and 1× 470 µF, 10 V or higher</span></li>
+          <li><input type="checkbox"><span>3 male dupont jumper wires (for the servo plug, instead of a header)</span></li>
+          <li><input type="checkbox"><span>Wire: 22 AWG stranded for everything (silicone insulation for the neck if you have it)</span></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Tools and consumables</h3>
+        <ul class="do">
+          <li><input type="checkbox"><span>Iron at ~340 °C, flux, solder, flush cutters, strippers</span></li>
+          <li><input type="checkbox"><span>Multimeter with continuity beep</span></li>
+          <li><input type="checkbox"><span>Heat shrink (2–3 mm), masking tape + pen for wire labels</span></li>
+          <li><input type="checkbox"><span>Thick double-sided foam tape (mounts both boards), hot glue (strain relief)</span></li>
+          <li><input type="checkbox"><span>Batteries OUT of the UPS module the whole time you solder</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" id="cut">
+    <h2>Cut every wire first</h2>
+    <p>Cut, strip 4 mm, tin, and tape-label each one with its code. Lengths already include slack: you trim at the board end, never splice.</p>
+    <div class="fig"><img src="img/01_cut_list.png" alt="Wire cut list table with codes H1 to H8, N1 to N4, B1 to B4, speaker and jumpers"></div>
+    <ul class="do">
+      <li><input type="checkbox"><span>H1–H5: five 25 cm pad wires (red, black, yellow, orange, purple)</span></li>
+      <li><input type="checkbox"><span>H6–H8: three 12 cm matrix wires</span></li>
+      <li><input type="checkbox"><span>N1–N4: four 30 cm neck wires, labelled at BOTH ends</span></li>
+      <li><input type="checkbox"><span>B1 (15 cm black), B4 (18 cm pink/red)</span></li>
+      <li><input type="checkbox"><span>Jumpers: 9× 2 cm, 1× 4 cm (base GND bridge), (no head rail links: your board's back bridge pads join the rails)</span></li>
+      <li><input type="checkbox"><span>S: 3 male dupont jumpers cut 8 cm from the male pin end (brown or black, red, orange if you have them)</span></li>
+    </ul>
+  </section>
+
+  <section class="card" id="s1">
+    <div class="step-head"><span class="num">1</span><h2>Solder the head board (ElectroCookie half)</h2></div>
+    <p>Board flat, component side up, <b>row 1 on your left, column A along the bottom</b>. On a breadboard the letters run A at the bottom to J at the top when the numbers read left to right, so it lands this way naturally. Solder lowest parts first so the board sits flat on the bench.</p>
+    <div class="fig"><img src="img/02_head_board.png" alt="Head board hole-by-hole layout"></div>
+    <ol class="do">
+      <li><input type="checkbox"><span><b>SN74AHCT125N</b> straight into the board across the channel, rows 10–16. <b>Before any solder: notch toward row 30 (right), pin 1 (the dot) in <code>F16</code>.</b> Legs in <code>E10</code>–<code>E16</code> and <code>F10</code>–<code>F16</code>. Tack two opposite corner pins, check it sits flat, then the rest at 1–2 s per pin. This is the one part you can't easily undo, so look twice.</span></li>
+      <li><input type="checkbox"><span><b>5V jumpers</b> (red, insulated, ~2 cm): <code>A11</code> <code>A12</code> <code>A14</code> <code>A15</code> <code>A16</code> each to the bottom <b>+</b> rail in the same row. On this board the bottom + rail is the <b>outer</b> one, so they hop over the − rail: arch them and keep the insulation over the − hole. These tie chip pins 9, 10, 12, 13 and 14.</span></li>
+      <li><input type="checkbox"><span><b>GND jumpers</b> (black, insulated, ~2 cm): <code>J10</code> <code>J12</code> <code>J13</code> <code>J16</code> each to the top <b>−</b> rail in the same row. They hop over the + rail; keep the insulation right down to the board. Chip pins 7, 5, 4, 1.</span></li>
+      <li><input type="checkbox"><span><b>330 Ω</b> from <code>G14</code> to <code>G19</code>, lying flat along column G.</span></li>
+      <li><input type="checkbox"><span><b>100 nF (104)</b> across the bottom rails beside row 17 (+ rail to − rail). Ceramic, no polarity.</span></li>
+      <li><input type="checkbox"><span><b>Rail links, only if needed.</b> Meter first: top − rail to bottom − rail, top + rail to bottom + rail, and row 1 to row 30 along each rail. If they all beep, the board already joins them on the back: skip this. If a pair doesn't beep, add that link in 22 AWG at row 1 (−, ~5.5 cm) or row 2 (+, ~4.5 cm), insulation intact all the way across.</span></li>
+      <li><input type="checkbox"><span><b>1000 µF</b> across the top rails beside row 30, bent flat so it lies off the end of the board. Stripe (−) leg in the <b>− rail</b>.</span></li>
+      <li><input type="checkbox"><span><b>Check before going on:</b> top + to bottom + beeps, top − to bottom − beeps, any + to any − does <b>not</b> beep (it may chirp once while the 1000 µF charges, that's fine).</span></li>
+    </ol>
+    <div class="tip">Empty on purpose: <code>E10</code>, <code>E13</code>, <code>F11</code> (the chip's unused outputs).</div>
+    <div class="warn">Rails on this board: <b>top</b> = − outer, + inner. <b>Bottom</b> = − inner (next to A), + outer. Rail holes come in groups of five; "beside row N" means the nearest rail hole.</div>
+  </section>
+
+  <section class="card" id="s2">
+    <div class="step-head"><span class="num">2</span><h2>Solder the base board (ElectroCookie mini)</h2></div>
+    <p>No rails on the mini, so two strips do the job: <b>row 10 (F–J) is the GND bus, row 11 (F–J) is the 5V bus.</b> Same orientation as before: row 1 left, A at the bottom.</p>
+    <div class="fig"><img src="img/03_base_board.png" alt="Base board hole-by-hole layout"></div>
+    <ol class="do">
+      <li><input type="checkbox"><span><b>Divider:</b> 100 kΩ <code>C2</code> → <code>C6</code>, 100 kΩ <code>D6</code> → <code>D10</code>, both flat.</span></li>
+      <li><input type="checkbox"><span><b>100 nF (104)</b> <code>B6</code> → <code>B10</code>.</span></li>
+      <li><input type="checkbox"><span><b>GND bridge</b> (black 22 AWG, 4 cm) <code>E10</code> → <code>H10</code>, arched over the channel.</span></li>
+      <li><input type="checkbox"><span><b>Servo leads:</b> strip and tin the cut ends of the three dupont jumpers and solder them into <code>J10</code> (GND, brown or black), <code>J11</code> (5V, red), <code>J12</code> (signal, orange). Male pins stay free on the other end.</span></li>
+      <li><input type="checkbox"><span><b>470 µF</b> standing: stripe (−) leg in <code>F10</code>, + leg in <code>F11</code>. Its can covers <code>G10</code> / <code>G11</code>.</span></li>
+      <li><input type="checkbox"><span><b>Check:</b> <code>A10</code> beeps to <code>I10</code> and <code>J10</code>; <code>H11</code> beeps to <code>J11</code>; row 10 to row 11 does not beep. <code>A2</code> to <code>A10</code> reads about 200 kΩ, <code>A6</code> to <code>A10</code> about 100 kΩ.</span></li>
+    </ol>
+  </section>
+
+  <section class="card" id="s3">
+    <div class="step-head"><span class="num">3</span><h2>Wire the reSpeaker's back pads</h2></div>
+    <p>Do this on the bench with the board out of the head. Five pads, five wires (H1–H5). Match the <b>printed label</b> next to each pad.</p>
+    <div class="fig"><img src="img/04_xvf_pads.png" alt="reSpeaker underside pad block: XIAO_D0, D2, D3, 5V and GND get wires; XIAO_D1 stays empty"></div>
+    <ol class="do">
+      <li><input type="checkbox"><span><code>5V</code> ← H1 red · <code>GND</code> ← H2 black · <code>XIAO_D0</code> ← H3 yellow · <code>XIAO_D2</code> ← H4 orange · <code>XIAO_D3</code> ← H5 purple.</span></li>
+      <li><input type="checkbox"><span><code>XIAO_D1</code> stays empty. Don't touch the I2C, I2S, MCLK or 3.3V pads.</span></li>
+      <li><input type="checkbox"><span>22 AWG is stiff for these pads: strip only ~2 mm, tin pad and wire, lay the wire flat along the board and touch it on for 1–2 s.</span></li>
+      <li><input type="checkbox"><span>Pads on <b>both sides</b> of each wire: no bridge to the neighbour pad (check with the meter).</span></li>
+      <li><input type="checkbox"><span>Hot-glue the five wires to the board about 2 cm from the pads, routed toward the XIAO edge (that edge faces the lid).</span></li>
+    </ol>
+  </section>
+
+  <section class="card" id="s4">
+    <div class="step-head"><span class="num">4</span><h2>Make the neck harness and extend the speaker lead</h2></div>
+    <ol class="do">
+      <li><input type="checkbox"><span>Lay N1–N4 side by side, ends even. Twist loosely (one turn every ~3 cm) and put a strip of tape every 8 cm. Labels at both ends.</span></li>
+      <li><input type="checkbox"><span><b>Speaker:</b> cut its lead, slide heat shrink on, splice about <b>30 cm of 22 AWG into each wire</b> (red to red, black to black), joints staggered 2–3 cm, then shrink. Aim for <b>40–45 cm</b> speaker to plug. It never touches either board: it runs up the neck and plugs straight into the reSpeaker's <code>SPK</code> socket.</span></li>
+      <li><input type="checkbox"><span>The plug (about 5 × 2.5 mm) fits through the 7 mm neck holes. Feed it through <b>first</b>, before the four neck wires.</span></li>
+    </ol>
+  </section>
+
+  <section class="card" id="s5">
+    <div class="step-head"><span class="num">5</span><h2>UPS module and rocker</h2></div>
+    <div class="warn">Cells OUT of the holder for all of this. A tinned iron on a live 18650 terminal is how you get a burn.</div>
+    <p>Your module is the <b>LX-2BUPS</b>. Its corner pads are <b>5V+ / 5V−</b> (charging input: leave empty, charge through the USB-C) and <b>UPS+ / UPS−</b> (the output). The four big round silver points are the battery holder's terminals; the 电池安装 drawing puts <b>+ on the left</b>.</p>
+    <ol class="do">
+      <li><input type="checkbox"><span><b>B4 (BAT+)</b>: first confirm with cells in: a <b>left</b> round point to <b>UPS−</b> reads 3.0–4.2 V (a right one reads ~0 V). Cells out, then solder B4 to one left point, quickly, so the holder plastic doesn't soften. Live whenever cells are in, even with the rocker off.</span></li>
+      <li><input type="checkbox"><span><b>B1 (black 22 AWG)</b> to the <b>UPS−</b> pad (bottom-right corner). Never the 5V+ / 5V− pads.</span></li>
+      <li><input type="checkbox"><span><b>Rocker red lead (B2)</b>: bare end to the <b>UPS+</b> pad (top-right corner). Long enough to reach the switch's spot on the back wall, plus 3 cm.</span></li>
+      <li><input type="checkbox"><span><b>Rocker black lead (B3)</b>: it carries switched 5V, so put red tape on it. Its bare end lands on base <code>H11</code> in step 8. The other ends are push-on spades: the rocker snaps into the back wall <b>empty</b> from outside, then the spades push onto its two tabs from inside (either way round). They're a friction fit; the clear sleeve is part of the connector, not heat shrink, so keep heat off it.</span></li>
+      <li><input type="checkbox"><span>Rocker on the <b>output</b> side means Lite still charges with the switch off.</span></li>
+    </ol>
+  </section>
+
+  <section class="card" id="s6">
+    <div class="step-head"><span class="num">6</span><h2>Install everything in the head</h2></div>
+    <p>Face sandwich first (skin + grid, matrix, backer, 4× M3×8) as in the chassis notes. Then the head board goes on the <b>back of the backer</b>, centered, just below the cutout.</p>
+    <div class="fig"><img src="img/05_head_placement.png" alt="Head seen from behind: head board taped to the backer below the cutout, reSpeaker at the top, neck hole in the floor"></div>
+    <ol class="do">
+      <li><input type="checkbox"><span>Two strips of foam tape on the board's back. Stick it centered left-right, bottom edge ~1 mm above the backer's bottom edge, top edge level with the bottom of the cutout. Row 1 on your left.</span></li>
+      <li><input type="checkbox"><span><b>Matrix lead</b> comes out through the cutout. Solder H6 (<code>J19</code>) to its <b>DIN</b> (usually green), H7 (top + rail, row 28) to its <b>5V</b> (red), H8 (top − rail, row 28) to its <b>GND</b> (white). Go by the print at the panel's input pad; the strip arrows point <b>away</b> from the input. Leave the panel's spare power leads unconnected and taped.</span></li>
+      <li><input type="checkbox"><span>Mount the reSpeaker in its hooks and clip (lift, slide forward into the two hooks, clip + M2×5 at the back), letting the five pad wires hang down. Plug the extended speaker lead into <code>SPK</code>.</span></li>
+      <li><input type="checkbox"><span>Land the pad wires: H1 → top + rail row 5, H2 → top − rail row 5, H3 → <code>J15</code>, H4 → <code>E21</code>, H5 → <code>E23</code>.</span></li>
+      <li><input type="checkbox"><span>Neck wires, head end (do this on the bench): N1 5V → bottom + rail (outer) row 3, N2 GND → bottom − rail (inner) row 3, N3 servo → <code>A21</code>, N4 sense → <code>A23</code>.</span></li>
+            <li><input type="checkbox"><span>Dab of hot glue where the wire bundles leave the board edges. Don't glue over the chip.</span></li>
+    </ol>
+  </section>
+
+  <section class="card" id="s7">
+    <div class="step-head"><span class="num">7</span><h2>Through the neck</h2></div>
+    <ol class="do">
+      <li><input type="checkbox"><span>Screw the hub to the head (3× M3×10, from inside) with the four neck wires and the speaker lead through the hub's wire hole (speaker plug first).</span></li>
+      <li><input type="checkbox"><span>Feed the bundle down the collar's arc slot into the base. Leave a loose loop of about 5 cm inside the base under the slot: the head turns ±90° and this loop takes the twist. No slip ring needed.</span></li>
+      <li><input type="checkbox"><span>Don't seat the head on the bearing yet. First power happens with the head off (step 10) so the servo can't wind the wires.</span></li>
+    </ol>
+  </section>
+
+  <section class="card" id="s8">
+    <div class="step-head"><span class="num">8</span><h2>Install everything in the base</h2></div>
+    <p>The base board sticks to the floor plate on the robot's left of the servo, row 1 toward the back.</p>
+    <div class="fig"><img src="img/06_base_placement.png" alt="Base floor plate from above: base board on the robot's left of the servo, between the rocker and the speaker"></div>
+    <ol class="do">
+      <li><input type="checkbox"><span>Foam-tape the base board down: A edge 24 mm from the floor's center line, row 1 end about 20 mm from the back wall, J side toward the robot's left wall.</span></li>
+      <li><input type="checkbox"><span>Neck wires: N1 5V → <code>I11</code>, N2 GND → <code>I10</code>, N3 servo → <code>H12</code>, N4 sense → <code>A6</code>.</span></li>
+      <li><input type="checkbox"><span>Power in: rocker black lead (B3) → <code>H11</code>, UPS− wire (B1) → <code>A10</code>, BAT+ wire (B4) → <code>A2</code>.</span></li>
+      <li><input type="checkbox"><span>Speaker: nothing on the base board. Its lead just passes up the neck; leave it in the loose loop.</span></li>
+      <li><input type="checkbox"><span>Push the three dupont pins into the servo's plug: <b>brown wire ← J10 lead, red ← J11 lead, orange ← J12 lead</b>, one pin at a time. Wrap the plug and the three dupont ends together with electrical tape or a zip tie so they can't shake loose. Zip-tie the extra servo cable.</span></li>
+      <li><input type="checkbox"><span>Speaker in its cradle (foam gasket), UPS in its pocket with the USB-C at the back wall. Rocker snapped into the back wall empty, then push the two spades onto its tabs from inside.</span></li>
+    </ol>
+  </section>
+
+  <section class="card" id="s9">
+    <div class="step-head"><span class="num">9</span><h2>Meter checks (cells still out)</h2></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Probe</th><th>Expect</th><th>If not</th></tr></thead>
+      <tbody>
+        <tr><td>Base <code>I11</code> ↔ head bottom + rail</td><td>beep</td><td>N1 broken or in the wrong hole</td></tr>
+        <tr><td>Base <code>I10</code> ↔ head bottom − rail</td><td>beep</td><td>N2</td></tr>
+        <tr><td>Head + rail ↔ head − rail</td><td>no beep (one chirp from the caps is fine)</td><td>short: look for a bridge on either board</td></tr>
+        <tr><td>Base <code>H12</code> ↔ reSpeaker <code>XIAO_D2</code> pad</td><td>beep</td><td>N3 / H4</td></tr>
+        <tr><td>Base <code>A6</code> ↔ reSpeaker <code>XIAO_D3</code> pad</td><td>beep</td><td>N4 / H5</td></tr>
+        <tr><td>Head <code>J15</code> ↔ chip pin 2 · chip pin 3 ↔ <code>G14</code></td><td>beep</td><td>chip in backwards? notch must face row 30</td></tr>
+        <tr><td>Servo plug: brown pin ↔ base <code>A10</code>, red pin ↔ <code>H11</code>, orange pin ↔ <code>H12</code></td><td>beep</td><td>dupont pins in the wrong order</td></tr>
+        <tr><td>reSpeaker <code>XIAO_D0</code> ↔ <code>XIAO_D1</code>, and <code>D2</code> ↔ <code>D3</code></td><td>no beep</td><td>solder bridge on the pads</td></tr>
+        <tr><td>Across the speaker plug's 2 pins (before plugging in)</td><td>~4 Ω</td><td>a bad joint in the extension</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="card" id="s10">
+    <div class="step-head"><span class="num">10</span><h2>First power</h2></div>
+    <ol class="do">
+      <li><input type="checkbox"><span>Flash the XVF3800's <b>I2S master 48 kHz</b> firmware first, over the XMOS USB-C (see <code>WIRING.md</code>, "Before the first power-up").</span></li>
+      <li><input type="checkbox"><span>Rocker <b>off</b>. Insert both P28A cells, + to +.</span></li>
+      <li><input type="checkbox"><span>Rocker on. Measure the head + rail to − rail: 4.9–5.2 V. Base <code>A2</code> to <code>A10</code>: the cell voltage (3.0–4.2 V). Base <code>A6</code> to <code>A10</code>: half of that.</span></li>
+      <li><input type="checkbox"><span>Rocker <b>off before plugging the XIAO into a computer</b>: its USB-C and the board's 5V pad share a rail.</span></li>
+      <li><input type="checkbox"><span>Upload the firmware, open the serial monitor: <code>test</code> (matrix orientation), <code>servo 0</code> to center, <code>doa</code>, <code>info</code> (put meter volts / reported volts in <code>BATT_CAL</code>).</span></li>
+      <li><input type="checkbox"><span>With the servo centered, drop the head on: stub through the bearing, square key into the coupler, wires through the arc slot.</span></li>
+    </ol>
+  </section>
+</div>
+
+<div id="viewer" role="dialog" aria-modal="true" aria-label="Diagram viewer">
+  <div id="vstage"><img id="vimg" alt="" draggable="false"><div id="vhint">Pinch or scroll to zoom · drag to move · double-tap to jump in</div></div>
+  <div id="vbar">
+    <button id="vprev" aria-label="Previous diagram">‹</button>
+    <span id="vtitle"></span>
+    <button id="vnext" aria-label="Next diagram">›</button>
+    <button id="vout" aria-label="Zoom out">−</button>
+    <span id="vpct">100%</span>
+    <button id="vin" aria-label="Zoom in">+</button>
+    <button id="vfit">Fit</button>
+    <button id="vclose" aria-label="Close">Close</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  var KEY='reedus-lite-wiring-v6';
+  var boxes=[].slice.call(document.querySelectorAll('input[type=checkbox]'));
+  var state={};
+  try{state=JSON.parse(localStorage.getItem(KEY)||'{}')||{};}catch(e){state={};}
+  function render(){
+    var n=0;
+    boxes.forEach(function(b,i){var on=!!state[i];b.checked=on;b.parentNode.classList.toggle('done',on);if(on)n++;});
+    document.getElementById('progress').textContent=n+' of '+boxes.length+' ticked';
+  }
+  boxes.forEach(function(b,i){b.addEventListener('change',function(){state[i]=b.checked;try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}render();});});
+  render();
+  // ---------- zoom viewer ----------
+  var figs=[].slice.call(document.querySelectorAll('.fig img'));
+  var V=document.getElementById('viewer'),st=document.getElementById('vstage'),im=document.getElementById('vimg');
+  var title=document.getElementById('vtitle'),pct=document.getElementById('vpct'),hint=document.getElementById('vhint');
+  var cur=0,S=1,X=0,Y=0,FIT=1,MAX=1.6,lastFocus=null;
+  function titleOf(img){var h=img.closest('section').querySelector('h2');return (h?h.textContent:'Diagram');}
+  function fitScale(){var r=st.getBoundingClientRect();return Math.min(r.width/im.naturalWidth,r.height/im.naturalHeight);}
+  function apply(){
+    var r=st.getBoundingClientRect(),w=im.naturalWidth*S,h=im.naturalHeight*S,m=60;
+    if(w<=r.width)X=(r.width-w)/2;else X=Math.min(m,Math.max(r.width-w-m,X));
+    if(h<=r.height)Y=(r.height-h)/2;else Y=Math.min(m,Math.max(r.height-h-m,Y));
+    im.style.transform='translate('+X+'px,'+Y+'px) scale('+S+')';
+    pct.textContent=Math.round(S/FIT*100)+'%';
+  }
+  function zoomAt(ns,cx,cy){ns=Math.max(FIT*0.8,Math.min(MAX,ns));X=cx-(cx-X)*ns/S;Y=cy-(cy-Y)*ns/S;S=ns;apply();}
+  function center(){var r=st.getBoundingClientRect();return [r.width/2,r.height/2];}
+  function fit(){FIT=fitScale();S=FIT;X=0;Y=0;apply();}
+  function show(k){
+    cur=(k+figs.length)%figs.length;var src=figs[cur];
+    title.textContent=(cur+1)+' / '+figs.length+' · '+titleOf(src);
+    im.onload=function(){fit();};im.src=src.src;im.alt=src.alt;
+    if(im.complete&&im.naturalWidth)fit();
+  }
+  function open(k){lastFocus=document.activeElement;V.classList.add('open');document.body.style.overflow='hidden';show(k);
+    hint.style.opacity='1';setTimeout(function(){hint.style.opacity='0';},2600);document.getElementById('vclose').focus();}
+  function close(){V.classList.remove('open');document.body.style.overflow='';if(lastFocus)lastFocus.focus();}
+  figs.forEach(function(img,k){var f=img.parentNode;f.setAttribute('tabindex','0');f.setAttribute('role','button');f.setAttribute('aria-label','Open '+titleOf(img)+' full screen');
+    f.addEventListener('click',function(){open(k);});f.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();open(k);}});});
+  document.getElementById('vclose').onclick=close;
+  document.getElementById('vfit').onclick=fit;
+  document.getElementById('vin').onclick=function(){var c=center();zoomAt(S*1.5,c[0],c[1]);};
+  document.getElementById('vout').onclick=function(){var c=center();zoomAt(S/1.5,c[0],c[1]);};
+  document.getElementById('vprev').onclick=function(){show(cur-1);};
+  document.getElementById('vnext').onclick=function(){show(cur+1);};
+  st.addEventListener('wheel',function(e){e.preventDefault();var r=st.getBoundingClientRect();
+    var k=e.ctrlKey?0.01:0.0018;zoomAt(S*Math.exp(-e.deltaY*k),e.clientX-r.left,e.clientY-r.top);},{passive:false});
+  var P={},pinch=null,drag=null,lastTap=0;
+  st.addEventListener('pointerdown',function(e){st.setPointerCapture(e.pointerId);P[e.pointerId]={x:e.clientX,y:e.clientY};
+    var ids=Object.keys(P);
+    if(ids.length===2){var a=P[ids[0]],b=P[ids[1]];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),s:S};drag=null;}
+    else if(ids.length===1){drag={x:e.clientX,y:e.clientY,X:X,Y:Y,moved:false};st.classList.add('drag');}});
+  st.addEventListener('pointermove',function(e){if(!P[e.pointerId])return;P[e.pointerId]={x:e.clientX,y:e.clientY};
+    var ids=Object.keys(P),r=st.getBoundingClientRect();
+    if(pinch&&ids.length>=2){var a=P[ids[0]],b=P[ids[1]],d=Math.hypot(a.x-b.x,a.y-b.y);
+      zoomAt(pinch.s*d/pinch.d,(a.x+b.x)/2-r.left,(a.y+b.y)/2-r.top);}
+    else if(drag){var dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>4)drag.moved=true;X=drag.X+dx;Y=drag.Y+dy;apply();}});
+  function up(e){var wasDrag=drag;delete P[e.pointerId];st.classList.remove('drag');
+    if(Object.keys(P).length<2)pinch=null;
+    if(Object.keys(P).length===1){var id=Object.keys(P)[0];drag={x:P[id].x,y:P[id].y,X:X,Y:Y,moved:true};}else drag=null;
+    if(e.type==='pointerup'&&wasDrag&&!wasDrag.moved){var now=Date.now(),r=st.getBoundingClientRect();
+      if(now-lastTap<320){if(S<FIT*1.8)zoomAt(FIT*3,e.clientX-r.left,e.clientY-r.top);else fit();lastTap=0;}else lastTap=now;}}
+  st.addEventListener('pointerup',up);st.addEventListener('pointercancel',up);
+  document.addEventListener('keydown',function(e){if(!V.classList.contains('open'))return;
+    if(e.key==='Escape')close();else if(e.key==='ArrowRight')show(cur+1);else if(e.key==='ArrowLeft')show(cur-1);
+    else if(e.key==='+'||e.key==='='){var c=center();zoomAt(S*1.5,c[0],c[1]);}else if(e.key==='-'){var c2=center();zoomAt(S/1.5,c2[0],c2[1]);}
+    else if(e.key==='0')fit();});
+  window.addEventListener('resize',function(){if(V.classList.contains('open')){var f=FIT;FIT=fitScale();if(Math.abs(S-f)<1e-6)fit();else apply();}});
+})();
+</script>
+</body>
+</html>

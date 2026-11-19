@@ -82,12 +82,12 @@ def run(request: str, catalog: List[dict], call: Callable[[str, dict], str], bac
         {"role": "system", "content": _SYSTEM.format(tools="\n".join(describe(t) for t in tools))},
         {"role": "user", "content": f"Request: {request}"},
     ]
-    gemini = type(backend).__name__.lower().startswith("gemini")
+    cloud = bool(getattr(getattr(backend, "active", backend), "CLOUD", False))
     last_result = ""
     for step in range(MAX_STEPS):
         try:
             raw = backend.chat(messages, 700, use_adapter=False, temperature=0.0,
-                               tier="router" if gemini else None, name="apps")
+                               tier="router" if cloud else None, name="apps")
         except Exception as e:                                   # noqa: BLE001
             return f"The apps helper failed: {type(e).__name__}: {e}"
         calls = toolmod.parse_tool_calls(raw)

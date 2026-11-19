@@ -13,6 +13,13 @@ ReedusLite/wiring_diagram.html
 # app tokens and hub keys (connect/manager.py)
 reedus_llm/reedus_companion/memory/connections.json
 reedus_llm/reedus_companion/memory/connections.tmp
+reedus_llm/reedus_companion/memory/assist.json
+reedus_llm/reedus_companion/memory/assist.tmp
+# cloud brain choice and API keys (cloud/llm_settings.py)
+reedus_llm/reedus_companion/memory/llm.json
+reedus_llm/reedus_companion/memory/llm.tmp
+# librespot's cached Spotify login (lite/music.py)
+reedus_llm/reedus_companion/memory/librespot/
 
 # models + build intermediates (rebuild: deploy/export_gguf.sh)
 reedus_llm/reedus_companion/artifacts/

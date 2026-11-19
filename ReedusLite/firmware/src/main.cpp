@@ -7,6 +7,7 @@
 #include "battery.h"
 #include "config.h"
 #include "face.h"
+#include "glance.h"
 #include "head.h"
 #include "net.h"
 #include "xvf.h"
@@ -27,6 +28,7 @@ static void help() {
       "  vol <0-100>       speaker volume\n"
       "  bright <0-100>    face brightness (under the cap)\n"
       "  wake              pretend the wake word fired\n"
+      "  glance <what>     show a sample: clock weather event music timer ring alarm off\n"
       "  reboot");
 }
 
@@ -83,6 +85,8 @@ static void command(String c) {
     face::wake();
     head::onWake();
     face::setState("listening");
+  } else if (c == "glance") {
+    glance::demo(arg.length() ? arg.c_str() : "clock");
   } else if (c == "reboot") {
     ESP.restart();
   } else if (c.length()) {

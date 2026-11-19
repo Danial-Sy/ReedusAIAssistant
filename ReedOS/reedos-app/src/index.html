@@ -31,6 +31,7 @@
     <symbol id="i-lite" viewBox="0 0 24 24"><path d="M5.2 9.2 4.4 3.6l4.8 3M18.8 9.2l.8-5.6-4.8 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><rect x="3.6" y="7" width="16.8" height="13" rx="4.4" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="8" y="11.4" width="1.9" height="3.2" rx=".9" fill="currentColor"/><rect x="14.1" y="11.4" width="1.9" height="3.2" rx=".9" fill="currentColor"/></symbol>
     <symbol id="i-chat" viewBox="0 0 24 24"><path d="M5 5h14a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-7.6L7 21v-3.5H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="8.5" cy="11.3" r="1.2" fill="currentColor"/><circle cx="12" cy="11.3" r="1.2" fill="currentColor"/><circle cx="15.5" cy="11.3" r="1.2" fill="currentColor"/></symbol>
     <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.9 1.9M16.6 16.6l1.9 1.9M18.5 5.5l-1.9 1.9M7.4 16.6l-1.9 1.9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3.2c.5 4.6 2.2 6.3 6.8 6.8-4.6.5-6.3 2.2-6.8 6.8-.5-4.6-2.2-6.3-6.8-6.8 4.6-.5 6.3-2.2 6.8-6.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M18.4 15.6c.2 1.6.8 2.2 2.4 2.4-1.6.2-2.2.8-2.4 2.4-.2-1.6-.8-2.2-2.4-2.4 1.6-.2 2.2-.8 2.4-2.4z" fill="currentColor"/></symbol>
     <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v4M15 3v4M6.5 7h11v3.5a5.5 5.5 0 0 1-11 0zM12 16v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-spotify" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M7 9.4c3.6-1 7.4-.7 10.4 1M7.6 12.5c3-.8 6-.5 8.5.9M8.2 15.4c2.4-.6 4.6-.4 6.6.7" fill="none" stroke="var(--sp-ink, #0C1510)" stroke-width="1.6" stroke-linecap="round"/></symbol>
     <symbol id="i-back" viewBox="0 0 24 24"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -324,12 +325,74 @@
             </div>
           </div>
 
+          <button class="link-card lc-lite" data-nav="standalone" id="sa-lite-card" hidden>
+            <span class="lc-icon"><svg><use href="#i-lite"/></svg></span>
+            <span class="lc-body"><b>Standalone Lite</b><small class="sa-sub">signed in to your relay</small></span>
+            <svg class="t-chev"><use href="#i-chev"/></svg>
+          </button>
+
           <div class="lite-help card" id="lite-help" hidden>
             <h3 id="lite-help-title">Lite isn't awake</h3>
             <p id="lite-help-body"></p>
           </div>
 
           <div class="lite-grid stagger">
+            <div class="card assist-card" id="as-timers-card">
+              <h3>Timers &amp; alarms <small id="as-count">nothing running</small></h3>
+              <div class="as-ring" id="as-ring" hidden>
+                <b id="as-ring-text">Ringing</b>
+                <div class="row-btns"><button class="cta gold" id="as-stop">Stop</button><button class="ghost-btn" id="as-snooze">Snooze 9 min</button></div>
+              </div>
+              <div class="as-list" id="as-list"></div>
+              <div class="as-quick" id="as-quick">
+                <button class="ghost-btn small" data-timer="60">1 min</button>
+                <button class="ghost-btn small" data-timer="300">5 min</button>
+                <button class="ghost-btn small" data-timer="600">10 min</button>
+                <button class="ghost-btn small" data-timer="1500">25 min</button>
+              </div>
+              <form class="try-row" id="as-say">
+                <input type="text" id="as-say-text" placeholder="Say it: wake me up at 7 on weekdays" autocapitalize="off">
+                <button class="ghost-btn" type="submit">Set</button>
+              </form>
+              <p class="card-note" id="as-say-out">Or just ask Reedus out loud. A running timer counts down on Lite's face.</p>
+            </div>
+
+            <div class="card assist-card" id="as-today-card">
+              <h3>Today <small id="as-today-note"></small></h3>
+              <div class="as-today" id="as-today"></div>
+              <p class="card-note" id="as-today-empty">Ask <q>what's my day?</q> any time. Add a calendar in <a href="#" data-nav="connections">Settings → Connections</a> and your classes show up here and on Lite's face.</p>
+            </div>
+
+            <div class="card assist-card" id="as-lists-card">
+              <h3>Lists</h3>
+              <div class="seg wide" id="as-list-seg">
+                <span class="seg-ind"></span>
+                <button class="seg-btn" data-val="shopping">Shopping</button>
+                <button class="seg-btn" data-val="to-do">To-do</button>
+              </div>
+              <div class="as-items" id="as-items"></div>
+              <form class="try-row" id="as-list-add">
+                <input type="text" id="as-list-text" placeholder="Add an item" autocapitalize="sentences">
+                <button class="ghost-btn" type="submit">Add</button>
+              </form>
+              <p class="card-note">Out loud: <q>add milk to my shopping list</q>, <q>what's on my to-do list?</q></p>
+            </div>
+
+            <div class="card assist-card" id="as-glance-card">
+              <h3>Glance screen <small>when nobody's talking</small></h3>
+              <label class="switch row"><input type="checkbox" id="gl-on" checked><span class="track"></span><span class="sw-label">Rotate info cards, then back to the face</span></label>
+              <label class="field"><span>Every</span>
+                <select id="gl-every"><option value="60">1 minute</option><option value="120" selected>2 minutes</option><option value="300">5 minutes</option><option value="900">15 minutes</option></select></label>
+              <div class="gl-cards" id="gl-cards">
+                <label class="switch row"><input type="checkbox" data-card="clock" checked><span class="track"></span><span class="sw-label">Time</span><button class="ghost-btn small gl-show" data-show="clock" type="button">Show</button></label>
+                <label class="switch row"><input type="checkbox" data-card="weather" checked><span class="track"></span><span class="sw-label">Weather</span><button class="ghost-btn small gl-show" data-show="weather" type="button">Show</button></label>
+                <label class="switch row"><input type="checkbox" data-card="event" checked><span class="track"></span><span class="sw-label">Next class or event</span><button class="ghost-btn small gl-show" data-show="event" type="button">Show</button></label>
+                <label class="switch row"><input type="checkbox" data-card="music" checked><span class="track"></span><span class="sw-label">What's playing</span><button class="ghost-btn small gl-show" data-show="music" type="button">Show</button></label>
+              </div>
+              <label class="switch row"><input type="checkbox" id="gl-h24"><span class="track"></span><span class="sw-label">24-hour clock</span></label>
+              <p class="card-note">From 10 PM to 7 AM only the time shows, dimmed.</p>
+            </div>
+
             <div class="card lite-card" id="lite-expr-card">
               <h3>Expressions <small>tap to play on the face</small></h3>
               <div class="expr-grid" id="expr-grid"></div>
@@ -369,6 +432,7 @@
               <div class="kv"><span>Uptime</span><b id="ls-up">-</b></div>
               <div class="kv"><span>Speaker buffer</span><b id="ls-buf">-</b></div>
               <div class="kv"><span>Underruns / mic drops</span><b id="ls-drops">-</b></div>
+              <div class="kv"><span>Music</span><b id="ls-music">-</b></div>
               <div class="kv"><span>Firmware</span><b id="ls-fw">-</b></div>
               <div class="kv"><span>Address</span><b id="ls-peer">-</b></div>
             </div>
@@ -426,6 +490,16 @@
             <span class="lc-body"><b>Connections</b><small id="conn-sub">Spotify, Gmail, Calendar, smart home…</small></span>
             <svg class="t-chev"><use href="#i-chev"/></svg>
           </button>
+          <button class="link-card" data-nav="llm">
+            <span class="lc-icon"><svg><use href="#i-spark"/></svg></span>
+            <span class="lc-body"><b>Cloud brain</b><small id="llm-sub">Gemini, Claude, GPT, or any model with an API key</small></span>
+            <svg class="t-chev"><use href="#i-chev"/></svg>
+          </button>
+          <button class="link-card lc-lite" data-nav="standalone">
+            <span class="lc-icon"><svg><use href="#i-lite"/></svg></span>
+            <span class="lc-body"><b>Standalone Lite</b><small class="sa-sub">Lite without the Xeon: sign in to your relay</small></span>
+            <svg class="t-chev"><use href="#i-chev"/></svg>
+          </button>
 
           <h4 class="group-label">Shared by Reedus &amp; Lite</h4>
           <div class="settings-grid stagger">
@@ -441,6 +515,7 @@
               <p class="card-note center" id="bc-body">The brain lives in one body at a time.</p>
               <div class="kv"><span>Mode</span><b id="bc-mode">-</b></div>
               <div class="kv"><span>Backend</span><b id="bc-backend">-</b></div>
+              <div class="kv"><span>Cloud brain</span><b id="bc-llm">-</b></div>
               <div class="kv"><span>Voice</span><b id="bc-voice">-</b></div>
               <div class="kv"><span>Cloud spend</span><b id="bc-budget">-</b></div>
               <p class="card-note" id="bc-note">Local / Cloud is in the top bar. It moves the real mode, the same as saying "switch to cloud mode".</p>
@@ -499,6 +574,186 @@
         </div>
       </section>
 
+      <!-- standalone Lite: the cloud relay (ReedusLiteS3/relay), js/relay.js + js/standalone.js -->
+      <section class="view" id="view-standalone" data-tab="settings" data-title="Standalone Lite">
+        <div class="page">
+          <div class="view-head"><button class="back" data-nav="settings" aria-label="Back"><svg><use href="#i-back"/></svg></button><h2>Standalone Lite</h2><span class="head-note" id="sa-note"></span></div>
+
+          <!-- signed out -->
+          <div class="card sa-signin" id="sa-signin">
+            <h3>Sign in to your relay</h3>
+            <label class="field" id="sa-url-row"><span>Relay address</span>
+              <input type="text" id="sa-url" placeholder="your-relay.up.railway.app" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url"></label>
+            <p class="hint" id="sa-served" hidden>Opened from your relay, so just the token.</p>
+            <label class="field"><span>App token</span>
+              <input type="password" id="sa-token" placeholder="rla_…" autocapitalize="off" spellcheck="false" autocomplete="off"></label>
+            <div class="row-btns">
+              <button class="cta" id="sa-go" type="button">Sign in</button>
+              <button class="ghost-btn" id="sa-demo" type="button">Try the demo</button>
+            </div>
+            <p class="card-note" id="sa-signin-out">Your app token was printed when your account was made. It stays on this device until you sign out.</p>
+          </div>
+
+          <!-- signed in -->
+          <div id="sa-live" hidden>
+            <div class="card sa-setup" id="sa-setup">
+              <div class="llm-head"><div><h3>Setup</h3><small id="sa-setup-lead"></small></div>
+                <span class="llm-state" id="sa-setup-state"></span></div>
+              <ol class="sa-check" id="sa-check"></ol>
+              <div class="sa-panel" id="sa-panel" hidden></div>
+            </div>
+
+            <div class="settings-grid stagger">
+              <div class="card sa-pool" id="sa-pool">
+                <h3>Pool</h3>
+                <div class="sa-balance"><b id="sa-balance">$0.00</b></div>
+                <p class="sa-low" id="sa-low" hidden>Running low. At $0 Lite stops and tells you.</p>
+                <div class="sa-amounts" id="sa-amounts" role="group" aria-label="Top-up amount"></div>
+                <label class="switch row sa-save" id="sa-save-row" hidden><input type="checkbox" id="sa-save-card"><span class="track"></span>
+                  <span class="sw-label">Save card and refill automatically</span></label>
+                <div class="row-btns"><button class="cta gold" id="sa-topup" type="button">Top up</button></div>
+                <p class="card-note" id="sa-topup-out"></p>
+                <div class="sa-auto" id="sa-auto" hidden>
+                  <div class="sa-auto-head">
+                    <span class="sa-card-chip" id="sa-card"></span>
+                    <label class="switch row"><input type="checkbox" id="sa-auto-on"><span class="track"></span><span class="sw-label">Auto refill</span></label>
+                  </div>
+                  <p class="sa-auto-line">Under <select id="sa-auto-below" aria-label="Threshold"></select>, add <select id="sa-auto-amount" aria-label="Amount"></select></p>
+                  <p class="sa-auto-warn" id="sa-auto-failed" hidden></p>
+                  <p class="card-note" id="sa-auto-note"></p>
+                  <button class="link-btn" id="sa-forget-card" type="button">Remove card</button>
+                </div>
+                <h4 class="sa-mini">Recent</h4>
+                <ul class="sa-ledger" id="sa-ledger"></ul>
+              </div>
+
+              <div class="card" id="sa-brain">
+                <h3>Brain</h3>
+                <div class="kv"><span>Thinking with</span><b id="sa-llm-now">-</b></div>
+                <label class="field"><span>Provider</span><select id="sa-provider"></select></label>
+                <label class="field"><span>Model</span><select id="sa-model"></select></label>
+                <label class="field" id="sa-model-other-row" hidden><span>Model id</span>
+                  <input type="text" id="sa-model-other" autocapitalize="off" spellcheck="false" placeholder="exact model id"></label>
+                <div class="row-btns"><button class="cta" id="sa-llm-save" type="button">Use this brain</button></div>
+                <p class="card-note" id="sa-llm-out">Only providers with a key are listed.</p>
+              </div>
+            </div>
+
+            <h4 class="group-label">Your Lites</h4>
+            <div class="sa-devices" id="sa-devices"></div>
+
+            <h4 class="group-label">Memory</h4>
+            <div class="settings-grid stagger">
+              <div class="card" id="sa-memory">
+                <h3>Notes</h3>
+                <p class="hint">One fact per line.</p>
+                <textarea id="sa-bulletin" class="sa-text" rows="8" spellcheck="true" placeholder="Nothing yet."></textarea>
+                <div class="row-btns"><button class="cta" id="sa-bulletin-save" type="button">Save notes</button></div>
+                <p class="card-note" id="sa-bulletin-out"></p>
+              </div>
+              <div class="card" id="sa-history">
+                <h3>Recent conversations</h3>
+                <ul class="sa-recent" id="sa-recent"></ul>
+                <div class="row-btns"><button class="ghost-btn danger-ghost" id="sa-forget" type="button">Forget everything</button></div>
+                <p class="card-note">Deletes notes and history for good.</p>
+              </div>
+            </div>
+
+            <h4 class="group-label">Talk to him</h4>
+            <div class="card">
+              <form class="try-row" id="sa-chat">
+                <input type="text" id="sa-chat-text" placeholder="Message Reedus" autocapitalize="sentences" maxlength="500">
+                <button class="cta" type="submit">Send</button>
+              </form>
+              <p class="sa-reply" id="sa-chat-out" hidden></p>
+            </div>
+
+            <p class="card-note sa-account" id="sa-account"></p>
+            <div class="row-btns"><button class="ghost-btn" id="sa-signout" type="button">Sign out</button></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- cloud brain (shared: the choice lives in the brain, cloud/llm.py) -->
+      <section class="view" id="view-llm" data-tab="settings" data-title="Cloud brain">
+        <div class="page">
+          <div class="view-head"><button class="back" data-nav="settings" aria-label="Back"><svg><use href="#i-back"/></svg></button><h2>Cloud brain</h2><span class="head-note" id="llm-note"></span></div>
+          <p class="lead">The AI that thinks for Reedus in cloud mode. Lite always runs in cloud mode;
+            the robot uses it when you switch to Cloud. Change it any time, he picks it up from his next sentence.</p>
+
+          <div class="cx-offline card" id="llm-offline" hidden>
+            <h3>The brain isn't running</h3>
+            <p>The cloud brain is chosen inside Reedus's brain. Start <code>run_lite.sh</code> or the voice loop on the run box, then come back.</p>
+          </div>
+
+          <div class="card llm-now" id="llm-now">
+            <span class="llm-now-icon"><svg><use href="#i-spark"/></svg></span>
+            <div class="llm-now-text"><small>Thinking with</small><b id="llm-now-label">-</b><small id="llm-now-search"></small></div>
+            <span class="llm-state" id="llm-now-state"></span>
+          </div>
+
+          <div class="llm-money card" role="note">
+            <b>Heads up: an API key needs money on the account.</b>
+            <p>Every provider here bills per use. Add prepaid credit or a card in the provider's billing page
+              before the key will answer, or every request fails. A ChatGPT Plus, Claude Pro or Gemini app
+              subscription doesn't count, the API is billed separately. Reedus's own monthly cap
+              (Cloud spend on the Settings page) stops him before he overspends.</p>
+          </div>
+
+          <h4 class="group-label">Provider <small>tap one to set it up</small></h4>
+          <div class="llm-grid stagger" id="llm-grid"></div>
+
+          <div class="card llm-detail" id="llm-detail" hidden>
+            <div class="llm-head">
+              <div><h3 id="ld-name">-</h3><small id="ld-blurb"></small></div>
+              <span class="llm-state" id="ld-state"></span>
+            </div>
+
+            <details class="llm-howto" id="ld-howto">
+              <summary>Getting a key from <span id="ld-short"></span></summary>
+              <ol class="steps" id="ld-steps"></ol>
+              <p class="llm-bill" id="ld-billing"></p>
+              <div class="row-btns">
+                <a class="ghost-btn small" id="ld-keyurl" target="_blank" rel="noopener">Open the key page</a>
+                <a class="ghost-btn small" id="ld-billurl" target="_blank" rel="noopener">Open billing</a>
+              </div>
+            </details>
+
+            <label class="field" id="ld-base-row" hidden><span>Base URL</span>
+              <input type="text" id="ld-base" placeholder="https://api.example.com/v1" autocapitalize="off" spellcheck="false" inputmode="url"></label>
+
+            <label class="field"><span>API key <b id="ld-keyhint"></b></span>
+              <span class="copy-row">
+                <input type="password" id="ld-key" autocapitalize="off" spellcheck="false" autocomplete="off" placeholder="paste the key">
+                <button class="cta" id="ld-key-save" type="button">Save &amp; test</button>
+              </span></label>
+            <button class="ghost-btn small danger-ghost" id="ld-forget" type="button" hidden>Forget saved key</button>
+
+            <label class="field"><span>Model <button class="link-btn" id="ld-refresh" type="button">Refresh list</button></span>
+              <select id="ld-model"></select></label>
+            <label class="field" id="ld-model-other-row" hidden><span>Model id</span>
+              <input type="text" id="ld-model-other" placeholder="exact model id, e.g. anthropic/claude-sonnet-5.5" autocapitalize="off" spellcheck="false"></label>
+            <p class="card-note" id="ld-model-note"></p>
+
+            <label class="field"><span>Web search</span>
+              <select id="ld-search">
+                <option value="auto">Automatic</option>
+                <option value="local">Reedus's own search (SearXNG / DuckDuckGo)</option>
+                <option value="gemini">Gemini grounding (needs a Gemini key too)</option>
+                <option value="off">Off</option>
+              </select></label>
+            <p class="card-note" id="ld-search-note"></p>
+
+            <div class="row-btns">
+              <button class="ghost-btn" id="ld-test" type="button">Test</button>
+              <button class="cta" id="ld-use" type="button">Use this brain</button>
+            </div>
+            <p class="card-note" id="ld-out"></p>
+          </div>
+          <p class="card-note">Keys stay on the run box (<code>memory/llm.json</code>), never in this app. Only the last few characters ever come back here.</p>
+        </div>
+      </section>
+
       <!-- connections (shared: they live in the brain) -->
       <section class="view" id="view-connections" data-tab="settings" data-title="Connections">
         <div class="page">
@@ -544,6 +799,10 @@
                 <button class="np-btn main" data-sp="toggle" id="np-toggle" aria-label="Play or pause"><svg viewBox="0 0 24 24" id="np-icon"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></button>
                 <button class="np-btn" data-sp="next" aria-label="Next"><svg viewBox="0 0 24 24"><path d="M18 5v14M5 5l10 7-10 7z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
               </div>
+              <div class="np-here" id="np-here-row" hidden>
+                <small id="np-here-state">Lite's speaker</small>
+                <button class="ghost-btn small" id="np-here" type="button">Play on Lite</button>
+              </div>
               <label class="field"><span>Volume <b id="np-vol-val">-</b></span><input type="range" id="np-vol" min="0" max="100" value="50"></label>
               <form class="try-row" id="sp-try">
                 <input type="text" id="sp-try-text" placeholder="Try a command: play daft punk" autocapitalize="off">
@@ -551,6 +810,21 @@
               </form>
               <p class="card-note" id="sp-try-out"></p>
             </div>
+          </div>
+
+          <!-- Calendars -->
+          <h4 class="group-label">Calendars <small>for "what's my day?" and Lite's next-class card</small></h4>
+          <div class="hub-list" id="cal-list"></div>
+          <div class="card cal-card" id="cal-card">
+            <p class="hint">Paste a calendar's private iCal link. Read-only, no sign-in:
+              <b>Google</b>: Settings → your calendar → <i>Secret address in iCal format</i>.
+              <b>iCloud</b>: share the calendar as Public, copy the webcal link.
+              <b>Outlook</b>: Settings → Shared calendars → Publish → ICS.
+              <b>Canvas</b>: Calendar → <i>Calendar Feed</i>.</p>
+            <label class="field"><span>Name</span><input type="text" id="cal-name" maxlength="40" placeholder="e.g. Classes"></label>
+            <label class="field"><span>iCal link</span><input type="password" id="cal-url" autocapitalize="off" spellcheck="false" autocomplete="off" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"></label>
+            <div class="row-btns"><button class="cta" id="cal-add" type="button">Add calendar</button></div>
+            <p class="card-note" id="cal-out">The link stays on the run box (<code>memory/assist.json</code>). Anyone with it can read the calendar, so treat it like a password.</p>
           </div>
 
           <!-- MCP hubs -->
@@ -581,10 +855,17 @@
 <script src="js/store.js"></script>
 <script src="js/link.js"></script>
 <script src="js/routines.js"></script>
+<script src="js/font.js"></script>
+<script src="js/glance.js"></script>
 <script src="js/face.js"></script>
 <script src="js/views.js"></script>
 <script src="js/lite.js"></script>
 <script src="js/connections.js"></script>
+<script src="js/llm.js"></script>
+<script src="js/relay.js"></script>
+<script src="js/setup.js"></script>
+<script src="js/standalone.js"></script>
+<script src="js/assist.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

@@ -158,6 +158,16 @@ const Connections = (() => {
     });
   }
 
+  function bindHere() {
+    $("#np-here").addEventListener("click", async (e) => {
+      e.target.classList.add("busy");
+      const out = await Link.connections({ action: "here", id: "spotify" });
+      e.target.classList.remove("busy");
+      App.toast(out.error || `Playing on ${out.device}`);
+      setTimeout(pollNow, 700);
+    });
+  }
+
   async function pollNow() {
     if (!spItem().connected || App.currentView() !== "connections") return;
     const out = await Link.connections({ action: "now", id: "spotify" });
@@ -178,11 +188,27 @@ const Connections = (() => {
       ? '<rect x="6.5" y="5" width="4" height="14" rx="1.2" fill="currentColor"/><rect x="13.5" y="5" width="4" height="14" rx="1.2" fill="currentColor"/>'
       : '<path d="M8 5v14l11-7z" fill="currentColor"/>';
     $("#np-prog").style.width = n.duration ? Math.min(100, n.progress / n.duration * 100) + "%" : "0%";
+    paintHere(n);
     if (n.volume != null && document.activeElement !== $("#np-vol")) {
       const v = $("#np-vol"); v.value = n.volume;
       v.style.setProperty("--fill", n.volume + "%");
       $("#np-vol-val").textContent = n.volume + "%";
     }
+  }
+
+  /* Lite's own speaker (lite/music.py, librespot): where "play X" goes when Lite has the brain */
+  function paintHere(n) {
+    const lite = typeof Lite !== "undefined" ? Lite.snapshot : null;
+    const m = lite && lite.music;
+    $("#np-here-row").hidden = !m;
+    if (!m) return;
+    const on = n && n.device && m.name && n.device.toLowerCase() === m.name.toLowerCase();
+    const st = $("#np-here-state");
+    if (!m.available) st.textContent = "Lite plays voice only: librespot isn't installed on the run box.";
+    else if (m.error) st.textContent = m.error;
+    else if (!m.lane) st.textContent = `"${m.name}" is ready. Lite needs the new firmware for music.`;
+    else st.textContent = on ? `Playing out of Lite ("${m.name}").` : `Lite is a Spotify speaker called "${m.name}". "Play X" plays there.`;
+    $("#np-here").hidden = !m.available || !m.lane || on;
   }
 
   function startPoll() {
@@ -244,6 +270,7 @@ const Connections = (() => {
 
   function init() {
     wireSpotify();
+    bindHere();
     wireForm();
     Link.on("status", (s) => {
       // the brain coming or going changes what this page can do

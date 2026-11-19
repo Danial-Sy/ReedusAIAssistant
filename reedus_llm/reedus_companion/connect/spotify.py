@@ -40,6 +40,10 @@ class Spotify:
     def __init__(self, cfg: dict, save: Callable[[], None]):
         self.cfg = cfg
         self.save = save
+        # the body's own speaker, when it has one (lite/music.py sets "Reedus Lite"): "play X"
+        # plays there, like asking an Echo plays on the Echo
+        self.home_device: Optional[str] = None
+        self.on_control: List[Callable[[str], None]] = []   # told after pause/next/... succeed
 
     # ---------- login ----------
     @property
@@ -171,6 +175,9 @@ class Spotify:
                                "computer once and I can take it from there")
         if any(d.get("is_active") for d in devs):
             return None
+        home = self._home_id(devs)
+        if home:
+            return home
         pref = self.cfg.get("last_device")
         pick = next((d for d in devs if d.get("id") == pref), devs[0])
         return pick.get("id")
@@ -185,7 +192,25 @@ class Spotify:
             dev = self._device()
             return self.api(method, path, {**(query or {}), **({"device_id": dev} if dev else {})}, body)
 
+    def _home_id(self, devs: Optional[List[dict]] = None) -> Optional[str]:
+        """The id of the body's own speaker, if it's logged in and visible to the Web API."""
+        if not self.home_device:
+            return None
+        devs = devs if devs is not None else self.devices()
+        n = _norm(self.home_device)
+        hit = next((d for d in devs if _norm(d.get("name") or "") == n), None)
+        return hit.get("id") if hit else None
+
     def control(self, action: str) -> str:
+        out = self._control(action)
+        for fn in list(self.on_control):
+            try:
+                fn(action.lower())
+            except Exception:                                    # noqa: BLE001
+                pass
+        return out
+
+    def _control(self, action: str) -> str:
         a = action.lower()
         if a == "pause":
             self._with_device("PUT", "/me/player/pause")
@@ -254,7 +279,11 @@ class Spotify:
             raise SpotifyError(f"couldn't find {query!r} on Spotify")
         it, t = hit["item"], hit["type"]
         body = {"uris": [it["uri"]]} if t == "track" else {"context_uri": it["uri"]}
-        self._with_device("PUT", "/me/player/play", body)
+        home = self._home_id()
+        if home:                    # asked out loud = play out loud, on this body
+            self.api("PUT", "/me/player/play", {"device_id": home}, body)
+        else:
+            self._with_device("PUT", "/me/player/play", body)
         by = ", ".join(a["name"] for a in it.get("artists") or [])
         if t == "track":
             return f"{it['name']} by {by}" if by else it["name"]
@@ -271,6 +300,17 @@ class Spotify:
         self._with_device("POST", "/me/player/queue", query={"uri": hit["item"]["uri"]})
         it = hit["item"]
         return f"{it['name']} by {', '.join(a['name'] for a in it.get('artists') or [])}"
+
+    def here(self) -> str:
+        """Move playback to the body's own speaker."""
+        if not self.home_device:
+            raise SpotifyError("I don't have a speaker of my own in this body")
+        home = self._home_id()
+        if not home:
+            raise SpotifyError(f"{self.home_device} isn't signed in to Spotify yet. Open Spotify on "
+                               f"your phone, tap the devices button and pick {self.home_device} once")
+        self.api("PUT", "/me/player", body={"device_ids": [home], "play": True})
+        return self.home_device
 
     def transfer(self, name: str) -> str:
         devs = self.devices()

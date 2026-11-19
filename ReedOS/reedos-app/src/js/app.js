@@ -45,6 +45,9 @@ const App = (() => {
     $("#crumb").textContent = name === tab ? label
       : narrow ? viewEl(name).dataset.title : `${label} · ${viewEl(name).dataset.title}`;
     Lite.wake();
+    if (typeof Assist !== "undefined" && (name === "lite" || name === "connections")) Assist.refresh();
+    if (typeof LLM !== "undefined" && name === "llm") LLM.refresh();
+    if (typeof Standalone !== "undefined" && name === "standalone") Standalone.refresh();
     requestAnimationFrame(Seg.refreshAll);
   }
 
@@ -138,15 +141,23 @@ const App = (() => {
       dot("#dot-lite", s.lite && s.lite.connected ? "on" : s.lite ? "mock" : "off");
       dot("#dot-chat", s.chat === "on" ? "on" : s.link === "mock" ? "mock" : "off");
       const demo = s.link !== "live";
-      $("#demo-pill").hidden = !demo;
+      // no Xeon, but a standalone Lite's relay is signed in: Lite is real, only the robot is simulated
+      const relayLive = demo && typeof Relay !== "undefined" && Relay.active && !Relay.demo;
+      const pill = $("#demo-pill");
+      pill.hidden = !demo;
+      pill.textContent = relayLive ? "Xeon off" : "Demo";
+      pill.title = relayLive ? "The Xeon isn't reachable, so the Reedus tab is simulated. Standalone Lite is live on your relay."
+        : "reedosd wasn't found, everything here is simulated";
+      pill.dataset.relay = relayLive ? "1" : "";
       document.body.classList.toggle("is-demo", demo);
       const conn = $("#conn");
-      conn.dataset.state = demo ? "mock" : s.brain === "on" ? "on" : "half";
-      $("#conn-text").textContent = demo ? "Demo mode"
+      conn.dataset.state = demo ? (relayLive ? "half" : "mock") : s.brain === "on" ? "on" : "half";
+      $("#conn-text").textContent = relayLive ? "Xeon off · Lite on the relay" : demo ? "Demo mode"
         : s.brain !== "on" ? "Run box up, brain off"
         : body === "lite" ? "Brain in Lite" : "Brain in Reedus";
     });
     $("#demo-pill").addEventListener("click", () => {
+      if ($("#demo-pill").dataset.relay) { navigate("standalone"); return; }
       navigate("settings");
       setTimeout(() => { const a = $("#as-daemon"); a.focus(); a.select(); }, 350);
     });
@@ -224,6 +235,9 @@ const App = (() => {
     Views.initViews();
     Lite.init();
     Connections.init();
+    LLM.init();
+    Standalone.init();
+    Assist.init();
     wireStatus();
     wireMode();
     wireLock();

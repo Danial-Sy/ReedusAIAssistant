@@ -4,6 +4,7 @@
 
 #include "audio.h"
 #include "config.h"
+#include "glance.h"
 
 namespace face {
 
@@ -22,7 +23,8 @@ enum Eye : uint8_t { E_OPEN, E_WIDE, E_HAPPY, E_CLOSED, E_HALF, E_SQUINT, E_HEAR
 enum Mouth : uint8_t { M_NONE, M_SMILE, M_GRIN, M_FLAT, M_SHORT, M_SMALL_O, M_BIG_O, M_FROWN,
                        M_WAVY, M_SMIRK, M_CAT, M_TALK };
 enum Extra : uint16_t { X_NONE = 0, X_BLUSH = 1, X_TEAR = 2, X_ZZZ = 4, X_DOTS = 8,
-                        X_QUESTION = 16, X_HEARTS = 32, X_SPARKLE = 64, X_BOUNCE = 128 };
+                        X_QUESTION = 16, X_HEARTS = 32, X_SPARKLE = 64, X_BOUNCE = 128,
+                        X_BOP = 256 };  // BOP: one-pixel hop right now (music beat)
 
 enum Emo : uint8_t { NEUTRAL, HAPPY, LAUGH, LOVE, SAD, SURPRISED, ANGRY, CONFUSED, SLEEPY,
                      EXCITED, SMUG, SHY, CURIOUS,
@@ -85,7 +87,8 @@ static uint16_t xyToIndex(int x, int y) {
   return ry * MATRIX_W + rx;
 }
 
-static void px(int x, int y, const CRGB& c, uint8_t v = 255) {
+static void px(int x, int y, const CRGB& c, uint8_t v = 255);
+static void px(int x, int y, const CRGB& c, uint8_t v) {
   if (x < 0 || x >= MATRIX_W || y < 0 || y >= MATRIX_H) return;
   CRGB p = c;
   p.nscale8_video(v);
@@ -405,8 +408,18 @@ static void idleFidget(uint32_t now, Spec& s) {
 }
 
 // ---------- compose ----------
+// a crude beat: the music's loudness jumping above its own recent average
+static bool musicBeat() {
+  static float avg = 0.0f;
+  float l = audio::musicLevel();
+  avg = avg * 0.97f + l * 0.03f;
+  return l > 0.08f && l > avg * 1.2f;
+}
+
 static void compose(uint32_t now, Spec& s) {
   bool speaking = st == S_SPEAKING || audio::playing();
+  bool music = audio::musicPlaying();
+  if (music) lastActive = now;  // nobody dozes off mid-song
   uint32_t idleFor = (now - lastActive) / 1000;
   bool drowsy = st == S_IDLE && idleFor > IDLE_DROWSY_S;
   bool asleep = st == S_SLEEP || (st == S_IDLE && idleFor > IDLE_SLEEP_S);
@@ -429,6 +442,12 @@ static void compose(uint32_t now, Spec& s) {
         s.eyeL = s.eyeR = E_HALF;
         s.mouth = M_FLAT;
         s.dim = 0.75f;
+      } else if (music && !voiceFresh) {
+        // listening along: happy eyes, a little smile, bobbing on the beat
+        s.eyeL = s.eyeR = E_HAPPY;
+        s.mouth = M_SMILE;
+        s.blinkable = false;
+        if (musicBeat()) s.extras |= X_BOP;
       } else if (!voiceFresh) {
         idleFidget(now, s);
       }
@@ -491,6 +510,23 @@ static void render(uint32_t now) {
   }
   Spec s;
   float bootP = (now - bootAt) / 900.0f;
+  if (wifiUp && serverUp && bootP >= 1.0f) {
+    // timers, ringing, idle cards (glance.cpp) take the panel while nobody's talking
+    if (glance::ringing()) lastActive = now;  // an alarm wakes him up
+    uint32_t idleFor = (now - lastActive) / 1000;
+    bool idle = st == S_IDLE;
+    bool asleep = st == S_SLEEP || (idle && idleFor > IDLE_SLEEP_S);
+    float gdim = 1.0f;
+    if (glance::draw(now, idle, asleep, px, &gdim)) {
+      if (gdim < 1.0f) {
+        uint8_t d = (uint8_t)(255 * constrain(gdim, 0.0f, 1.0f));
+        for (int y = 0; y < MATRIX_H; y++)
+          for (int x = 0; x < MATRIX_W; x++) frame[y][x].nscale8_video(d);
+      }
+      snprintf(desc, sizeof(desc), "%s glance=%s", ST_NAMES[st], glance::describe());
+      return;
+    }
+  }
   if (!wifiUp || !serverUp) {
     // searching: dim eyes scanning, a status pixel (amber = no wifi, red = no run box)
     s.eyeL = s.eyeR = E_OPEN;
@@ -513,7 +549,7 @@ static void render(uint32_t now) {
   gazeX += (s.gx - gazeX) * 0.35f;
   gazeY += (s.gy - gazeY) * 0.35f;
   int gx = (int)roundf(gazeX), gy = (int)roundf(gazeY);
-  int bounce = (s.extras & X_BOUNCE) && ((millis() / 160) & 1) ? 1 : 0;
+  int bounce = ((s.extras & X_BOUNCE) && ((millis() / 160) & 1)) || (s.extras & X_BOP) ? 1 : 0;
 
   // eye left in its own wink states
   float openL = open, openR = open;

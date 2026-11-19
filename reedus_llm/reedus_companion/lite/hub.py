@@ -27,6 +27,10 @@ DIM, RESET = "\033[2m", "\033[0m"
 # is also the worst-case barge-in tail if a flush ever gets lost.
 PREBUFFER_S = float(os.environ.get("REEDUS_LITE_PREBUFFER", "0.12"))
 LEAD_S = float(os.environ.get("REEDUS_LITE_LEAD", "0.30"))
+# music can wait for the network, speech can't: a deeper lead, corrected by the device's own
+# buffer reports (the two clocks drift apart by a few ms a minute, which adds up over an album)
+MUSIC_PREBUFFER_S = 0.30
+MUSIC_LEAD_S = float(os.environ.get("REEDUS_LITE_MUSIC_LEAD", "0.8"))
 
 
 def _log(msg: str) -> None:
@@ -96,11 +100,17 @@ class LiteHub:
         self._clock_lock = threading.Lock()
         self._play_end = 0.0                # monotonic time the device runs dry
         self.gen = 0                        # bumped by flush(); stale speech is dropped
+        self.mgen = 0                       # bumped by music_flush(); stale music is dropped
+        self._mplay_end = 0.0               # monotonic time the device's music buffer runs dry
+        self.dev_proto = 1                  # what the connected device speaks
+        self.dev_caps: set = set()
+        self.music: dict = {}               # lite/music.py fills this in for snapshots
         self.volume = int(os.environ.get("REEDUS_LITE_VOLUME", "70"))
         self.brightness = int(os.environ.get("REEDUS_LITE_BRIGHTNESS", "100"))
         self.last_state: Optional[str] = None
         self.last_face: Optional[dict] = None   # {name, until}: the emotion/expr on the face now
         self.status: dict = {"connected": False}
+        self.display: dict = {}                  # lite/glance.py: timers + the card on the face
         self.error: Optional[str] = None
 
     # --- lifecycle ---
@@ -169,6 +179,51 @@ class LiteHub:
             self._play_end += n / float(P.RATE)
         self._post(("audio", self.gen, to_int16(pcm16k)))
 
+    # --- music lane ---
+    @property
+    def music_ok(self) -> bool:
+        """The connected device can take music (firmware with proto 2 and the 48 kHz path)."""
+        return self.connected and self.dev_proto >= 2 and "music24" in self.dev_caps
+
+    def music_ahead(self) -> float:
+        with self._clock_lock:
+            return max(0.0, self._mplay_end - time.monotonic())
+
+    def queue_music(self, pcm24k: np.ndarray, gen: Optional[int] = None) -> bool:
+        """Send 24 kHz float32 music. False (and nothing sent) if the device can't play it."""
+        if not self.music_ok or (gen is not None and gen != self.mgen):
+            return False
+        n = int(np.asarray(pcm24k).size)
+        if n == 0:
+            return True
+        with self._clock_lock:
+            now = time.monotonic()
+            if self._mplay_end < now:
+                self._mplay_end = now + MUSIC_PREBUFFER_S
+            self._mplay_end += n / float(P.MUSIC_RATE)
+        self._post(("music", self.mgen, to_int16(pcm24k)))
+        return True
+
+    def music_flush(self) -> None:
+        """Pause or skip: the device drops what it has queued, with a short fade."""
+        with self._clock_lock:
+            self.mgen += 1
+            self._mplay_end = 0.0
+        self.send({"type": P.MUSIC, "op": "flush"})
+
+    def _music_report(self, msg: dict) -> None:
+        # pull our estimate halfway to what the device says it holds; frames still in flight
+        # aren't in its count, so snapping all the way would make us send a burst
+        try:
+            held = float(msg.get("buffered_ms") or 0) / 1000.0
+        except (TypeError, ValueError):
+            return
+        with self._clock_lock:
+            now = time.monotonic()
+            if self._mplay_end > now or held > 0:
+                cur = max(self._mplay_end, now)
+                self._mplay_end = cur + ((now + held) - cur) * 0.5
+
     def flush(self) -> None:
         """Barge-in: stop talking now."""
         with self._clock_lock:
@@ -223,8 +278,26 @@ class LiteHub:
         snap = dict(self.status)
         face = self.last_face if self.last_face and self.last_face["until"] > time.time() else None
         snap.update(connected=self.connected, state=self.last_state,
-                    volume=self.volume, brightness=self.brightness, face=face)
+                    volume=self.volume, brightness=self.brightness, face=face,
+                    display=self._display_now(),
+                    music={**self.music, "lane": self.music_ok} if self.music or self.music_ok else None)
         return snap
+
+    def _display_now(self) -> dict:
+        """Timers with their seconds brought up to now, and the card if it's still up."""
+        d, now = self.display or {}, time.time()
+        out: dict = {}
+        tm = d.get("timers")
+        if tm:
+            gone = now - float(d.get("timers_at") or now)
+            out["timers"] = {**tm, "items": [
+                {**t, "left": t["left"] if t.get("paused") else max(0.0, t["left"] - gone)}
+                for t in tm.get("items", [])]}
+        card = d.get("card")
+        if card and card.get("until", 0) > now:
+            out["card"] = card
+        out["h24"] = bool(d.get("h24"))
+        return out
 
     def _post(self, item) -> None:
         loop, box = self.loop, self._outbox
@@ -285,6 +358,8 @@ class LiteHub:
             await ws.close(4002, f"rate must be {P.RATE}")
             return
 
+        self.dev_proto = min(P.PROTO, int(hello.get("proto") or 1))
+        self.dev_caps = set(hello.get("caps") or [])
         old = self._ws
         if old is not None:
             _log("a second Lite connected, dropping the first")
@@ -297,8 +372,9 @@ class LiteHub:
         self.status = {"connected": True, "device": hello.get("device"),
                        "fw": hello.get("fw"), "peer": str(peer), "since": time.time()}
         self._connected.set()
-        _log(f"{hello.get('device', 'device')} fw {hello.get('fw', '?')} connected from {peer}")
-        await ws.send(json.dumps({"type": P.WELCOME, "proto": P.PROTO, "volume": self.volume,
+        _log(f"{hello.get('device', 'device')} fw {hello.get('fw', '?')} connected from {peer}"
+             f"{' (music lane)' if 'music24' in self.dev_caps and self.dev_proto >= 2 else ''}")
+        await ws.send(json.dumps({"type": P.WELCOME, "proto": self.dev_proto, "volume": self.volume,
                                   "brightness": self.brightness}))
         if self.last_state:
             await ws.send(json.dumps({"type": P.STATE, "state": self.last_state}))
@@ -318,6 +394,8 @@ class LiteHub:
                 self._outbox = None
                 self._connected.clear()
                 self.status = {"connected": False, "last_seen": time.time()}
+                with self._clock_lock:
+                    self._mplay_end = 0.0       # its music buffer went with it
                 _log("Lite disconnected")
 
     async def _sender(self, ws, box: asyncio.Queue) -> None:
@@ -325,6 +403,10 @@ class LiteHub:
             kind, gen, payload = await box.get()
             if kind == "audio" and gen != self.gen:
                 continue                    # flushed while queued
+            if kind == "music" and gen != self.mgen:
+                continue
+            if kind in ("audio", "music") and self.dev_proto >= 2:
+                payload = bytes([P.KIND_SPEECH if kind == "audio" else P.KIND_MUSIC]) + payload
             try:
                 await ws.send(payload)
             except Exception:                                    # noqa: BLE001
@@ -336,6 +418,10 @@ class LiteHub:
         except ValueError:
             return
         kind = msg.get("type")
+        if kind == P.MUSIC:
+            self._music_report(msg)
+            self.status["music"] = {k: v for k, v in msg.items() if k != "type"}
+            self.status["music"]["at"] = time.time()
         if kind in (P.DOA, P.BATTERY, P.STATUS):
             self.status[kind] = {k: v for k, v in msg.items() if k != "type"}
             self.status[kind]["at"] = time.time()

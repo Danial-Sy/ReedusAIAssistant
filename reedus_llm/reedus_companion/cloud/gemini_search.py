@@ -18,24 +18,41 @@ _INSTRUCTION = (
 
 
 def available() -> bool:
-    """True when cloud mode is active and a Gemini key exists."""
+    """True in cloud mode when Gemini is the search engine and has a key: the Gemini brain on
+    search "auto", or any brain on search "gemini" (cloud/llm_settings.py)."""
     if (os.environ.get("REEDUS_CLOUD_SEARCH") or "1") == "0":
         return False
     try:
         from reedus_companion import mode
+        from reedus_companion.cloud import llm_settings
         if mode.current() != mode.CLOUD:
             return False
+        how = llm_settings.search_mode()
+        if not (how == "gemini" or (how == "auto" and llm_settings.provider() == "gemini")):
+            return False
+        return bool(llm_settings.key("gemini"))
     except Exception:
         return False
-    return bool((os.environ.get("GEMINI_API_KEY") or "").strip())
+
+
+def _model() -> str:
+    from reedus_companion.cloud import llm_settings
+    if llm_settings.provider() == "gemini":
+        return llm_settings.model("gemini")
+    return os.environ.get("REEDUS_GEMINI_MODEL", "gemini-3.7-flash")
+
+
+_CLIENT_KEY = ""
 
 
 def _client():
-    global _CLIENT
+    global _CLIENT, _CLIENT_KEY
+    from reedus_companion.cloud import llm_settings
+    key = llm_settings.key("gemini")
     with _LOCK:
-        if _CLIENT is None:
+        if _CLIENT is None or key != _CLIENT_KEY:
             from google import genai
-            _CLIENT = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+            _CLIENT, _CLIENT_KEY = genai.Client(api_key=key), key
         return _CLIENT
 
 
@@ -69,7 +86,7 @@ def search(query: str, max_results: Optional[int] = None, full: bool = False) ->
         from reedus_companion.cloud.gemini_backend import create_interaction
         interaction = create_interaction(
             _client(),
-            model=os.environ.get("REEDUS_GEMINI_MODEL", "gemini-3.7-flash"),
+            model=_model(),
             input=q,
             system_instruction=_INSTRUCTION,
             tools=[{"type": "google_search"}],
@@ -85,7 +102,7 @@ def search(query: str, max_results: Optional[int] = None, full: bool = False) ->
     cites = _citations(interaction)
     try:
         from reedus_companion.cloud import budget
-        budget.record_tokens(os.environ.get("REEDUS_GEMINI_MODEL", "gemini-3.7-flash"),
+        budget.record_tokens(_model(),
                              len(q) // 4 + 80, len(answer) // 4,
                              grounded=bool(cites))
     except Exception:

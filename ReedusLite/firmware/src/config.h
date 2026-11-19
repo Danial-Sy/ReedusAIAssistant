@@ -49,6 +49,9 @@
 #define PLAY_BUFFER_MS 2000        // jitter buffer capacity
 #define PLAY_PREBUFFER_MS 120      // same as REEDUS_LITE_PREBUFFER on the server
 #define DEFAULT_VOLUME 70          // 0-100, the server sends its own on connect
+#define MUSIC_BUFFER_MS 2000       // music jitter buffer (24 kHz, PSRAM): music can afford latency
+#define MUSIC_PREBUFFER_MS 300     // starts once this much is queued
+#define MUSIC_DUCK 0.22f           // music level under speech / while listening (~-13 dB)
 
 // ---------- XVF3800 control (I2C) ----------
 #define XVF_ADDR 0x2C

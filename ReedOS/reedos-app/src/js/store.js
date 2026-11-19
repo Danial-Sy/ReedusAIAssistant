@@ -42,6 +42,8 @@ const Store = (() => {
       ttsInChat: true,        // is the answer said out loud at all
       chatInput: "type",      // "type" | "talk"
       chatRoute: "mobo",      // "mobo" = his mic + his voice; "device" = this browser's
+      relayUrl: "",           // standalone Lite: wss://<relay>/app ("" = the page's own origin)
+      relayToken: "",         // the account's app token (rla_…), "" = signed out
 
     },
     robot: {

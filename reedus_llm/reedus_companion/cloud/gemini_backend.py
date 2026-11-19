@@ -1,4 +1,5 @@
-"""gemini 3.7 flash backend, the cloud mode brain. uses the interactions api."""
+"""gemini backend (3.7 flash by default), one of the cloud brains cloud/llm.py can build.
+uses the interactions api."""
 from __future__ import annotations
 
 import os
@@ -64,13 +65,19 @@ class GeminiBackend:
     """Drop-in Backend protocol client for Gemini 3.x via the Interactions API."""
 
     PROFILE: List[Dict] = []
+    CLOUD = True
+    provider = "gemini"
 
     def __init__(self, model: Optional[str] = None, api_key: Optional[str] = None):
-        key = api_key or os.environ.get("GEMINI_API_KEY") or ""
+        if not api_key:
+            from reedus_companion.cloud import llm_settings
+            api_key = llm_settings.key("gemini")
+        key = api_key or ""
         if not key.strip():
             raise CloudUnavailable(
-                "GEMINI_API_KEY is not set. Add it to deploy/xeon.env "
-                "(get one at https://aistudio.google.com/apikey and enable billing "
+                "no Gemini API key. Add one in ReedOS → Settings → Cloud brain, or "
+                "GEMINI_API_KEY in deploy/xeon.secrets.env (get one at "
+                "https://aistudio.google.com/apikey and enable billing "
                 "so your conversations are excluded from training).",
                 provider="gemini", retryable=False)
         try:
@@ -87,8 +94,8 @@ class GeminiBackend:
         self._retries = int(os.environ.get("REEDUS_GEMINI_RETRIES", "2"))
         _inline = os.environ.get("REEDUS_GEMINI_INLINE_SEARCH")
         if _inline is None:
-            from reedus_companion import mode as _mode
-            self._search = not _mode.local_search_enabled()
+            from reedus_companion.cloud import llm as _llm
+            self._search = _llm.inline_search("gemini")
         else:
             self._search = _inline == "1"
         self._think_main = os.environ.get("REEDUS_GEMINI_THINK", "low")
@@ -100,7 +107,9 @@ class GeminiBackend:
               f"inline_search={'on' if self._search else 'off'})")
         try:
             from reedus_companion import mode as _mode
-            if not self._search and not _mode.local_search_enabled():
+            from reedus_companion.cloud import llm_settings as _ls
+            if not self._search and not _mode.local_search_enabled() \
+                    and _ls.search_mode() != "off":
                 print("\n[reedus] *** WARNING: NOTHING CAN SEARCH ***\n"
                       "  core.py's search routing is off (cloud mode) AND the persona\n"
                       "  call cannot ground inline. Reedus will make up anything he is\n"
@@ -161,7 +170,8 @@ class GeminiBackend:
                 if cancel is not None and getattr(cancel, "is_set", lambda: False)():
                     break
                 time.sleep(0.35 * (2 ** attempt))
-        raise CloudUnavailable(f"{type(last).__name__}: {last}",
+        from reedus_companion.cloud.base import explain
+        raise CloudUnavailable(explain("gemini", last) if last else "no reply",
                                provider="gemini",
                                retryable=_is_transient(last) if last else True)
 

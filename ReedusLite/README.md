@@ -1,6 +1,8 @@
 # Reedus Lite
 
-Reedus Lite is Reedus's personality in a small desk body. The Telly chassis has red cat ears, a 16x16 LED face, a head that turns toward whoever is talking, and a far-field mic array. Lite is a thin client: it streams its mics to the run box and plays back what comes down. It shares one brain with the robot: the same wake word, Whisper STT, Gemini Flash, Inworld voice, memory and barge-in.
+> **The primary Reedus Lite is now the standalone build in `ReedusLiteS3/`**: the S3 talks to a cloud relay, no run box needed. This run-box version still works on the same hardware.
+
+Reedus Lite is Reedus's personality in a small desk body. The Telly chassis has red cat ears, a 16x16 LED face, a head that turns toward whoever is talking, and a far-field mic array. Lite is a thin client: it streams its mics to the run box and plays back what comes down. It shares one brain with the robot: the same wake word, Whisper STT, cloud LLM (Gemini Flash by default, switchable in ReedOS), Inworld voice, memory and barge-in.
 
 ```
  Reedus Lite (XIAO ESP32S3 + XVF3800)               run box (Xeon)
@@ -21,6 +23,9 @@ Reedus Lite is Reedus's personality in a small desk body. The Telly chassis has 
 | `tools/lite_sim.py` | acts as the Lite from a laptop (mic up, speaker down, face events printed) |
 | `WIRING.md` | **the pin map and wiring.** It matches `firmware/src/config.h` |
 | `PROTOCOL.md` | the WebSocket protocol |
+| `ASSISTANT.md` | timers, alarms, reminders, lists, calendars, the glanceable face, and what's next |
+| `MUSIC.md` | Spotify out of Lite's own speaker (librespot on the run box), ducking, setup |
+| `CLOUD_BRAIN.md` | switch the LLM (Gemini by default, or Claude, GPT, OpenRouter…), getting API keys, web search |
 | `../reedus_llm/reedus_companion/lite/` | server side: hub, sounddevice shim, face bridge, emotion picker, launcher |
 | `../reedus_llm/reedus_companion/voice/events.py` | state events the voice loop emits (no-op when nothing listens) |
 | `../reedus_llm/tests/test_lite_link.py` | link tests: real WebSocket, fake device, no models needed |
@@ -48,6 +53,7 @@ Reedus Lite is Reedus's personality in a small desk body. The Telly chassis has 
 ```bash
 pip install -r reedus_companion/requirements/lite.txt     # websockets, on top of voice + cloud
 # keys in deploy/xeon.secrets.env: GEMINI_API_KEY, INWORLD_API_KEY, REEDUS_LITE_TOKEN
+# (or pick another LLM and paste its key in ReedOS → Settings → Cloud brain, see CLOUD_BRAIN.md)
 bash reedus_companion/deploy/run_lite.sh                  # waits for the Lite, then boots the brain
 ```
 
@@ -70,7 +76,7 @@ cp src/secrets.example.h src/secrets.h      # wifi, run box host (or "" to auto-
 pio run -t upload && pio device monitor
 ```
 
-Before the first upload, flash the XVF3800's I2S master firmware (WIRING.md, "Before the first power-up"). Then type `help` in the serial monitor. `test`, `servo`, `doa`, `expr` and `info` cover every calibration constant tagged MEASURE in `config.h`.
+Before the first upload, flash the XVF3800's I2S master firmware (WIRING.md, "Before the first power-up"). Then type `help` in the serial monitor. `test`, `servo`, `doa`, `expr` and `info` cover every calibration constant tagged MEASURE in `config.h`. `glance timer` (or `ring`, `alarm`, `clock`, `weather`, `event`, `music`, `off`) shows each display screen without a run box.
 
 ## Tested so far
 
@@ -96,5 +102,8 @@ Before the first upload, flash the XVF3800's I2S master firmware (WIRING.md, "Be
 ## Next chats
 
 - ~~ReedOS app support for Lite.~~ Done: ReedOS has a Lite tab (live face, expressions, head dial, volume, brightness, status). It goes through `POST /api/lite` on the control API.
-- Integrations (Spotify and others).
-- v2: on-device microWakeWord, timers and alarms.
+- Integrations (Spotify and others): Spotify and MCP hubs are in. What's playing shows on the face.
+- ~~Timers and alarms.~~ Done, along with reminders, lists, calendars and the glanceable face (`ASSISTANT.md`).
+- ~~Music out of Lite's own speaker.~~ Done: librespot on the run box, a music lane on the link, ducking on the device (`MUSIC.md`).
+- Next up: routines, proactive nudges. Ranked list in `ASSISTANT.md`.
+- v2: on-device microWakeWord.

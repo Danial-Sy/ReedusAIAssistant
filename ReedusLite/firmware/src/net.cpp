@@ -9,6 +9,7 @@
 #include "battery.h"
 #include "config.h"
 #include "face.h"
+#include "glance.h"
 #include "head.h"
 
 #if __has_include("secrets.h")
@@ -30,6 +31,8 @@ static String host = LITE_HOST;
 static uint16_t port = LITE_PORT;
 static uint32_t lastStatus = 0, lastBatt = 0, lastDoa = 0, wifiSince = 0, failSince = 0;
 static int lastSentBatt = -2;
+static int proto = 1;                 // what the server agreed to in welcome
+static uint32_t lastMusic = 0, musicIdleAt = 0;
 static char desc[48] = "-";
 
 static void handleText(const char* txt, size_t len) {
@@ -40,9 +43,12 @@ static void handleText(const char* txt, size_t len) {
     const char* s = doc["state"] | "idle";
     face::setState(s);
     head::setState(s);
+    // music steps back while Reedus is listening, thinking or talking
+    audio::setDuck(strcmp(s, "idle") != 0 && strcmp(s, "sleep") != 0);
   } else if (!strcmp(t, "wake")) {
     face::wake();
     head::onWake();
+    audio::setDuck(true);  // duck the instant the name is heard, before the state arrives
   } else if (!strcmp(t, "emotion")) {
     face::setEmotion(doc["emotion"] | "neutral", doc["strength"] | 1.0f, doc["hold"] | 3.0f);
   } else if (!strcmp(t, "expr")) {
@@ -55,7 +61,13 @@ static void handleText(const char* txt, size_t len) {
     face::setBrightness(doc["level"] | 100);
   } else if (!strcmp(t, "look")) {
     head::look(doc["angle"] | 0.0f);
+  } else if (!strcmp(t, "clock") || !strcmp(t, "timers") || !strcmp(t, "glance")) {
+    glance::onMessage(t, doc);
+  } else if (!strcmp(t, "music")) {
+    const char* op = doc["op"] | "";
+    if (!strcmp(op, "flush")) audio::musicFlush();
   } else if (!strcmp(t, "welcome")) {
+    proto = doc["proto"] | 1;
     audio::setVolume(doc["volume"] | DEFAULT_VOLUME);
     face::setBrightness(doc["brightness"] | 100);
     Serial.printf("[net] linked to the run box (%s)\n", desc);
@@ -69,7 +81,8 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t len) {
       failSince = 0;
       JsonDocument hello;
       hello["type"] = "hello";
-      hello["proto"] = 1;
+      hello["proto"] = 2;  // 2: downstream audio frames carry a 1-byte kind (1 speech, 2 music)
+      if (audio::musicSupported()) hello["caps"].add("music24");
       hello["device"] = DEVICE_NAME;
       hello["fw"] = FW_VERSION;
       hello["token"] = LITE_TOKEN;
@@ -79,19 +92,28 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t len) {
       serializeJson(hello, out);
       ws.sendTXT(out);
       lastSentBatt = -2;
+      proto = 1;  // until the welcome says otherwise
       break;
     }
     case WStype_DISCONNECTED:
       if (connected) Serial.println("[net] link down");
       connected = false;
       audio::flush();
+      audio::musicFlush();
+      audio::setDuck(false);
       if (!failSince) failSince = millis();
       break;
     case WStype_TEXT:
       handleText((const char*)payload, len);
       break;
     case WStype_BIN:
-      audio::pushSpeech(payload, len);
+      if (proto >= 2) {
+        if (len < 1) break;
+        if (payload[0] == 1) audio::pushSpeech(payload + 1, len - 1);
+        else if (payload[0] == 2) audio::pushMusic(payload + 1, len - 1);
+      } else {
+        audio::pushSpeech(payload, len);
+      }
       break;
     default:
       break;
@@ -197,6 +219,21 @@ void update() {
       ws.sendTXT(b);
     }
   }
+  // music: how much is buffered, twice a second while it plays, so the server can pace it
+  // against this clock instead of its own (they drift apart over a long album)
+  bool mActive = audio::musicPlaying() || audio::musicBufferedMs() > 0;
+  if (mActive) musicIdleAt = 0;
+  else if (!musicIdleAt) musicIdleAt = now;
+  bool recent = mActive || (musicIdleAt && now - musicIdleAt < 1500);
+  if (recent && now - lastMusic > 500) {
+    lastMusic = now;
+    char b[96];
+    snprintf(b, sizeof(b), "{\"type\":\"music\",\"buffered_ms\":%u,\"underruns\":%u,\"playing\":%s}",
+             (unsigned)audio::musicBufferedMs(), (unsigned)audio::musicUnderruns(),
+             audio::musicPlaying() ? "true" : "false");
+    ws.sendTXT(b);
+  }
+
   if (now - lastStatus > 10000) {
     lastStatus = now;
     char b[200];

@@ -107,17 +107,21 @@ def _wire_status(reedus, speaker) -> None:
     reedus.on_status = _status
 
 
+CLOUD_BACKENDS = ("cloud", "gemini")     # "gemini" kept as an alias for old run scripts
+
+
 def build_backend(name, args):
-    if name == "gemini":
+    if name in CLOUD_BACKENDS:
+        # whichever LLM Settings → Cloud brain picked (cloud/llm.py): Gemini by default
+        from reedus_companion.cloud import llm
         from reedus_companion.cloud.fallback import FallbackBackend
-        from reedus_companion.cloud.gemini_backend import GeminiBackend
 
         def _local():
             """Built only if the cloud dies mid-conversation."""
             from reedus_companion.serve.backend_llamacpp import LlamaCppBackend
             return LlamaCppBackend(gguf_path=args.gguf, router_gguf=args.router_gguf)
 
-        return FallbackBackend(GeminiBackend(), _local,
+        return FallbackBackend(llm.build(), _local,
                                announce=getattr(args, "_announce", None))
     if name == "hf":
         from reedus_companion.serve.backend_hf import HFBackend
@@ -571,7 +575,7 @@ def _live_switch(reedus, speaker, backend_name: str, target: str):
 
     _say(speaker, f"You got it, {target} mode. Give me a second.")
     mode_mod.set_current(target)
-    new_name = "gemini" if target == mode_mod.CLOUD else _RUNTIME["local_backend"]
+    new_name = "cloud" if target == mode_mod.CLOUD else _RUNTIME["local_backend"]
 
     old_backend = getattr(reedus, "backend", None)
     try:
@@ -598,6 +602,53 @@ def _live_switch(reedus, speaker, backend_name: str, target: str):
         pass
     _say(speaker, f"Right, {target} mode. Go ahead.")
     return speaker, new_name
+
+
+def reload_cloud_brain(runtime: Optional[dict] = None, wait: float = 90.0) -> dict:
+    """Swap the cloud LLM under a running Reedus after Settings → Cloud brain changed.
+
+    Runs on the caller's thread (the control API) but holds the turn lock, so it waits for a
+    turn in progress and the next one starts on the new brain. Nothing to do outside cloud mode:
+    the choice is read again the next time cloud mode starts."""
+    rt = runtime if runtime is not None else _RUNTIME
+    reedus = rt.get("reedus")
+    if reedus is None or mode_mod.current() != mode_mod.CLOUD:
+        return {"applied": False, "note": "saved, used next time cloud mode starts"}
+    lock = rt.get("turn_lock")
+    if lock is not None and not lock.acquire(timeout=wait):
+        return {"applied": False, "note": "he's mid-conversation, it applies on the next restart"}
+    try:
+        ok, why = mode_mod.preflight(mode_mod.CLOUD)
+        if not ok:
+            return {"applied": False, "note": f"saved, but not switched: {why}"}
+        args = rt.get("args") or _RUNTIME.get("args")
+        old = getattr(reedus, "backend", None)
+        try:
+            reedus.backend = build_backend("cloud", args)
+        except Exception as e:                                   # noqa: BLE001
+            print(f"[reedus] cloud brain switch failed: {type(e).__name__}: {e}", flush=True)
+            return {"applied": False, "note": f"couldn't start it: {e}"}
+        try:
+            if old is not None:
+                old.close()
+        except Exception:
+            pass
+        rt["backend"] = "cloud"
+        from reedus_companion.cloud import llm
+        cur = llm.current()
+        print(f"[reedus] === cloud brain is now {cur['label']} ===", flush=True)
+        threading.Thread(target=lambda: _quiet_warm(reedus), name="llm-warm", daemon=True).start()
+        return {"applied": True, "note": f"he's on {cur['label']} from the next sentence"}
+    finally:
+        if lock is not None:
+            lock.release()
+
+
+def _quiet_warm(reedus) -> None:
+    try:
+        reedus.warm()
+    except Exception:
+        pass
 
 
 def _choose_mode(args, speaker, stt, hear) -> str:
@@ -661,9 +712,10 @@ def _swap_to_cloud_voice(speaker):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--backend", choices=["hf", "gguf", "server", "gemini"], default="gguf",
+    ap.add_argument("--backend", choices=["hf", "gguf", "server", "cloud", "gemini"], default="gguf",
                     help="gguf=in-process llama-cpp-python; server=native llama-server HTTP; "
-                         "gemini=cloud mode (implied by --mode cloud)")
+                         "cloud=the cloud brain from Settings → Cloud brain (implied by --mode "
+                         "cloud; gemini is an old alias)")
     ap.add_argument("--mode", choices=["local", "cloud", "ask"], default=None,
                     help="skip the spoken 'local or cloud?' prompt. Default: ask "
                          "(or REEDUS_MODE if set)")
@@ -754,7 +806,7 @@ def main():
             _RUNTIME["local_backend"] = args.backend
             if mode_mod.current() == mode_mod.CLOUD and \
                     mode_mod.preflight(mode_mod.CLOUD)[0]:
-                args.backend = "gemini"
+                args.backend = "cloud"
             print(f"Loading Reedus brain… ({mode_mod.current()} mode)")
             reedus = Reedus(build_backend(args.backend, args))
             print("Warming the prompt cache…", end=" ", flush=True)
@@ -791,7 +843,7 @@ def main():
         _RUNTIME["local_backend"] = args.backend      # before cloud overwrites it
         chosen = _choose_mode(args, speaker, stt, hear)
         if chosen == mode_mod.CLOUD:
-            args.backend = "gemini"
+            args.backend = "cloud"
             if speaker is not None:
                 speaker = _swap_to_cloud_voice(speaker)
 
@@ -805,6 +857,15 @@ def main():
 
     _RUNTIME["turn_lock"] = threading.RLock()
     _publish(reedus, speaker, args.backend)
+    try:
+        # timers, alarms and reminders ring through this loop's speaker (assist/, voice/ringer.py)
+        from reedus_companion.voice import ringer
+        ringer.start(_RUNTIME)
+        if _RUNTIME.get("lite") is not None:
+            from reedus_companion.lite import glance
+            glance.start(_RUNTIME["lite"])
+    except Exception as e:                                       # noqa: BLE001
+        print(f"[assist] not started ({type(e).__name__}: {e}), voice unaffected")
     api = None
     if not args.no_api and (os.environ.get("REEDUS_API") or "1") != "0":
         try:

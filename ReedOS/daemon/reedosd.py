@@ -259,6 +259,28 @@ async def handle_message(ws: WebSocket, m: dict):
             out = {"error": "Reedus's brain isn't running, app connections live there."}
         await ws.send_text(json.dumps({"type": "connections.reply", "id": mid, "data": out}))
 
+    elif t == "llm":
+        # which cloud LLM is the brain. keys go in, only masked hints ever come back out
+        out = await asyncio.to_thread(brain.llm, data if data.get("action") else None)
+        if out.get("offline"):
+            out = {"error": "Reedus's brain isn't running, the cloud brain is chosen there."}
+        await ws.send_text(json.dumps({"type": "llm.reply", "id": mid, "data": out}))
+        if data.get("action") in ("set", "key", "forget") and not out.get("error"):
+            live = out.get("live") or {}
+            await hub.broadcast("log", {"level": "info",
+                                        "msg": f"cloud brain: {out.get('label') or 'key saved'}"
+                                               + (f" ({live.get('note')})" if live.get("note") else "")})
+            await push_status()
+
+    elif t == "assist":
+        # timers, alarms, reminders, lists, calendars. no action = the whole picture
+        out = await asyncio.to_thread(brain.assist, data if data.get("action") else None)
+        if out.get("offline"):
+            out = {"error": "Reedus's brain isn't running, timers and lists live there."}
+        await ws.send_text(json.dumps({"type": "assist.reply", "id": mid, "data": out}))
+        if data.get("action") and not out.get("error"):
+            await push_status()
+
     elif t == "routine.run":
         asyncio.create_task(engine.run(data, hub))
 

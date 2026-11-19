@@ -42,6 +42,9 @@ _VOLUME = re.compile(_LEAD + rf"(?:set\s+)?(?:the\s+)?(?:volume|{_MUSIC})\s+(?:t
                      r"(?:\s*%|\s+percent)?" + _TAIL, re.I)
 _QUEUE = re.compile(_LEAD + r"(?:queue(?:\s+up)?|add)\s+(.+?)(?:\s+to\s+(?:the\s+)?queue)?" + _TAIL, re.I)
 _MOVE = re.compile(_LEAD + rf"(?:move|switch|send|transfer)\s+(?:it|{_MUSIC})\s+to\s+(?:the\s+)?(.+?)" + _TAIL, re.I)
+_HERE = re.compile(_LEAD + rf"(?:(?:play|move|switch|send|put|transfer|bring)\s+(?:it|this|that|{_MUSIC})\s+"
+                     r"(?:here|over here|on you|on (?:reedus )?lite|on reedus|out loud|on your speaker|through you)|"
+                     r"play (?:music|it) (?:on|through) your speaker)" + _TAIL, re.I)
 _PLAY = re.compile(_LEAD + r"(?:play|put\s+on|throw\s+on|blast)\s+(?:me\s+)?(?:some\s+)?(.+?)" + _TAIL, re.I)
 
 # "play X" is also how people start games. these stay with the persona
@@ -60,6 +63,8 @@ def parse(text: str) -> Optional[Tuple[str, dict]]:
     for action, rx in _RULES:
         if rx.match(t):
             return action, {}
+    if _HERE.match(t):
+        return "here", {}
     m = _VOLUME.match(t)
     if m:
         return "volume", {"percent": int(m.group(1))}
@@ -123,6 +128,9 @@ def run(spotify, action: str, args: dict) -> str:
             return "Playing " + spotify.play(args["query"], args.get("kind")) + "."
         if action == "queue":
             return "Queued " + spotify.queue(args["query"]) + "."
+        if action == "here":
+            spotify.here()
+            return random.choice(("Playing it here.", "Moved it over to me.", "Okay, it's coming out of me now."))
         if action == "transfer":
             return "Moved it to " + spotify.transfer(args["device"]) + "."
     except SpotifyError as e:

@@ -2056,6 +2056,18 @@ def _app_fast_path(user_msg: str) -> Optional[str]:
         return None
 
 
+def _assist_fast_path(user_msg: str, apps=None) -> Optional[str]:
+    if os.environ.get("REEDUS_ASSIST", "1") == "0":
+        return None
+    try:
+        from reedus_companion.assist import commands
+        return commands.handle(user_msg, apps)
+    except Exception as e:                                       # noqa: BLE001
+        if DEBUG:
+            print(f"\n[debug] assist fast path failed: {e!r}", file=sys.stderr)
+        return None
+
+
 class Reedus:
     def __init__(self, backend: "Backend"):
         self.backend = backend
@@ -2154,6 +2166,17 @@ class Reedus:
     def _run_apps(self, request: str) -> str:
         from reedus_companion.connect.manager import manager
         return manager().run_request(request, self.backend)
+
+    def _calendar_via_apps(self, request: str) -> Optional[str]:
+        """"what's my day" with no iCal feed: ask a connected hub (Composio's Google Calendar)."""
+        try:
+            from reedus_companion.connect.manager import manager
+            if not manager().servers:
+                return None
+        except Exception:                                        # noqa: BLE001
+            return None
+        self._status("Checking your calendar.")          # spoken before the slow part
+        return self._run_apps(request)
 
     def _status(self, msg: str) -> None:
         """Fire the status hook. A UI callback must never break a turn."""
@@ -2913,8 +2936,12 @@ class Reedus:
                 print(f"\n[debug] arithmetic fast path -> {arithmetic!r}", file=sys.stderr)
             return arithmetic
 
+        # timers, alarms, reminders, lists, "what's my day": answered without a model (assist/),
+        # before music so "stop" while an alarm rings stops the alarm, not the song
+        app_said = _assist_fast_path(user_msg, self._calendar_via_apps)
         # music commands go straight to Spotify: a pause shouldn't wait on a language model
-        app_said = _app_fast_path(user_msg)
+        if app_said is None:
+            app_said = _app_fast_path(user_msg)
         if app_said is not None:
             self._skip_corpus = True
             self._corpus_unsure = False

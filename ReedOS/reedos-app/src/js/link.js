@@ -45,6 +45,7 @@ const Link = (() => {
       status: { rssi: -57, heap: 183400, psram: 7900000, buffered_ms: 0, underruns: 0,
                 mic_drops: 0, uptime: 0, head: 0, at: now },
       doa: null,
+      music: { available: true, state: "idle", name: "Reedus Lite", error: "", lane: true },
     };
   }
 
@@ -58,7 +59,9 @@ const Link = (() => {
     return {
       robot: "mock", phone: "off", chat: "off", brain: "off",
       link: "mock", mode: mock.brainMode, modePending: null, budget: {},
-      micOwner: "lite", lite: L ? structuredClone(L) : null,
+      micOwner: "lite", lite: L ? { ...structuredClone(L), display: mockDisplay() } : null,
+      assist: mockAssistLight(),
+      llm: mockLlm(null),
     };
   }
 
@@ -156,6 +159,8 @@ const Link = (() => {
         case "chat.heard": emit("chat-heard", m.data); break;
         case "log": emit("log", m.data); break;
         case "lite.reply":
+        case "llm.reply":
+        case "assist.reply":
         case "connections.reply":
         case "chat.reply": {
           const r = pendingChat.get(m.id);
@@ -252,6 +257,11 @@ const Link = (() => {
 
   function chat(text, opts) {
     const o = opts || {};
+    // the Xeon is off but a standalone Lite's relay is signed in: talk to Reedus there
+    if (mode !== "live" && typeof Relay !== "undefined" && Relay.active) {
+      return Relay.chat(text).then((r) => ({ text: r.error ? `(${r.error})` : r.text, tts: false,
+                                             spoke: false, mode: "cloud" }));
+    }
     return new Promise((resolve) => {
       if (mode === "live") {
         const id = send("chat", { text, speak: !!o.speak, route: o.route || "mobo" });
@@ -300,6 +310,97 @@ const Link = (() => {
     });
   }
 
+  /* cloud brain (cloud/llm.py): no action = the picture; else {action, provider, ...}.
+     "key" and "test" make a real call to the provider, so they get a long timeout */
+  function llm(req) {
+    return new Promise((resolve) => {
+      if (mode === "live") {
+        const id = send("llm", req || {});
+        pendingChat.set(id, resolve);
+        setTimeout(() => {
+          if (pendingChat.has(id)) { pendingChat.delete(id); resolve({ error: "the brain took too long to answer" }); }
+        }, 105000);
+        return;
+      }
+      const slow = req && (req.action === "key" || req.action === "test");
+      setTimeout(() => resolve(mockLlm(req)), slow ? 900 : 120);
+    });
+  }
+
+  /* demo: three providers so the page can be explored; the real list comes from the brain */
+  const mockAi = { provider: "gemini", search: "auto",
+    models: { gemini: "gemini-3.7-flash", anthropic: "claude-sonnet-5-5", openai: "gpt-5-mini" },
+    keys: { gemini: "AIza…demo" } };
+  const MOCK_PROVIDERS = [
+    { id: "gemini", name: "Google Gemini", short: "Gemini", default: "gemini-3.7-flash", search: "native",
+      searchName: "Google Search grounding", keyPrefix: "AIza", env: "GEMINI_API_KEY",
+      blurb: "The default. Fast, cheap, and answers live questions with Google Search.",
+      models: [{ id: "gemini-3.7-flash", label: "Gemini 3.7 Flash", note: "default, fast and cheap" },
+               { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro (preview)", note: "smarter, slower" }],
+      keyUrl: "https://aistudio.google.com/apikey", billingUrl: "https://aistudio.google.com/usage",
+      steps: ["Open aistudio.google.com/apikey and sign in with a Google account.",
+              "Press Create API key. The key starts with AIza.",
+              "Next to the key, press Set up billing and add a card (pay-as-you-go).",
+              "Paste the key below and press Test."],
+      billing: "Pay-as-you-go on your Google Cloud billing account." },
+    { id: "anthropic", name: "Anthropic Claude", short: "Claude", default: "claude-sonnet-5-5", search: "native",
+      searchName: "Claude web search ($10 per 1,000 searches)", keyPrefix: "sk-ant-", env: "ANTHROPIC_API_KEY",
+      blurb: "Claude Sonnet, Opus or Haiku. Searches the web itself when it needs to.",
+      models: [{ id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5", note: "fast, very capable" },
+               { id: "claude-opus-5-5", label: "Claude Opus 5.5", note: "smartest Opus, slower" },
+               { id: "claude-haiku-5-5", label: "Claude Haiku 5.5", note: "quickest and cheapest" }],
+      keyUrl: "https://console.anthropic.com/settings/keys", billingUrl: "https://console.anthropic.com/settings/billing",
+      steps: ["Open console.anthropic.com and sign up.",
+              "Settings → Billing → buy credits ($5 minimum). A Claude Pro or Max plan does NOT include API credit.",
+              "Settings → API keys → Create key. It starts with sk-ant-.",
+              "Paste the key below and press Test."],
+      billing: "Prepaid credits." },
+    { id: "openai", name: "OpenAI", short: "OpenAI", default: "gpt-5-mini", search: "native",
+      searchName: "OpenAI web search tool", keyPrefix: "sk-", env: "OPENAI_API_KEY",
+      blurb: "GPT models through the Responses API, with OpenAI's own web search.",
+      models: [{ id: "gpt-5-mini", label: "GPT-5 mini", note: "fast and cheap" }],
+      keyUrl: "https://platform.openai.com/api-keys", billingUrl: "https://platform.openai.com/settings/organization/billing/overview",
+      steps: ["Open platform.openai.com and sign in.",
+              "Settings → Billing → add credit ($5 minimum). ChatGPT Plus does NOT include API usage.",
+              "API keys → Create new secret key.", "Paste the key below and press Test."],
+      billing: "Prepaid credits." },
+  ];
+  function mockLlm(req) {
+    const P = (id) => MOCK_PROVIDERS.find(p => p.id === id) || MOCK_PROVIDERS[0];
+    const label = () => { const p = P(mockAi.provider), m = mockAi.models[p.id];
+      const ml = (p.models.find(x => x.id === m) || { label: m }).label;
+      return ml.toLowerCase().startsWith(p.short.toLowerCase()) ? ml : `${p.short} · ${ml}`; };
+    const cur = () => ({ provider: mockAi.provider, model: mockAi.models[mockAi.provider], name: P(mockAi.provider).short,
+                         label: label(), search: mockAi.search });
+    if (!req || !req.action) {
+      const keys = {};
+      MOCK_PROVIDERS.forEach(p => { keys[p.id] = { set: !!mockAi.keys[p.id], hint: mockAi.keys[p.id] || "",
+        source: mockAi.keys[p.id] ? "app" : "", model: mockAi.models[p.id], baseUrl: "" }; });
+      const ready = !!mockAi.keys[mockAi.provider];
+      return { ...cur(), ready, why: ready ? "" : `I don't have a ${P(mockAi.provider).short} key.`,
+               searchSummary: P(mockAi.provider).searchName, searchModes: ["auto", "local", "gemini", "off"],
+               keys, providers: MOCK_PROVIDERS, file: "memory/llm.json" };
+    }
+    const pid = req.provider || mockAi.provider;
+    if (req.action === "key") {
+      if (!req.key) return { error: "paste a key first" };
+      mockAi.keys[pid] = req.key.slice(0, 4) + "…" + req.key.slice(-4);
+      return { ok: true, hint: mockAi.keys[pid], test: { ok: true, ms: 640, reply: "Ready.", model: mockAi.models[pid] } };
+    }
+    if (req.action === "forget") { delete mockAi.keys[pid]; return { ok: true }; }
+    if (req.action === "test") return mockAi.keys[pid] ? { ok: true, ms: 610, reply: "Ready." }
+      : { ok: false, error: `no ${P(pid).name} API key. Add one above.` };
+    if (req.action === "models") return { models: P(pid).models };
+    if (req.action === "set") {
+      mockAi.provider = pid;
+      if (req.model) mockAi.models[pid] = req.model;
+      if (req.search) mockAi.search = req.search;
+      return { ok: true, ready: !!mockAi.keys[pid], why: mockAi.keys[pid] ? "" : `I don't have a ${P(pid).short} key.`,
+               ...cur(), live: { applied: true, note: `he's on ${label()} from the next sentence (demo)` } };
+    }
+    return { error: "unknown action" };
+  }
+
   /* demo: a Spotify that "connects" and a hub that "lists" tools, so the page can be explored */
   const mockCx = {
     spotify: { connected: false, account: null, pending: false, playing: true, track: 0, vol: 55, at: Date.now() },
@@ -329,13 +430,18 @@ const Link = (() => {
       }
       if (action === "finish") { sp.pending = false; sp.connected = true; sp.account = "Danial"; return { ok: true, account: "Danial", product: "premium" }; }
       if (action === "disconnect") { sp.connected = false; sp.account = null; return { ok: true }; }
+      if (action === "here") {
+        sp.device = "Reedus Lite"; sp.playing = true;
+        if (mock.lite) mock.lite.music.state = "playing";
+        return { ok: true, device: "Reedus Lite" };
+      }
       if (action === "now") {
         const [track, artist] = mockCx.songs[sp.track % mockCx.songs.length];
         const dur = 214000, prog = sp.playing ? (Date.now() - sp.at) % dur : 61000;
-        return { now: { playing: sp.playing, track, artist, album: "", art: null, device: "Danial's iPhone", volume: sp.vol, progress: prog, duration: dur } };
+        return { now: { playing: sp.playing, track, artist, album: "", art: null, device: sp.device || "Danial's iPhone", volume: sp.vol, progress: prog, duration: dur } };
       }
       if (action === "control") {
-        if (req.do === "pause") sp.playing = false;
+        if (req.do === "pause") { sp.playing = false; if (mock.lite) mock.lite.music.state = "paused"; }
         if (req.do === "resume") sp.playing = true;
         if (req.do === "next") { sp.track++; sp.at = Date.now(); }
         if (req.do === "previous") { sp.track = Math.max(0, sp.track - 1); sp.at = Date.now(); }
@@ -355,6 +461,124 @@ const Link = (() => {
     }
     if (action === "remove") { mockCx.hubs = mockCx.hubs.filter(h => h.id !== id); return { ok: true }; }
     if (action === "test") return { ok: true, tools: 7, sample: ["COMPOSIO_SEARCH_TOOLS", "COMPOSIO_MULTI_EXECUTE_TOOL"] };
+    return { error: "unknown action" };
+  }
+
+  /* timers, alarms, reminders, lists, calendars, glance settings (assist/api.py).
+     no action = the whole picture; otherwise {action, ...} */
+  function assist(req) {
+    return new Promise((resolve) => {
+      if (mode === "live") {
+        const id = send("assist", req || {});
+        pendingChat.set(id, resolve);
+        setTimeout(() => {
+          if (pendingChat.has(id)) { pendingChat.delete(id); resolve({ error: "the brain took too long to answer" }); }
+        }, 35000);
+        return;
+      }
+      setTimeout(() => { resolve(mockAssist(req)); emit("status", mockStatus()); }, req && req.action === "calendar.add" ? 900 : 80);
+    });
+  }
+
+  /* demo assistant: enough to click through every control, and a timer that counts on the face */
+  const mockAs = {
+    items: [], lists: { shopping: ["Oat milk", "Eggs", "Coffee"], "to-do": ["Lab report", "Call the dentist"] },
+    settings: { glance: { enabled: true, every: 120, cards: ["clock", "weather", "event", "music"], h24: false, night: [22, 7] }, calendars: [], units: "F" },
+    card: null, seq: 1,
+  };
+  const nowS = () => Date.now() / 1000;
+  function mockLeft(i) { return i.state === "paused" ? i.paused_left : Math.max(0, i.due - nowS()); }
+  function mockTickAssist() {
+    mockAs.items.forEach(i => {
+      if (i.state === "active" && i.due <= nowS()) { i.state = "ringing"; i.rang = nowS(); }
+      if (i.state === "ringing" && nowS() - i.rang > 20) i.state = "done";
+    });
+    mockAs.items = mockAs.items.filter(i => i.state !== "done");
+  }
+  function mockAssistLight() {
+    mockTickAssist();
+    return {
+      active: mockAs.items.filter(i => i.state === "active" || i.state === "paused")
+        .map(i => ({ id: i.id, kind: i.kind, label: i.label, left: mockLeft(i), state: i.state })),
+      ringing: mockAs.items.filter(i => i.state === "ringing").map(i => ({ id: i.id, kind: i.kind, label: i.label })),
+      at: nowS(),
+    };
+  }
+  function mockDisplay() {
+    mockTickAssist();
+    const up = (s) => (s || "").toUpperCase();
+    const d = {
+      timers: {
+        items: mockAs.items.filter(i => i.kind === "timer" && i.state !== "ringing")
+          .map(i => ({ id: i.id, label: up(i.label), left: mockLeft(i), total: i.total, paused: i.state === "paused" })),
+        ring: mockAs.items.filter(i => i.state === "ringing")
+          .map(i => ({ id: i.id, kind: i.kind, label: up(i.label) || (i.kind === "alarm" ? "WAKE UP" : "") })),
+        alarm: mockAs.items.some(i => i.kind === "alarm") ? 3600 : -1,
+      },
+      h24: mockAs.settings.glance.h24,
+    };
+    if (mockAs.card && mockAs.card.until > nowS()) d.card = mockAs.card;
+    return d;
+  }
+  function mockAssist(req) {
+    const a = mockAs;
+    const snap = () => ({
+      items: a.items.map(i => ({ ...i, left: mockLeft(i) })).sort((x, y) => x.due - y.due),
+      lists: structuredClone(a.lists), settings: structuredClone(a.settings), now: nowS(),
+      today: a.settings.calendars.length ? [
+        { title: "CHEM 101 Lecture", start: nowS() + 1500, end: nowS() + 4500, allDay: false, location: "Hall B", cal: "Classes" },
+        { title: "Study group", start: nowS() + 4 * 3600, end: nowS() + 5 * 3600, allDay: false, location: "", cal: "Classes" },
+      ] : [],
+    });
+    if (!req || !req.action) return snap();
+    const add = (kind, due, label, extra = {}) => {
+      const it = { id: "m" + a.seq++, kind, label: label || "", due, state: "active", ...extra };
+      a.items.push(it);
+      return it;
+    };
+    const find = () => a.items.find(x => x.id === req.id);
+    switch (req.action) {
+      case "timer": return { ok: true, item: add("timer", nowS() + +req.seconds, req.label, { total: +req.seconds }) };
+      case "cancel": a.items = a.items.filter(i => i.id !== req.id); return { ok: true };
+      case "pause": { const i = find(); if (i) { i.paused_left = mockLeft(i); i.state = "paused"; } return { ok: true }; }
+      case "resume": { const i = find(); if (i) { i.due = nowS() + i.paused_left; i.state = "active"; } return { ok: true }; }
+      case "stop": a.items = a.items.filter(i => i.state !== "ringing"); return { ok: true };
+      case "snooze": a.items.filter(i => i.state === "ringing").forEach(i => { i.state = "active"; i.due = nowS() + 540; }); return { ok: true };
+      case "say": {
+        const t = (req.text || "").toLowerCase();
+        const m = t.match(/(\d+)\s*(second|sec|minute|min|hour|hr)s?/);
+        if (/timer/.test(t) && m) {
+          const secs = +m[1] * (/^h/.test(m[2]) ? 3600 : /^m/.test(m[2]) ? 60 : 1);
+          const lab = (t.match(/(?:a |an )?(\w+) timer/) || [])[1];
+          const label = lab && !/^\d|set|minute|second|hour|min|sec/.test(lab) ? lab : "";
+          add("timer", nowS() + secs, label, { total: secs });
+          return { reply: `${label ? label[0].toUpperCase() + label.slice(1) + " timer, " : ""}${m[1]} ${m[2]}${+m[1] === 1 ? "" : "s"}, starting now. (demo)` };
+        }
+        if (/alarm|wake me/.test(t)) { add("alarm", nowS() + 8 * 3600, ""); return { reply: "Alarm set for 7 AM tomorrow. (demo)" }; }
+        const r = t.match(/remind me to (.+?) in (\d+) (second|minute)s?/);
+        if (r) { add("reminder", nowS() + +r[2] * (r[3] === "minute" ? 60 : 1), r[1]); return { reply: `I'll remind you to ${r[1]} in ${r[2]} ${r[3]}s. (demo)` }; }
+        return { reply: "In the demo I only know timers, alarms and 'remind me to X in N minutes'." };
+      }
+      case "list.add": (a.lists[req.list] = a.lists[req.list] || []).push(req.text); return { ok: true };
+      case "list.remove": a.lists[req.list] = (a.lists[req.list] || []).filter(x => x !== req.text); return { ok: true };
+      case "settings": Object.assign(a.settings.glance, req.glance || {}); return { ok: true };
+      case "calendar.add":
+        if (!/^(https?|webcals?):\/\//i.test(req.url || "")) return { error: "paste the calendar's iCal link (starts with https:// or webcal://)" };
+        a.settings.calendars.push({ id: "c" + a.seq++, name: req.name || "Calendar", enabled: true, host: (req.url.split("/")[2] || ""), error: "" });
+        return { ok: true, events: 42, upcoming: 9, sample: ["Mon 09:00 CHEM 101 Lecture", "Mon 13:30 Stats"] };
+      case "calendar.remove": a.settings.calendars = a.settings.calendars.filter(c => c.id !== req.id); return { ok: true };
+      case "calendar.test": return { ok: true, events: 42, upcoming: 9, sample: ["Mon 09:00 CHEM 101 Lecture"] };
+      case "glance.show": {
+        const cards = {
+          clock: { card: "clock" }, weather: { card: "weather", temp: 72, unit: "F", icon: "partly" },
+          event: { card: "event", title: "CHEM 101 LECTURE", at: "2:30", mins: 25 },
+          music: { card: "music", title: "MIDNIGHT CITY", artist: "M83" },
+        };
+        const c = cards[req.card] || cards.clock;
+        a.card = { ...c, start: nowS(), until: nowS() + (c.card === "event" ? 10 : 7) };
+        return { ok: true, card: c };
+      }
+    }
     return { error: "unknown action" };
   }
 
@@ -484,7 +708,7 @@ const Link = (() => {
 
   return {
     connect, drive, twist, moveMm, turnDeg, stop, chat, runRoutine,
-    pushSettings, requestSelfTest, setMode, listen, liteSet, connections,
+    pushSettings, requestSelfTest, setMode, listen, liteSet, connections, assist, llm,
     demo: () => { if (mode !== "live") startMock(); },
     get mode() { return mode; },
     on: (t, fn) => bus.addEventListener(t, (e) => fn(e.detail)),

@@ -169,12 +169,27 @@ const Face = (() => {
     const st = inp.state || "idle";
     const speaking = st === "speaking";
 
+    // timers, ringing, idle cards own the panel while nobody's talking (glance.js = glance.cpp)
+    if (inp.connected && inp.display && typeof Glance !== "undefined") {
+      const g = Glance.draw((x, y, c, v) => px(f, x, y, c, v), inp.display, nowMs, st === "idle", false, inp.h24);
+      if (g.own) {
+        const dim = g.dim * (inp.brightness === undefined ? 1 : Math.max(0.3, inp.brightness / 100));
+        if (dim < 1) for (const r of f) for (const p of r) { p[0] *= dim; p[1] *= dim; p[2] *= dim; }
+        return f;
+      }
+    }
+
     if (!inp.connected) {
       s.mouth = "flat"; s.gx = 2 * Math.sin(t * 1.3); s.dim = 0.4;
       if (Math.floor(nowMs / 600) % 2) px(f, 15, 15, inp.searchColor === "red" ? RED : AMBER, 180);
     } else {
       switch (st) {
-        case "idle": idleFidget(live, nowMs, s); break;
+        case "idle":
+          if (inp.music) {           // listening along: happy eyes, bobbing (face.cpp musicBeat)
+            s.eyeL = s.eyeR = "happy"; s.mouth = "smile"; s.blinkable = false;
+            if (Math.floor(nowMs / 260) % 2 === 0) s.extras.bop = true;
+          } else idleFidget(live, nowMs, s);
+          break;
         case "listening": s.eyeL = s.eyeR = "wide"; s.mouth = "short"; break;
         case "thinking": s.gy = -1; s.gx = 1.5 * Math.sin(t * 0.8); s.mouth = "flat"; s.extras.dots = true; break;
         case "speaking": s.mouth = "talk"; break;
@@ -194,7 +209,7 @@ const Face = (() => {
     live.gazeX += (s.gx - live.gazeX) * 0.35;
     live.gazeY += (s.gy - live.gazeY) * 0.35;
     const gx = Math.round(live.gazeX), gy = Math.round(live.gazeY);
-    const bounce = s.extras.bounce && Math.floor(nowMs / 160) % 2 ? 1 : 0;
+    const bounce = (s.extras.bounce && Math.floor(nowMs / 160) % 2) || s.extras.bop ? 1 : 0;
     const level = speaking ? Math.abs(Math.sin(t * 9.1) * 0.6 + Math.sin(t * 13.7) * 0.4) : 0;
 
     drawEye(f, s.eyeL, 3 + gx, 3 + gy - bounce, s.color, open, -1, t);

@@ -1,0 +1,12 @@
+# Reedus relay (Railway). the brain code is imported from reedus_llm/reedus_companion
+websockets>=13.0
+numpy>=1.24
+requests>=2.31.0
+psycopg[binary]>=3.2
+# the cloud brain + speech-to-text (same as reedus_companion/requirements/cloud.txt)
+google-genai>=1.0.0
+anthropic>=2.9.0
+openai>=3.51.0
+# the "hey reedus" wake word (phase 1 runs it here; phase 2 moves it onto the S3)
+openwakeword>=0.6
+onnxruntime>=1.17

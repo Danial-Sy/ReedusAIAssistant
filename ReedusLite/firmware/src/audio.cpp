@@ -5,6 +5,7 @@
 #include <freertos/queue.h>
 
 #include "config.h"
+#include "musicdsp.h"
 
 namespace audio {
 
@@ -48,6 +49,27 @@ static volatile float lvl = 0.0f;
 static uint8_t oddByte = 0;
 static bool haveOdd = false;
 
+// music ring (int16 @24k): deeper than speech, music can wait for the network, speech can't
+#if XVF_I2S_MASTER_48K
+static const bool MUSIC = true;
+#else
+static const bool MUSIC = false;  // the 16 kHz I2S mode has no clean 24k path; voice only
+#endif
+static const int MUSIC_RATE = 24000;
+static const size_t M_FRAMES = FRAME_SAMPLES * 3 / 2;  // 480 @24k per 20 ms pass
+static const size_t MCAP = MUSIC_RATE * MUSIC_BUFFER_MS / 1000;
+static const size_t MPRE = MUSIC_RATE * MUSIC_PREBUFFER_MS / 1000;
+static int16_t* mring = nullptr;
+static size_t mHead = 0, mTail = 0, mCount = 0;
+static portMUX_TYPE mMux = portMUX_INITIALIZER_UNLOCKED;
+static volatile bool mPlaying = false, duckOn = false;
+static volatile uint32_t mUnderruns = 0;
+static volatile uint32_t mDrainedAt = 0;  // ran dry mid-stream; more within 1 s = the network was late
+static volatile float mLvl = 0.0f;
+static musicdsp::Up2<M_FRAMES> mUp;
+static musicdsp::Ducker ducker;
+static musicdsp::Edge edge;
+
 struct MicFrame {
   int16_t s[FRAME_SAMPLES];
 };
@@ -57,6 +79,49 @@ static int32_t txBuf[I2S_FRAMES * 2];
 // filter state: input history, newest last
 static float micHist[NTAPS - 1 + I2S_FRAMES];
 static float spkHist[NTAPS / 3 - 1 + FRAME_SAMPLES];
+
+static void mPush(const int16_t* s, size_t n) {
+  portENTER_CRITICAL(&mMux);
+  if (!mPlaying && mDrainedAt && millis() - mDrainedAt < 1000) {
+    mUnderruns++;
+    mDrainedAt = 0;
+  }
+  for (size_t i = 0; i < n; i++) {
+    if (mCount == MCAP) {  // full: the server's pacing went wrong, drop the oldest
+      mTail = (mTail + 1) % MCAP;
+      mCount--;
+    }
+    mring[mHead] = s[i];
+    mHead = (mHead + 1) % MCAP;
+    mCount++;
+  }
+  portEXIT_CRITICAL(&mMux);
+}
+
+// returns how many samples were real music; sets *started when playback just (re)began
+static size_t mPop(int16_t* out, size_t n, bool* started) {
+  portENTER_CRITICAL(&mMux);
+  size_t got = 0;
+  *started = false;
+  if (!mPlaying && mCount >= MPRE) {
+    mPlaying = true;
+    *started = true;
+  }
+  if (mPlaying) {
+    got = n < mCount ? n : mCount;
+    for (size_t i = 0; i < got; i++) {
+      out[i] = mring[mTail];
+      mTail = (mTail + 1) % MCAP;
+    }
+    mCount -= got;
+    if (mCount == 0) {  // ran dry: end of the music, or a late network (mPush tells which)
+      mPlaying = false;  // either way, wait for a full prebuffer rather than stutter
+      mDrainedAt = millis();
+    }
+  }
+  portEXIT_CRITICAL(&mMux);
+  return got;
+}
 
 static void ringPush(const int16_t* s, size_t n) {
   // more speech right after the ring ran dry = the network was late, not the reply ending
@@ -117,8 +182,8 @@ static void micDown(int16_t* out) {
   memmove(x, &x[I2S_FRAMES], H * sizeof(float));
 }
 
-// FRAME_SAMPLES mono @16k -> I2S TX (I2S_FRAMES stereo @ I2S_RATE)
-static void spkUp(const float* in) {
+// FRAME_SAMPLES mono @16k -> I2S_FRAMES mono @ I2S_RATE, as floats in int16 units
+static void spkUp(const float* in, float* out) {
   const int T = NTAPS / 3;  // taps per phase
   const int H = T - 1;
   float* x = spkHist;
@@ -134,10 +199,7 @@ static void spkUp(const float* in) {
         for (int k = 0; k < T; k++) acc += x[H + n - k] * FIR[p + k * 3];
         acc *= 3.0f;
       }
-      int32_t s = (int32_t)constrain(acc, -32768.0f, 32767.0f) << 16;
-      size_t o = (n * R + p) * 2;
-      txBuf[o] = s;
-      txBuf[o + 1] = s;
+      out[n * R + p] = acc;
     }
   }
   memmove(x, &x[FRAME_SAMPLES], H * sizeof(float));
@@ -146,6 +208,10 @@ static void spkUp(const float* in) {
 static void audioTask(void*) {
   static int16_t play[FRAME_SAMPLES];
   static float playF[FRAME_SAMPLES];
+  static float out48[I2S_FRAMES];
+  static int16_t mus[M_FRAMES];
+  static float musF[M_FRAMES];
+  static float mus48[I2S_FRAMES];
   MicFrame f;
   for (;;) {
     size_t n = 0;
@@ -167,11 +233,34 @@ static void audioTask(void*) {
       playF[i] = v;
       acc += v * v;
     }
-    spkUp(playF);
+    spkUp(playF, out48);
     // mouth: fast attack, slower release, scaled so normal speech reaches ~0.8
     float rms = sqrtf(acc / FRAME_SAMPLES) / 32768.0f;
     float target = constrain(rms * 5.0f, 0.0f, 1.0f);
     lvl = target > lvl ? target : lvl * 0.82f + target * 0.18f;
+
+    // music under it: fade edges at 24k, double to 48k, duck under speech / while listening
+    if (MUSIC) {
+      bool started;
+      size_t mgot = mPop(mus, M_FRAMES, &started);
+      if (started) edge.start();
+      float macc = 0.0f;
+      for (size_t i = 0; i < M_FRAMES; i++) {
+        musF[i] = i < mgot ? (float)mus[i] : 0.0f;
+        macc += musF[i] * musF[i];
+      }
+      edge.apply(musF, (int)mgot, (int)M_FRAMES);
+      mUp.process(musF, mus48);
+      ducker.apply(isPlaying || duckOn ? MUSIC_DUCK : 1.0f, mus48, (int)I2S_FRAMES);
+      for (size_t i = 0; i < I2S_FRAMES; i++) out48[i] += mus48[i] * g;
+      float mr = constrain(sqrtf(macc / M_FRAMES) / 32768.0f * 4.0f, 0.0f, 1.0f);
+      mLvl = mr > mLvl ? mLvl * 0.5f + mr * 0.5f : mLvl * 0.9f + mr * 0.1f;
+    }
+    for (size_t i = 0; i < I2S_FRAMES; i++) {
+      int32_t s = (int32_t)constrain(out48[i], -32768.0f, 32767.0f) << 16;
+      txBuf[i * 2] = s;
+      txBuf[i * 2 + 1] = s;
+    }
     size_t w = 0;
     i2s_write(PORT, txBuf, sizeof(txBuf), &w, portMAX_DELAY);
   }
@@ -181,6 +270,10 @@ bool begin() {
   ring = (int16_t*)heap_caps_malloc(PLAY_CAP * sizeof(int16_t), MALLOC_CAP_SPIRAM);
   if (!ring) ring = (int16_t*)malloc(PLAY_CAP * sizeof(int16_t));
   if (!ring) return false;
+  if (MUSIC) {
+    mring = (int16_t*)heap_caps_malloc(MCAP * sizeof(int16_t), MALLOC_CAP_SPIRAM);
+    if (!mring) return false;
+  }
   memset(micHist, 0, sizeof(micHist));
   memset(spkHist, 0, sizeof(spkHist));
   micQ = xQueueCreate(25, sizeof(MicFrame));  // 0.5 s of slack for a wifi hiccup
@@ -275,6 +368,42 @@ uint32_t bufferedMs() {
 }
 
 uint32_t underruns() { return nUnderruns; }
+
+bool musicSupported() { return MUSIC && mring != nullptr; }
+
+void pushMusic(const uint8_t* pcm, size_t bytes) {
+  if (!musicSupported()) return;
+  static int16_t tmp[512];
+  size_t i = 0;
+  while (i + 1 < bytes) {  // the server only sends whole samples
+    size_t n = 0;
+    while (n < 512 && i + 1 < bytes) {
+      tmp[n++] = (int16_t)(pcm[i] | (pcm[i + 1] << 8));
+      i += 2;
+    }
+    mPush(tmp, n);
+  }
+}
+
+void musicFlush() {
+  portENTER_CRITICAL(&mMux);
+  mHead = mTail = mCount = 0;
+  mPlaying = false;  // the audio task fades the last sample out (Edge)
+  mDrainedAt = 0;
+  portEXIT_CRITICAL(&mMux);
+}
+
+uint32_t musicBufferedMs() {
+  portENTER_CRITICAL(&mMux);
+  size_t c = mCount;
+  portEXIT_CRITICAL(&mMux);
+  return c * 1000 / MUSIC_RATE;
+}
+
+uint32_t musicUnderruns() { return mUnderruns; }
+bool musicPlaying() { return mPlaying; }
+float musicLevel() { return mLvl; }
+void setDuck(bool on) { duckOn = on; }
 bool playing() { return isPlaying; }
 float level() { return lvl; }
 

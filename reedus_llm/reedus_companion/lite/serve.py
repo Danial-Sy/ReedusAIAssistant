@@ -53,6 +53,10 @@ def main(argv=None) -> None:
     from reedus_companion.voice import events
     events.subscribe(FaceBridge(hub))
 
+    # Spotify Connect speaker "Reedus Lite" (librespot), if it's installed; voice-only if not
+    from reedus_companion.lite import music
+    music.start(hub)
+
     # Lite is the cloud-voice body (gemini + inworld); --mode / REEDUS_MODE still win, and a
     # failed cloud preflight still drops to local
     if "--mode" not in argv and not os.environ.get("REEDUS_MODE"):

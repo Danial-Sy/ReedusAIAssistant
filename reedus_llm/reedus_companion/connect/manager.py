@@ -217,6 +217,8 @@ class Connections:
             return {"ok": True}
         if a == "now":
             return {"now": sp.now()}
+        if a == "here":            # ReedOS: "Play on Lite"
+            return {"ok": True, "device": sp.here()}
         if a == "control":
             do = req.get("do") or ""
             if do == "volume":

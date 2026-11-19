@@ -39,6 +39,15 @@ def cloud_ready() -> dict:
     return {"ok": bool(ok), "why": why}
 
 
+def llm_info():
+    """The cloud brain Settings → Cloud brain picked: provider, model, label."""
+    try:
+        from reedus_companion.cloud import llm
+        return llm.current()
+    except Exception:                                            # noqa: BLE001
+        return None
+
+
 class Hooks:
     """The host's side of the door. Everything returns plain dicts."""
 
@@ -60,6 +69,10 @@ class Hooks:
     def lite(self, req: dict) -> dict:
         return {"error": "this brain has no Reedus Lite (start it with run_lite.sh)"}
 
+    def llm_changed(self) -> dict:
+        """The cloud LLM choice changed; swap it in if cloud mode is running."""
+        return {"applied": False, "note": "saved"}
+
 
 def _resolve_target(target: str) -> tuple[str, str]:
     """('cloud'|'local', '') or ('', reason)."""
@@ -69,6 +82,14 @@ def _resolve_target(target: str) -> tuple[str, str]:
     if t not in (mode_mod.LOCAL, mode_mod.CLOUD):
         return "", f"unknown mode {target!r}, want local, cloud or toggle"
     return t, ""
+
+
+def _assist_light():
+    try:
+        from reedus_companion.assist import api as assist_api
+        return assist_api.snapshot_light()
+    except Exception:                                            # noqa: BLE001
+        return None
 
 
 class VoiceLoopHooks(Hooks):
@@ -91,9 +112,15 @@ class VoiceLoopHooks(Hooks):
             "busy": rt.get("busy"),
             "micOwner": "lite" if rt.get("lite") is not None else "voiceloop",
             "lite": rt["lite"].snapshot() if rt.get("lite") is not None else None,
+            "assist": _assist_light(),
             "budget": budget_info(),
             "cloud": cloud_ready(),
+            "llm": llm_info(),
         }
+
+    def llm_changed(self) -> dict:
+        from reedus_companion.voice import voice_loop as vl
+        return vl.reload_cloud_brain(self.rt)
 
     def chat(self, text: str, speak: bool) -> dict:
         rt = self.rt
@@ -178,7 +205,7 @@ class StandaloneHooks(Hooks):
         from reedus_companion.voice import voice_loop as vl
         args = self.args
         if mode_mod.current() == mode_mod.CLOUD and mode_mod.preflight(mode_mod.CLOUD)[0]:
-            args.backend = "gemini"
+            args.backend = "cloud"
         if args.speak and self.rt["speaker"] is None:
             from reedus_companion.voice.tts import TTS
             from reedus_companion.voice.stream_speaker import StreamSpeaker
@@ -210,7 +237,18 @@ class StandaloneHooks(Hooks):
             "micOwner": "api" if self.args.mic else None,
             "budget": budget_info(),
             "cloud": cloud_ready(),
+            "llm": llm_info(),
         }
+
+    def llm_changed(self) -> dict:
+        if self.rt.get("reedus") is None:
+            return {"applied": False, "note": "saved, used when the brain loads"}
+        from reedus_companion.voice import voice_loop as vl
+        rt = {**self.rt, "turn_lock": self.lock, "args": self.args}
+        out = vl.reload_cloud_brain(rt)
+        if out.get("applied"):
+            self.rt["backend"] = "cloud"
+        return out
 
     def chat(self, text: str, speak: bool) -> dict:
         if not self.lock.acquire(timeout=TURN_WAIT_S):
@@ -323,6 +361,12 @@ INDEX = """Reedus control API, he is {mode} right now.
   POST /api/lite    {{"volume":70,"brightness":80,"look":30,"expr":"wink"}}
   GET  /api/connections            Spotify + MCP servers (Composio, Zapier, Home Assistant…)
   POST /api/connections {{"action":"add","preset":"composio","key":"ck_…"}}
+  GET  /api/assist                 timers, alarms, reminders, lists, calendars, glance settings
+  POST /api/assist  {{"action":"timer","seconds":300,"label":"tea"}}  (see assist/api.py)
+  GET  /api/llm                    cloud brain: provider, model, search, which keys are set
+  POST /api/llm     {{"action":"set","provider":"anthropic","model":"claude-sonnet-5-5"}}
+                    {{"action":"key","provider":"anthropic","key":"sk-ant-…"}}  (tests it too)
+                    {{"action":"test"|"models"|"forget","provider":"…"}}  (see cloud/llm.py)
 
 ReedOS talks to this through reedosd; curl works too:
   curl -s localhost:{port}/api/health
@@ -391,6 +435,12 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/connections":
             from reedus_companion.connect.manager import manager
             return self._send(manager().status())
+        if path == "/api/assist":
+            from reedus_companion.assist import api as assist_api
+            return self._send(assist_api.status())
+        if path == "/api/llm":
+            from reedus_companion.cloud import llm
+            return self._send(llm.status())
         if path == "/api/lite":
             lite = h.snapshot().get("lite")
             return self._send({"lite": lite} if lite is not None else
@@ -428,10 +478,30 @@ class _Handler(BaseHTTPRequestHandler):
                 from reedus_companion.connect.manager import manager
                 out = manager().act(data)
                 return self._send(out, 409 if out.get("error") else 200)
+            if path == "/api/assist":
+                from reedus_companion.assist import api as assist_api
+                out = assist_api.act(data)
+                return self._send(out, 409 if out.get("error") else 200)
+            if path == "/api/llm":
+                return self._send(_llm_act(h, data))
         except Exception as e:                                   # noqa: BLE001
             traceback.print_exc()
             return self._send({"error": f"{type(e).__name__}: {e}"}, 500)
         return self._send({"error": "no such endpoint"}, 404)
+
+
+def _llm_act(hooks: Hooks, data: dict) -> dict:
+    """Settings → Cloud brain. Errors come back as 200 + {"error"} so the app can show them."""
+    from reedus_companion.cloud import llm
+    applied: dict = {}
+
+    def _apply():
+        applied.update(hooks.llm_changed() or {})
+
+    out = llm.act(data or {}, on_change=_apply)
+    if applied:
+        out["live"] = applied
+    return out
 
 
 def serve(hooks: Hooks, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT,
@@ -460,7 +530,7 @@ def main():
     ap = argparse.ArgumentParser(description="Reedus control API (standalone brain)")
     ap.add_argument("--host", default=DEFAULT_HOST)
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
-    ap.add_argument("--backend", default="gguf", choices=["gguf", "hf", "server", "gemini"])
+    ap.add_argument("--backend", default="gguf", choices=["gguf", "hf", "server", "cloud", "gemini"])
     ap.add_argument("--gguf", default=None)
     ap.add_argument("--adapter", default=None)
     ap.add_argument("--merged", default=None)

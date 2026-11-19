@@ -28,7 +28,40 @@ Why these three:
 
 ## Boards
 
-The head circuit (the 74AHCT125 and its parts) goes on an **ElectroCookie half-size** solderable breadboard. The base circuit (divider, servo header, 470 µF, power hub) goes on an **ElectroCookie mini**. `wiring_diagram.html` (published as the "Reedus Lite Wiring" artifact) shows which hole every leg and wire goes in.
+The head circuit (the 74AHCT125 and its parts) goes on an **ElectroCookie half-size** (30 rows, with power rails), taped to the back of the face backer just below its cutout. The base circuit (divider, servo header, 470 µF, 5V/GND buses, speaker junction) goes on an **ElectroCookie mini** (17 rows, no rails), taped to the base floor plate on the robot's left of the servo. The full step-by-step soldering walkthrough with pictures is the "Reedus Lite Wiring" artifact; the same pictures are in `wiring/`.
+
+Both boards are described component side up, **row 1 on the left, column A along the bottom**. Half-board rails as printed: top = − outer, + inner; bottom = − inner (next to A), + outer.
+
+### Head board (half), hole by hole
+
+| What | Holes |
+|---|---|
+| SN74AHCT125N (soldered in, no socket) | rows 10-16 across the channel, **notch toward row 30**: pin 1 = F16, pin 7 = F10, pin 8 = E10, pin 14 = E16 |
+| GND jumpers | J10, J12, J13, J16 to the top − rail (pins 7, 5, 4, 1) |
+| 5V jumpers | A11, A12, A14, A15, A16 to the bottom + rail, which is the OUTER bottom rail on this board (pins 9, 10, 12, 13, 14); insulated, hopping the − rail |
+| 330 Ω | G14 to G19 |
+| 100 nF | bottom + rail to bottom − rail, row 17 |
+| 1000 µF | top + rail to top − rail, row 30, laid flat off the end |
+| Rail links | not needed: the half board's bridge pads on the back join top and bottom rails (verify with a meter) |
+| reSpeaker 5V / GND pads | top + / − rail, row 5 |
+| reSpeaker XIAO_D0 | J15 |
+| Matrix DIN / 5V / GND | J19 / top + rail row 28 / top − rail row 28 |
+| Pass-throughs | reSpeaker XIAO_D2 at E21, XIAO_D3 at E23; the neck wire for each lands in A of the same row. (Speaker no longer uses this board.) |
+| Neck 5V / GND | bottom + / − rail, row 3 |
+
+### Base board (mini), hole by hole
+
+| What | Holes |
+|---|---|
+| Divider | 100k C2 to C6, 100k D6 to D10, 100 nF B6 to B10 (row 2 = BAT+, row 6 = middle, row 10 = GND) |
+| GND bridge | E10 to H10 |
+| 470 µF | − in F10, + in F11 (standing) |
+| Servo leads | 3 male dupont jumpers, cut 8 cm from the pin end, soldered into J10 GND (brown), J11 5V (red), J12 signal (orange); the male pins plug into the SG90's plug, taped together |
+| In | BAT+ A2 (UPS battery + terminal, big round point on the left), UPS− pad A10, rocker black lead (switched 5V) H11 |
+| Neck | 5V I11, GND I10, servo signal H12, battery sense A6 |
+| Speaker | not on this board: the lead is extended (~40-45 cm) and plugs straight into the reSpeaker SPK socket |
+
+Row 10 F-J is the base GND bus and row 11 F-J the 5V bus.
 
 ## Head (turns with the servo)
 
@@ -46,15 +79,15 @@ GND ─────┬──►│7  GND      │
 ```
 
 - SN74AHCT125N: pin 14 to 5V, pin 7 to GND, **pin 1 (1OE) to GND**, pin 2 from D0, pin 3 through 330 Ω to DIN.
-- Put a 100 nF ceramic across the head board's right rails at row 9, next to pin 14.
-- Unused gates: no input may float. Tie pins 4 and 5 (2OE, 2A, on the GND-rail side) to **GND**. Tie pins 9, 10, 12, 13 (3A, 3OE, 4A, 4OE, on the 5V-rail side) to **5V**. Leave the outputs (6, 8, 11) unconnected. Every pin then reaches its nearest rail without crossing the chip. `wiring_diagram.html` shows the hole-by-hole layout.
-- Put a 1000 µF / 10 V electrolytic across the head board's right rails at row 24, stripe (−) on the − rail. It sits where the matrix power leaves the board.
+- Put a 100 nF ceramic across the head board's bottom rails at row 17, next to pin 14.
+- Unused gates: no input may float. Tie pins 4 and 5 (2OE, 2A, on the top side, next to the − rail) to **GND**. Tie pins 9, 10, 12, 13 (3A, 3OE, 4A, 4OE, on the bottom side) to **5V** on the outer bottom rail. Leave the outputs (6, 8, 11) unconnected. Every pin then reaches its nearest rail without crossing the chip. The tables above give the hole-by-hole layout.
+- Put a 1000 µF / 10 V electrolytic across the head board's top rails at row 30, stripe (−) on the − rail, laid flat off the end. It sits next to where the matrix power leaves the board (row 28).
 - Power the matrix from the 5V bus, not from the board's 3.3V pad. The firmware caps brightness at 18% and the frame current at 1.2 A (`BRIGHTNESS_CAP`, `LED_POWER_MA`).
 - Feed DIN at the panel's **input** end (the arrow on the strip points away from it).
 
 ### Speaker
 
-Seeed 4 Ω 5 W speaker on the board's speaker connector (marked SPK). It sits in the base, so its two leads run down the neck.
+Seeed 4 Ω 5 W speaker on the board's speaker connector (marked SPK). It sits in the base: its lead is cut, extended ~30 cm per wire (soldered, heat-shrunk, joints staggered) and runs up the neck with the bundle, plug end first.
 
 ## Base
 
@@ -83,26 +116,25 @@ cell + (UPS module B+) ──[100k]──┬──[100k]── GND
 ### Power
 
 ```
-2x P28A (parallel) ── JUZITAO UPS ── 5V out ── rocker ── 5V bus ──┬── board 5V pad (head)
+2x P28A (parallel) ── LX-2BUPS UPS ── UPS+ ── rocker ── 5V bus ──┬── board 5V pad (head)
                                                                     ├── matrix + 74AHCT125 (head)
                                                                     └── servo (base)
 ```
 
-- Every GND is common: UPS, board GND pad, matrix, 74AHCT125, servo, divider.
+- Every GND is common: UPS (UPS− pad), board GND pad, matrix, 74AHCT125, servo, divider.
 - **Flashing over USB:** the board's 5V pad and its USB-C share a rail. Turn the rocker **off** before plugging the XIAO into a computer, or the UPS and the PC back-feed each other.
 
-## Neck: 6 wires (the handoff planned 5)
+## Neck: 4 wires plus the speaker lead
 
 | Wire | From | To |
 |---|---|---|
-| 5V | base bus | head (board 5V pad, matrix, 74AHCT125) |
-| GND | base bus | head |
-| servo signal | D2 (head) | SG90 orange (base) |
-| speaker + | board SPK (head) | speaker (base) |
-| speaker − | board SPK (head) | speaker (base) |
-| **battery sense** | divider midpoint (base) | D3 (head) |
+| 5V | base board I11 | head board bottom + rail (outer), row 3 |
+| GND | base board I10 | head board bottom − rail (inner), row 3 |
+| servo signal | head board A21 (XIAO D2) | base board H12 (SG90 orange) |
+| battery sense | base board A6 (divider midpoint) | head board A23 (XIAO D3) |
+| speaker lead | speaker (base) | reSpeaker SPK socket (head), not on either board |
 
-The battery-sense wire is the one added since the handoff. It carries almost no current, so thin wire is fine. The head only turns ±90°, so a loose service loop still works and no slip ring is needed.
+All 22 AWG, 30 cm (speaker lead ~40-45 cm total). The plug end of the speaker lead fits the 7 mm holes, so thread it first. Solder the head ends on the bench; thread through head floor, hub and collar slot; then solder the base ends. The head only turns ±90°, so a loose ~5 cm loop in the base is enough and no slip ring is needed.
 
 ## Before the first power-up
 

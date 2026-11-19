@@ -90,19 +90,32 @@ def knowledge_enabled() -> bool:
 
 
 def local_search_enabled() -> bool:
-    """Should core.py do its own search routing and topic learning this turn?"""
+    """Should core.py do its own search routing and topic learning this turn?
+    In cloud mode it depends on the brain: Gemini, Claude and OpenAI search inside their own
+    reply; the others (or search "local"/"gemini" in Settings → Cloud brain) use core.py's."""
     explicit = (os.environ.get("REEDUS_LOCAL_SEARCH") or "").strip()
     if explicit:
         return explicit != "0"
-    return current() != CLOUD
+    if current() != CLOUD:
+        return True
+    try:
+        from reedus_companion.cloud import llm
+        return llm.local_search_wanted()
+    except Exception:
+        return False
 
 
 def preflight(mode: str) -> tuple[bool, str]:
     """Can cloud mode actually run? Returns (ok, reason)."""
     if mode != CLOUD:
         return True, ""
-    if not (os.environ.get("GEMINI_API_KEY") or "").strip():
-        return False, "I don't have a Gemini key."
+    try:
+        from reedus_companion.cloud import llm
+        ok, why = llm.preflight()
+        if not ok:
+            return False, why
+    except Exception as e:                                       # noqa: BLE001
+        return False, f"the cloud brain settings are broken ({type(e).__name__}: {e})."
     if not (os.environ.get("INWORLD_API_KEY") or "").strip():
         return False, "I don't have an Inworld key."
     try:
@@ -112,11 +125,6 @@ def preflight(mode: str) -> tuple[bool, str]:
                            f"${budget.spent():.2f} of ${budget.cap():.2f}.")
     except Exception:
         pass
-    try:
-        import google.genai                                     # noqa: F401
-    except ImportError:
-        return False, ("the cloud packages aren't installed, "
-                       "pip install -r reedus_companion/requirements/cloud.txt")
     return True, ""
 
 

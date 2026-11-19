@@ -1,0 +1,3 @@
+.pio/
+src/secrets.h
+src/ca_cert.h

@@ -14,6 +14,8 @@ const Lite = (() => {
   let status = {};
   let localFace = null;     // {name, until} we just sent, so the preview reacts before the next status
   let lookTarget = null;    // {angle, until, sentAt}: held until the device reports a newer head
+  let displayAt = 0;        // when the last status (and its timer seconds) arrived
+  const ringSeen = {};      // ring id -> when it started, for the flashing
   const live = Face.createLive();
   let raf = 0;
 
@@ -68,6 +70,9 @@ const Lite = (() => {
     kv("#ls-up", w && w.uptime != null ? dur(w.uptime) : "-");
     kv("#ls-buf", w && w.buffered_ms != null ? `${w.buffered_ms} ms` : "-");
     kv("#ls-drops", w ? `${w.underruns ?? 0} / ${w.mic_drops ?? 0}` : "-");
+    const mu = lite && lite.music;
+    kv("#ls-music", !mu ? "-" : !mu.available ? "voice only (no librespot)" : mu.error ? "error"
+      : !mu.lane ? "needs new firmware" : mu.state === "playing" ? `playing as "${mu.name}"` : `ready as "${mu.name}"`);
     kv("#ls-fw", lite && lite.fw ? lite.fw : "-");
     kv("#ls-peer", lite && lite.peer ? String(lite.peer).replace(/[()' ]/g, "").split(",")[0] : "-");
 
@@ -85,9 +90,28 @@ const Lite = (() => {
       connected: mode() === "live",
       state: lite ? lite.state : "idle",
       face, gx,
+      display: displayNow(),
+      music: lite && lite.music && lite.music.state === "playing" && lite.music.lane,
+      h24: !!(lite && lite.display && lite.display.h24),
       brightness: lite ? lite.brightness : 100,
       searchColor: lite ? "red" : "amber",
     };
+  }
+
+  /* lite.display with the seconds brought up to now, so the preview counts down between updates */
+  function displayNow() {
+    const d = lite && lite.display;
+    if (!d) return null;
+    const gone = (Date.now() - displayAt) / 1000, nowS = Date.now() / 1000;
+    const out = {};
+    if (d.timers) {
+      const ring = d.timers.ring || [];
+      ring.forEach(r => { if (!ringSeen[r.id]) ringSeen[r.id] = Date.now(); });
+      out.timers = { ...d.timers, items: (d.timers.items || []).map(t => ({ ...t, left: t.paused ? t.left : Math.max(0, t.left - gone) })) };
+      out.ringFor = ring.length ? Date.now() - ringSeen[ring[0].id] : 0;
+    }
+    if (d.card && d.card.until > nowS) out.card = { ...d.card, age: (nowS - (d.card.start || nowS)) * 1000 };
+    return out;
   }
 
   function frame() {
@@ -251,6 +275,7 @@ const Lite = (() => {
     Link.on("status", (s) => {
       status = s;
       lite = s.lite || null;
+      displayAt = Date.now();
       render();
     });
     document.addEventListener("visibilitychange", wake);

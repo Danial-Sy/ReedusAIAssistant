@@ -1,0 +1,71 @@
+"""relay settings, all from the environment (Railway → service → Variables).
+
+    DATABASE_URL            postgres://… from Railway's Postgres plugin. unset = SQLite at
+                            RELAY_DATA/relay.sqlite (local runs and tests)
+    PORT                    Railway sets it. default 8080
+    RELAY_ADMIN_TOKEN       guards the admin actions (make accounts and devices, top up)
+    RELAY_DATA              scratch dir for SQLite and models. default ./data
+
+    keys the relay spends from (never sent to devices):
+    GEMINI_API_KEY / ANTHROPIC_API_KEY / OPENAI_API_KEY / … (reedus_companion/cloud/providers.py)
+    INWORLD_API_KEY         his voice
+
+    defaults a device can override from ReedOS:
+    REEDUS_LLM_PROVIDER / REEDUS_LLM_MODEL / REEDUS_LLM_SEARCH   as on the run box
+    RELAY_STT               gemini | openai. default gemini (one key fewer)
+    RELAY_STT_MODEL         default gemini-3.7-flash / gpt-4o-mini-transcribe
+    REEDUS_WAKEWORD_MODEL   path to hey_reedus.onnx (see README)
+"""
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+
+def env(name: str, default: str = "") -> str:
+    return (os.environ.get(name) or default).strip()
+
+
+def env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+DATA = Path(env("RELAY_DATA", str(Path.cwd() / "data"))).expanduser()
+
+
+def _ui_dir() -> Path:
+    """The ReedOS app the relay serves at / (Docker copies it to /app/ui)."""
+    explicit = env("RELAY_UI")
+    if explicit:
+        return Path(explicit).expanduser()
+    for cand in (Path("/app/ui"), Path(__file__).resolve().parents[3] / "ReedOS" / "reedos-app" / "src"):
+        if (cand / "index.html").exists():
+            return cand
+    return Path("/nonexistent")
+
+
+UI_DIR = _ui_dir()
+RELAY_NAME = env("RELAY_NAME", "Reedus relay")
+PORT = int(env("PORT", "8080"))
+HOST = env("RELAY_HOST", "0.0.0.0")
+ADMIN_TOKEN = env("RELAY_ADMIN_TOKEN")
+DATABASE_URL = env("DATABASE_URL")
+
+# audio, same wire format as the run box (ReedusLite/PROTOCOL.md)
+RATE = 16000
+FRAME_SAMPLES = 320
+LEAD_S = env_float("RELAY_LEAD_S", 0.35)          # speech sent ahead of the device's playhead
+PREBUFFER_S = 0.12
+
+# listening
+START_TIMEOUT_S = env_float("RELAY_START_TIMEOUT_S", 6.0)    # wake, then nothing said
+END_SILENCE_S = env_float("RELAY_END_SILENCE_S", 0.8)        # pause that ends a sentence
+MAX_UTTERANCE_S = env_float("RELAY_MAX_UTTERANCE_S", 15.0)
+FOLLOW_UP_S = env_float("RELAY_FOLLOW_UP_S", 6.0)            # answer without the wake word
+HISTORY_TURNS = int(env_float("RELAY_HISTORY_TURNS", 12))    # kept in the prompt per session
+
+# money
+LOW_BALANCE_USD = env_float("RELAY_LOW_BALANCE_USD", 1.0)

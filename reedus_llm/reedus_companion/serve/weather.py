@@ -163,3 +163,63 @@ def fetch_weather_fact(user_msg: str = "") -> Optional[str]:
                 f"(feels like {feels}), wind around {wind} mph.")
     return (f"Right now in {display} it is {cond}, {temp} degrees Fahrenheit, "
             f"wind around {wind} mph.")
+
+
+_cur_cache: dict = {"at": 0.0, "data": None}
+
+
+def icon_for(code: int, is_day: bool = True) -> str:
+    """WMO code -> one of the Lite face's weather icons."""
+    if code in (0, 1):
+        return "sun" if is_day else "moon"
+    if code == 2:
+        return "partly"
+    if code == 3:
+        return "cloud"
+    if code in (45, 48):
+        return "fog"
+    if 71 <= code <= 77 or code in (85, 86):
+        return "snow"
+    if code >= 95:
+        return "storm"
+    if 51 <= code <= 67 or 80 <= code <= 82:
+        return "rain"
+    return "cloud"
+
+
+def current(max_age: float = 600.0) -> Optional[dict]:
+    """Home weather as data for the face and the day briefing, cached for 10 minutes.
+    {temp, high, low, code, cond, icon, unit, place} or None."""
+    import time as _time
+    if _cur_cache["data"] and _time.time() - _cur_cache["at"] < max_age:
+        return _cur_cache["data"]
+    if not weather_enabled():
+        return None
+    place = resolve_place("")
+    if place is None:
+        return _cur_cache["data"]
+    lat, lon, display = place
+    unit = "celsius" if os.environ.get("REEDUS_UNITS", "F").upper().startswith("C") else "fahrenheit"
+    url = ("https://api.open-meteo.com/v1/forecast?"
+           + urllib.parse.urlencode({
+               "latitude": lat, "longitude": lon,
+               "current": "temperature_2m,weather_code,is_day",
+               "daily": "temperature_2m_max,temperature_2m_min",
+               "forecast_days": 1, "temperature_unit": unit, "timezone": "auto"}))
+    data = _http_json(url)
+    cur = (data or {}).get("current")
+    if not cur:
+        return _cur_cache["data"]
+    try:
+        code = int(cur.get("weather_code", 0))
+        daily = (data or {}).get("daily") or {}
+        out = {"temp": int(round(float(cur["temperature_2m"]))), "code": code,
+               "cond": _WMO.get(code, "unknown conditions"),
+               "icon": icon_for(code, bool(cur.get("is_day", 1))),
+               "high": int(round(float(daily["temperature_2m_max"][0]))) if daily.get("temperature_2m_max") else None,
+               "low": int(round(float(daily["temperature_2m_min"][0]))) if daily.get("temperature_2m_min") else None,
+               "unit": "C" if unit == "celsius" else "F", "place": display}
+    except (KeyError, TypeError, ValueError, IndexError):
+        return _cur_cache["data"]
+    _cur_cache.update(at=_time.time(), data=out)
+    return out

@@ -30,6 +30,14 @@ def _tone(freqs, durs, sr: int = 24000, gain: float = 0.22):
 def make_jingle(kind: str, sr: int = 24000):
     """float32 mono audio for listen | ready | sleep."""
     k = (kind or "listen").lower().strip()
+    if k == "timer":        # the kitchen-timer four-beep, twice
+        return _tone([1046.5, 0, 1046.5, 0, 1046.5, 0, 1046.5, 0] * 2,
+                     [0.09, 0.05, 0.09, 0.05, 0.09, 0.05, 0.09, 0.35] * 2, sr=sr, gain=0.26)
+    if k == "alarm":        # a rising wake-up figure, brighter each pass
+        return _tone([523.25, 659.25, 783.99, 1046.5, 0, 587.33, 739.99, 880.0, 1174.66, 0],
+                     [0.12, 0.12, 0.12, 0.22, 0.25, 0.12, 0.12, 0.12, 0.26, 0.4], sr=sr, gain=0.24)
+    if k == "reminder":     # a soft two-note doorbell
+        return _tone([880.0, 659.25, 0, 880.0, 659.25], [0.18, 0.32, 0.2, 0.18, 0.36], sr=sr, gain=0.2)
     if k == "ready":
         return _tone([660.0, 880.0], [0.07, 0.09], sr=sr, gain=0.18)
     if k in ("sleep", "stop", "bye"):

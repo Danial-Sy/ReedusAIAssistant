@@ -1,3 +1,6 @@
 # cloud mode only
 google-genai>=1.0.0
+# other cloud brains (Settings → Cloud brain): Claude, and OpenAI + every OpenAI-compatible host
+anthropic>=2.9.0
+openai>=3.51.0
 requests>=2.31.0

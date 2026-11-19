@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 
-PROTO = 1
+PROTO = 2          # 2: downstream binary frames start with a kind byte (KIND_*)
 PATH = "/lite"
 PORT = int(os.environ.get("REEDUS_LITE_PORT", "8767"))
 BEACON_PORT = int(os.environ.get("REEDUS_LITE_BEACON_PORT", "8769"))
@@ -15,6 +15,9 @@ BEACON_PORT = int(os.environ.get("REEDUS_LITE_BEACON_PORT", "8769"))
 RATE = 16000
 FRAME_MS = 20
 FRAME_SAMPLES = RATE * FRAME_MS // 1000          # 320 samples, 640 bytes
+MUSIC_RATE = 24000                               # music lane, mono int16, proto 2 + caps music24
+KIND_SPEECH = 1
+KIND_MUSIC = 2
 
 # server -> device
 WELCOME = "welcome"        # {proto, volume, brightness}
@@ -26,12 +29,17 @@ FLUSH = "flush"            # barge-in: drop every queued speech sample now
 VOLUME = "volume"          # {level: 0-100}
 BRIGHTNESS = "brightness"  # {level: 0-100}, still capped by the firmware
 LOOK = "look"              # {angle}: turn to a world bearing (deg, + = its left)
+CLOCK = "clock"            # {t: local wall-clock seconds, h24}: the device keeps time from this
+TIMERS = "timers"          # {items:[{id,label,left,total,paused}], ring:[{id,kind,label}], alarm}
+MUSIC = "music"            # {op: flush}: drop queued music now (pause, skip)
+GLANCE = "glance"          # {card: clock|weather|event|music|text|none, hold, dim?, ...card fields}
 
 # device -> server
 HELLO = "hello"            # {proto, device, fw, token, rate, frame_ms}
 DOA = "doa"                # {angle, rel, head, speech}
 BATTERY = "battery"        # {pct, volts}
 STATUS = "status"          # {rssi, heap, buffered_ms, underruns, uptime}
+# MUSIC also goes up: {buffered_ms, underruns, playing}, twice a second while music plays
 
 STATES = ("idle", "listening", "thinking", "speaking", "sleep")
 
