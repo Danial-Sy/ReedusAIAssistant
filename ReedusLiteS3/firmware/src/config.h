@@ -92,7 +92,7 @@
 // + = the robot's left (same as the chassis mockup). MEASURE both: stand in front, run
 // `doa`, put the reported angle here; then step to its left, the bearing must go positive.
 #define DOA_FRONT_DEG 280          // measured: talking straight into the face reads raw 280
-#define DOA_SIGN 1                 // MEASURE: from its left the bearing must go positive (`cal doaflip`)
+#define DOA_SIGN 1                 // checked: wake turns toward the voice
 
 // ---------- LED matrix ----------
 #define MATRIX_W 16

@@ -12,6 +12,7 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 COPY ReedusLiteS3/relay/requirements.txt /app/relay/requirements.txt
 RUN pip install --no-cache-dir -r /app/relay/requirements.txt \
+ && pip install --no-cache-dir --no-deps "openwakeword>=0.6,<0.7" \
  && python -c "import openwakeword.utils as u; u.download_models(model_names=[])"
 
 # only the brain modules the relay uses: no models, no memory/, no training data
