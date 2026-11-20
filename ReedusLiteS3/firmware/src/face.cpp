@@ -1,4 +1,5 @@
 #include "face.h"
+#include "store.h"
 
 #include <FastLED.h>
 
@@ -74,15 +75,21 @@ static char desc[64];
 static float now_s() { return millis() / 1000.0f; }
 
 // ---------- pixels ----------
+// how the panel is mounted: config.h's defaults, overridden by `cal rotate/flipx/flipy`
+// (saved in NVS, see store.cpp), so the face can be turned the right way without reflashing
+static int rot = MATRIX_ROTATE;
+static bool flipX = MATRIX_FLIP_X, flipY = false;
+
 static uint16_t xyToIndex(int x, int y) {
   // logical (x right, y down, seen from the front) -> strip index
   int rx = x, ry = y;
-  for (int r = 0; r < MATRIX_ROTATE; r++) {
+  if (flipY) ry = MATRIX_H - 1 - ry;
+  for (int r = 0; r < rot; r++) {
     int t = rx;
     rx = MATRIX_W - 1 - ry;
     ry = t;
   }
-  if (MATRIX_FLIP_X) rx = MATRIX_W - 1 - rx;
+  if (flipX) rx = MATRIX_W - 1 - rx;
   if (MATRIX_SERPENTINE && (ry & 1)) rx = MATRIX_W - 1 - rx;
   return ry * MATRIX_W + rx;
 }
@@ -500,7 +507,7 @@ static void render(uint32_t now) {
   memset(frame, 0, sizeof(frame));
   if (test) {
     // corners: red top-left, green top-right, blue bottom-left, white bottom-right, as seen
-    // from the front. use it to set MATRIX_ROTATE / MATRIX_FLIP_X
+    // from the front. fix it live with `cal rotate` / `cal flipx` / `cal flipy`
     px(0, 0, CRGB::Red); px(1, 0, CRGB::Red);
     px(15, 0, CRGB::Green);
     px(0, 15, CRGB::Blue);
@@ -570,6 +577,9 @@ static void render(uint32_t now) {
 
 // ---------- api ----------
 void begin() {
+  rot = store::getInt("face_rot", MATRIX_ROTATE) & 3;
+  flipX = store::getInt("face_fx", MATRIX_FLIP_X) != 0;
+  flipY = store::getInt("face_fy", 0) != 0;
   FastLED.addLeds<WS2812B, PIN_LED_DATA, GRB>(leds, MATRIX_W * MATRIX_H);
   FastLED.setMaxPowerInVoltsAndMilliamps(5, LED_POWER_MA);
   FastLED.setBrightness(BRIGHTNESS_CAP);
@@ -646,6 +656,23 @@ void hearVoice(float relDeg) {
 void setBrightness(int level) { bright = constrain(level, 0, 100); }
 void setBattery(int pct) { battPct = pct; }
 void testPattern(bool on) { test = on; }
+
+void setOrientation(int rotate, bool fx, bool fy, bool save) {
+  rot = rotate & 3;
+  flipX = fx;
+  flipY = fy;
+  if (save) {
+    store::putInt("face_rot", rot);
+    store::putInt("face_fx", flipX);
+    store::putInt("face_fy", flipY);
+  }
+}
+
+void orientation(int& rotate, bool& fx, bool& fy) {
+  rotate = rot;
+  fx = flipX;
+  fy = flipY;
+}
 const char* describe() { return desc; }
 
 }  // namespace face

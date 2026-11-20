@@ -21,6 +21,10 @@ void hearVoice(float relDeg);
 void setBrightness(int level);  // 0-100 of BRIGHTNESS_CAP
 void setBattery(int pct);
 void testPattern(bool on);
+
+// panel mounting (`cal`): quarter turns, then mirror left-right / top-bottom, as seen from the front
+void setOrientation(int rotate, bool flipX, bool flipY, bool save);
+void orientation(int& rotate, bool& flipX, bool& flipY);
 const char* describe();
 
 bool knownExpr(const char* name);

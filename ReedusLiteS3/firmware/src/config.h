@@ -30,6 +30,8 @@
 #define WAKE_REFRACTORY_MS 2000    // one "Reedus" = one wake
 #define WAKE_WARMUP_SLICES 100     // ignore the first second (the noise estimate settling)
 #define WAKE_TASK_CORE 0           // wifi's core has the idle time; audio + the loop are on 1
+#define WAKE_CHIME 1               // the old Reedus "listening" chime when the name is heard
+#define CHIME_GAIN 0.20f           // its loudness before the volume setting (jingle.py uses 0.20)
 
 // ---------- ringing on its own (glance.cpp localTick) ----------
 #define LOCAL_RING_MAX_MS 60000    // a timer/alarm the relay never rang: ring here for a minute
@@ -89,15 +91,15 @@
 // direction of arrival -> bearing. bearing is degrees, 0 = straight out of the face,
 // + = the robot's left (same as the chassis mockup). MEASURE both: stand in front, run
 // `doa`, put the reported angle here; then step to its left, the bearing must go positive.
-#define DOA_FRONT_DEG 0
-#define DOA_SIGN 1
+#define DOA_FRONT_DEG 280          // measured: talking straight into the face reads raw 280
+#define DOA_SIGN 1                 // MEASURE: from its left the bearing must go positive (`cal doaflip`)
 
 // ---------- LED matrix ----------
 #define MATRIX_W 16
 #define MATRIX_H 16
 #define MATRIX_SERPENTINE 1        // BTF 16x16 panels zig-zag
-#define MATRIX_ROTATE 0            // MEASURE with `test`: 0-3 quarter turns
-#define MATRIX_FLIP_X 0            // MEASURE with `test`: mirror if it reads backwards
+#define MATRIX_ROTATE 1            // measured with `test`: the panel is mounted transposed, so a
+#define MATRIX_FLIP_X 1            // quarter turn + mirror. `cal rotate/flipx/flipy` overrides live
 #define BRIGHTNESS_CAP 46          // of 255 (~18%): behind the diffuser this is plenty
 #define LED_POWER_MA 1200          // FastLED dims the frame if it would draw more
 #define FACE_FPS 40
@@ -105,9 +107,11 @@
 // ---------- head servo ----------
 #define SERVO_CENTER_US 1500       // MEASURE: pulse that points the face straight ahead
 #define SERVO_US_PER_DEG 10.0f     // SG90 is roughly 500-2400 us over 180 deg
-#define SERVO_DIR 1                // MEASURE: flip to -1 if `servo 30` turns it right
+#define SERVO_DIR 1                // checked: `servo 30` turns toward its left (your right, facing it)
 #define HEAD_LIMIT_DEG 90.0f       // +/-90 per the chassis; the eyes cover the rest
-#define HEAD_MAX_DPS 220.0f        // top speed
+#define HEAD_MAX_DPS 120.0f        // top speed (deg/s). lower = calmer
+#define HEAD_ACCEL_DPS2 360.0f     // how fast it gets up to speed and slows down (deg/s^2). lower = softer
+#define HEAD_TURN_SCALE 0.85f      // turn this share of the way to the voice; the eyes cover the rest
 #define HEAD_FOLLOW_DELAY_MS 200   // eyes glance first, the head follows
 #define HEAD_DEADBAND_DEG 12.0f    // closer than this, the eyes alone handle it
 #define HEAD_IDLE_FOLLOW 1         // turn toward sustained talking while idle

@@ -4,10 +4,13 @@
 
 namespace store {
 
-static Preferences prefs;
-static bool ok = false;
+static Preferences prefs, cal;
+static bool ok = false, calOk = false;
 
-void begin() { ok = prefs.begin("reedus", false); }
+void begin() {
+  if (!ok) ok = prefs.begin("reedus", false);
+  if (!calOk) calOk = cal.begin("cal", false);
+}
 
 uint32_t bulletinRev() { return ok ? prefs.getUInt("brev", 0) : 0; }
 
@@ -20,6 +23,16 @@ void saveBulletin(uint32_t rev, const char* text) {
   if (t.length() > 3800) t = t.substring(0, 3800);
   prefs.putString("btext", t);
   prefs.putUInt("brev", rev);
+}
+
+int getInt(const char* key, int def) { return calOk ? cal.getInt(key, def) : def; }
+
+void putInt(const char* key, int value) {
+  if (calOk) cal.putInt(key, value);
+}
+
+void clearCal() {
+  if (calOk) cal.clear();
 }
 
 }  // namespace store

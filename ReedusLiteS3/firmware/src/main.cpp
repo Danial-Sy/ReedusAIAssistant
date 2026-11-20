@@ -14,6 +14,7 @@
 #include "glance.h"
 #include "head.h"
 #include "relay.h"
+#include "sounds.h"
 #include "store.h"
 #include "wake.h"
 #include "xvf.h"
@@ -37,34 +38,14 @@ static void help() {
       "                    smug shy curious wink bye dizzy yawn content blink\n"
       "  vol <0-100>       speaker volume\n"
       "  bright <0-100>    face brightness (under the cap)\n"
-      "  ring              play the ring tone once\n"
+      "  ring / chime      play the ring tone / the wake chime once\n"
+      "  cal               calibration (saved on the device): show it, or\n"
+      "    cal rotate <0-3>  turn the face a quarter at a time      cal flipx / flipy  mirror it\n"
+      "    cal center <us>   servo pulse for straight ahead (1500)  cal center +10 / -10  nudge\n"
+      "    cal dir           flip which way the head turns          cal front  you're in front: set DoA\n"
+      "    cal doaflip       flip the DoA direction                 cal reset  back to config.h\n"
       "  glance <what>     show a sample: clock weather event music timer ring alarm off\n"
       "  reboot");
-}
-
-// two short beeps, 16 kHz, made once. played through the speech path so volume applies
-static int16_t* ringPcm = nullptr;
-static size_t ringSamples = 0;
-
-static void makeRing() {
-  const float beep = 0.11f, gap = 0.07f;
-  ringSamples = (size_t)(AUDIO_RATE * (beep * 2 + gap));
-  ringPcm = (int16_t*)ps_malloc(ringSamples * 2);
-  if (!ringPcm) ringPcm = (int16_t*)malloc(ringSamples * 2);
-  if (!ringPcm) return;
-  for (size_t i = 0; i < ringSamples; i++) {
-    float t = (float)i / AUDIO_RATE;
-    bool second = t > beep + gap;
-    bool on = t < beep || second;
-    float lt = second ? t - beep - gap : t;
-    float env = on ? fminf(1.0f, fminf(lt, beep - lt) / 0.008f) : 0.0f;
-    float f = second ? 1175.0f : 880.0f;
-    ringPcm[i] = (int16_t)(env * 0.3f * 32767.0f * sinf(2.0f * PI * f * t));
-  }
-}
-
-static void playRing() {
-  if (ringPcm) audio::pushSpeech((const uint8_t*)ringPcm, ringSamples * 2);
 }
 
 // ringing: beep every 1.6 s, unless he's mid-conversation (you're telling him "stop")
@@ -73,7 +54,73 @@ static void ringTone(uint32_t now) {
   if (!glance::ringing() || relay::listenOpen()) return;
   if (now - last < 1600 || audio::bufferedMs() > 80) return;
   last = now;
-  playRing();
+  sounds::ring();
+}
+
+static void showCal() {
+  int rot;
+  bool fx, fy;
+  face::orientation(rot, fx, fy);
+  head::Cal c = head::cal();
+  int raw;
+  uint32_t age;
+  Serial.printf("face   rotate %d  flipx %s  flipy %s\n", rot, fx ? "on" : "off", fy ? "on" : "off");
+  Serial.printf("servo  center %d us  dir %+d  (head now %.1f deg)\n", c.centerUs, c.dir, head::angle());
+  Serial.printf("doa    front %d deg  sign %+d", c.doaFront, c.doaSign);
+  if (head::lastRawDoa(raw, age)) Serial.printf("  (last voice raw %d deg, %u ms ago)", raw, (unsigned)age);
+  Serial.println();
+}
+
+static void calCommand(String arg) {
+  String what = arg, val;
+  int sp = arg.indexOf(' ');
+  if (sp > 0) {
+    what = arg.substring(0, sp);
+    val = arg.substring(sp + 1);
+    val.trim();
+  }
+  int rot;
+  bool fx, fy;
+  face::orientation(rot, fx, fy);
+  head::Cal c = head::cal();
+  if (what == "rotate") {
+    face::setOrientation(val.length() ? val.toInt() : rot + 1, fx, fy, true);
+    face::testPattern(true);
+  } else if (what == "flipx") {
+    face::setOrientation(rot, !fx, fy, true);
+    face::testPattern(true);
+  } else if (what == "flipy") {
+    face::setOrientation(rot, fx, !fy, true);
+    face::testPattern(true);
+  } else if (what == "center") {
+    if (val.startsWith("+") || val.startsWith("-")) c.centerUs += val.toInt();
+    else if (val.length()) c.centerUs = val.toInt();
+    head::setManual(0);  // look straight ahead while you judge it
+    head::setCal(c, true);
+  } else if (what == "dir") {
+    c.dir = -c.dir;
+    head::setCal(c, true);
+  } else if (what == "front") {
+    int raw;
+    uint32_t age;
+    if (!head::lastRawDoa(raw, age) || age > 10000) {
+      Serial.println("talk straight into the face first, then `cal front` within 10 s");
+      return;
+    }
+    c.doaFront = raw;
+    head::setCal(c, true);
+  } else if (what == "doaflip") {
+    c.doaSign = -c.doaSign;
+    head::setCal(c, true);
+  } else if (what == "reset") {
+    store::clearCal();
+    face::setOrientation(MATRIX_ROTATE, MATRIX_FLIP_X, false, false);
+    head::setCal({SERVO_CENTER_US, SERVO_DIR, DOA_FRONT_DEG, DOA_SIGN}, false);
+  } else if (what.length()) {
+    Serial.println("? cal rotate|flipx|flipy|center|dir|front|doaflip|reset");
+    return;
+  }
+  showCal();
 }
 
 static void command(String c) {
@@ -149,7 +196,11 @@ static void command(String c) {
   } else if (c == "bright") {
     face::setBrightness(arg.toInt());
   } else if (c == "ring") {
-    playRing();
+    sounds::ring();
+  } else if (c == "chime") {
+    sounds::wake();
+  } else if (c == "cal") {
+    calCommand(arg);
   } else if (c == "glance") {
     glance::demo(arg.length() ? arg.c_str() : "clock");
   } else if (c == "reboot") {
@@ -163,14 +214,14 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.printf("\nReedus Lite (standalone) %s\n", FW_VERSION);
-  face::begin();  // first, so there's a face while the rest comes up
+  store::begin();  // the calibration lives here: face and head read it in begin()
+  face::begin();   // then a face, while the rest comes up
   head::begin();
   battery::begin();
   xvf::begin();
-  store::begin();
   if (!audio::begin()) Serial.println("[audio] I2S init FAILED");
   wake::begin();  // before wifi + TLS, so its arena gets internal RAM
-  makeRing();
+  sounds::begin();
   relay::begin();
   face::setBattery(battery::percent());
 }

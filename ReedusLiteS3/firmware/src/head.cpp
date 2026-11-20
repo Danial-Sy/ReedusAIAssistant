@@ -2,6 +2,7 @@
 
 #include "config.h"
 #include "face.h"
+#include "store.h"
 #include "xvf.h"
 
 namespace head {
@@ -13,7 +14,7 @@ static const uint32_t SERVO_PERIOD_US = 20000;
 enum Mode : uint8_t { M_IDLE, M_LISTEN, M_THINK, M_SPEAK, M_SLEEP };
 
 static Mode mode = M_IDLE;
-static float cur = 0, target = 0;
+static float cur = 0, target = 0, vel = 0;  // deg, deg, deg/s
 static uint32_t lastUpdate = 0, arrivedAt = 0, settleUntil = 0, pendingAt = 0;
 static float pendingTarget = 0;
 static bool pending = false, attached = false, printDoa = false, manual = false;
@@ -28,6 +29,11 @@ static float lastWorld = 0, lastRel = 0;
 static uint32_t lastVoiceAt = 0;
 static int sustained = 0;
 
+// calibration: config.h's defaults, overridden by `cal` (saved in NVS, see store.cpp)
+static int centerUs = SERVO_CENTER_US, dir = SERVO_DIR, doaFront = DOA_FRONT_DEG, doaSign = DOA_SIGN;
+static int lastRaw = -1;
+static uint32_t lastRawAt = 0;
+
 static float wrap180(float a) {
   while (a > 180) a -= 360;
   while (a < -180) a += 360;
@@ -35,7 +41,7 @@ static float wrap180(float a) {
 }
 
 static void writeServo(float deg) {
-  float us = SERVO_CENTER_US + SERVO_DIR * deg * SERVO_US_PER_DEG;
+  float us = centerUs + dir * deg * SERVO_US_PER_DEG;
   uint32_t duty = (uint32_t)(us / SERVO_PERIOD_US * ((1 << SERVO_BITS) - 1));
   ledcWrite(SERVO_CH, duty);
   attached = true;
@@ -79,7 +85,11 @@ static void pollDoa(uint32_t now) {
   uint16_t raw;
   bool speech;
   if (!xvf::readDoa(raw, speech)) return;
-  float rel = wrap180(DOA_SIGN * ((float)raw - DOA_FRONT_DEG));
+  if (speech) {
+    lastRaw = raw;
+    lastRawAt = now;
+  }
+  float rel = wrap180(doaSign * ((float)raw - doaFront));
   if (printDoa)
     Serial.printf("[doa] raw=%3u rel=%+6.1f head=%+6.1f world=%+6.1f %s\n", raw, rel, cur,
                   wrap180(rel + cur), speech ? "SPEECH" : "");
@@ -107,13 +117,17 @@ static void pollDoa(uint32_t now) {
     float b;
     if (recentBearing(1200, b)) {
       lastIdleTurn = now;
-      turnTo(b, HEAD_FOLLOW_DELAY_MS);
+      turnTo(cur + wrap180(b - cur) * HEAD_TURN_SCALE, HEAD_FOLLOW_DELAY_MS);
     }
   }
 #endif
 }
 
 void begin() {
+  centerUs = constrain(store::getInt("srv_c", SERVO_CENTER_US), 800, 2200);
+  dir = store::getInt("srv_dir", SERVO_DIR) < 0 ? -1 : 1;
+  doaFront = store::getInt("doa_f", DOA_FRONT_DEG);
+  doaSign = store::getInt("doa_s", DOA_SIGN) < 0 ? -1 : 1;
   ledcSetup(SERVO_CH, 1000000 / SERVO_PERIOD_US, SERVO_BITS);
   ledcAttachPin(PIN_SERVO, SERVO_CH);
   cur = target = 0;
@@ -135,12 +149,30 @@ void update() {
   if (dt <= 0 || dt > 0.2f) dt = 0.02f;
 
   float err = target - cur;
-  if (fabsf(err) > 0.3f) {
-    // ease in/out: proportional with a speed cap, so big turns are quick and small ones soft
-    float step = constrain(err * 8.0f * dt, -HEAD_MAX_DPS * dt, HEAD_MAX_DPS * dt);
-    if (fabsf(step) < 0.15f) step = err > 0 ? 0.15f : -0.15f;
+  if (fabsf(err) > 0.3f || fabsf(vel) > 1.0f) {
+    // ramp up, cruise, ease out: the speed it wants falls off as it nears the target (so it
+    // can always stop in time), and the speed it has can only change by HEAD_ACCEL_DPS2. no
+    // instant full-speed starts, no hard stops: that's what made the SG90 look twitchy
+    float stopDist = vel * vel / (2.0f * HEAD_ACCEL_DPS2);
+    float want = 0;
+    if (fabsf(err) > 0.3f) {
+      want = sqrtf(2.0f * HEAD_ACCEL_DPS2 * fabsf(err)) * 0.9f;  // the most it can stop from
+      want = min(want, (float)HEAD_MAX_DPS);
+      if (fabsf(err) <= stopDist) want = 0;
+      if (err < 0) want = -want;
+    }
+    float dv = constrain(want - vel, -HEAD_ACCEL_DPS2 * dt, HEAD_ACCEL_DPS2 * dt);
+    vel += dv;
+    float step = vel * dt;
+    if ((err > 0 && step > err) || (err < 0 && step < err)) {  // would pass it: land exactly
+      step = err;
+      vel = 0;
+    }
     cur += step;
-    if (fabsf(target - cur) < 0.3f) cur = target;
+    if (fabsf(target - cur) < 0.3f && fabsf(vel) < 8.0f) {
+      cur = target;
+      vel = 0;
+    }
     writeServo(cur);
     arrivedAt = now;
     settleUntil = now + 300;
@@ -164,7 +196,9 @@ void onWake() {
   float b;
   if (!recentBearing(1500, b)) return;  // didn't catch it: the eyes stay put too
   face::hearVoice(wrap180(b - cur));
-  float want = constrain(b, -HEAD_LIMIT_DEG, HEAD_LIMIT_DEG);
+  // the array's bearing runs a little wide, so turn most of the way and let the eyes
+  // (already looking at the voice) cover the rest. better short than past you
+  float want = constrain(cur + wrap180(b - cur) * HEAD_TURN_SCALE, -HEAD_LIMIT_DEG, HEAD_LIMIT_DEG);
   if (fabsf(want - cur) > HEAD_DEADBAND_DEG) turnTo(want, HEAD_FOLLOW_DELAY_MS);
 }
 
@@ -181,6 +215,31 @@ void setManual(float headDeg) {
 }
 
 float angle() { return cur; }
+
+Cal cal() { return {centerUs, dir, doaFront, doaSign}; }
+
+void setCal(const Cal& c, bool save) {
+  bool moved = c.centerUs != centerUs || c.dir != dir;
+  centerUs = constrain(c.centerUs, 800, 2200);
+  dir = c.dir < 0 ? -1 : 1;
+  doaFront = ((c.doaFront % 360) + 360) % 360;
+  doaSign = c.doaSign < 0 ? -1 : 1;
+  if (save) {
+    store::putInt("srv_c", centerUs);
+    store::putInt("srv_dir", dir);
+    store::putInt("doa_f", doaFront);
+    store::putInt("doa_s", doaSign);
+  }
+  if (moved) writeServo(cur);  // show the new center right away
+  arrivedAt = millis();
+}
+
+bool lastRawDoa(int& raw, uint32_t& ageMs) {
+  if (lastRaw < 0) return false;
+  raw = lastRaw;
+  ageMs = millis() - lastRawAt;
+  return true;
+}
 bool moving() { return fabsf(target - cur) > 0.3f || pending; }
 void setDoaPrint(bool on) { printDoa = on; }
 

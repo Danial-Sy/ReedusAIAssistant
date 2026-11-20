@@ -15,6 +15,15 @@ void center();
 void setManual(float headDeg);     // serial console: point it and stay
 
 float angle();                     // where the head is now (deg, + = its left)
+
+// calibration (`cal`): servo pulse at center, which way + turns, the array's raw DoA angle
+// that means "straight out of the face", and which way its angles run
+struct Cal {
+  int centerUs, dir, doaFront, doaSign;
+};
+Cal cal();
+void setCal(const Cal& c, bool save);
+bool lastRawDoa(int& raw, uint32_t& ageMs);  // the array's last raw angle while someone spoke
 bool moving();
 void setDoaPrint(bool on);
 

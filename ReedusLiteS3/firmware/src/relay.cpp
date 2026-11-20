@@ -10,6 +10,7 @@
 #include "face.h"
 #include "glance.h"
 #include "head.h"
+#include "sounds.h"
 #include "store.h"
 #include "wake.h"
 
@@ -130,6 +131,7 @@ static void onDeviceWake(float score) {
   head::onWake();
   audio::setDuck(true);
   if (audio::playing()) audio::flush();  // barge-in: quiet now, the relay cancels the reply
+  sounds::wake();                        // the old Reedus chime: I heard you
   char b[48];
   snprintf(b, sizeof(b), "{\"type\":\"wake\",\"score\":%.2f}", score);
   ws.sendTXT(b);
@@ -138,6 +140,16 @@ static void onDeviceWake(float score) {
     sendPreroll(WAKE_PREROLL_MS);
   }
   lastSpeech = millis();  // hold the gate while the relay switches to listening
+}
+
+// "Reedus" heard with no relay to answer (offline, or before it's deployed): still react, so
+// you can tell it heard you and the head and face can be checked on the bench
+static void onLocalWake(float score) {
+  wokeAt = millis();
+  face::wake();
+  head::onWake();
+  sounds::wake();
+  Serial.printf("[wake] heard Reedus (%.2f), no relay linked so nobody answers\n", score);
 }
 
 // ---------- events from the relay ----------
@@ -154,9 +166,10 @@ static void handleText(const char* txt, size_t len) {
     listening = doc["open"] | false;
     if (!listening) lastSpeech = 0;  // let the gate close on its own schedule
   } else if (!strcmp(t, "wake")) {
-    if (millis() - wokeAt > 1500) {  // not just the echo of ours
+    if (millis() - wokeAt > 1500) {  // not just the echo of ours: the relay heard the name
       face::wake();
       head::onWake();
+      sounds::wake();
     }
     audio::setDuck(true);
   } else if (!strcmp(t, "emotion")) {
@@ -282,6 +295,7 @@ void begin() {
 void update() {
   float score;
   bool heard = wake::take(&score);  // always drained, so a stale one never fires later
+  if (heard && !connected) onLocalWake(score);
   bool up = WiFi.status() == WL_CONNECTED;
   if (!up) {
     wifiSince = 0;
