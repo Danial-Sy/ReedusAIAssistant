@@ -11,6 +11,7 @@
 #include "glance.h"
 #include "head.h"
 #include "store.h"
+#include "wake.h"
 
 #if __has_include("secrets.h")
 #include "secrets.h"
@@ -41,15 +42,20 @@ static uint32_t lastMusic = 0, musicIdleAt = 0;
 static char desc[64] = "-";
 
 // ---------- the speech gate ----------
-// nothing goes up while the room is quiet. when the XVF3800 flags speech (or the beam gets
-// loud), the last GATE_PREROLL_MS goes up first so the start of "hey reedus" isn't clipped,
-// then live audio until GATE_HOLD_MS after the voice stops. while the relay has a
-// conversation open (`listen`), everything goes up.
-static const int PREROLL = GATE_PREROLL_MS / 20;
+// nothing goes up while the room is quiet. with the wake word on the S3 (wake.cpp, and the
+// relay said wake: "device" in welcome) the gate opens only on "Reedus": the last
+// WAKE_PREROLL_MS goes up right behind the wake message, then live audio. with the relay doing
+// the wake word, it opens when the XVF3800 flags speech (or the beam gets loud) and the last
+// GATE_PREROLL_MS goes up first so the start of the name isn't clipped. either way it stays
+// open until GATE_HOLD_MS after the voice stops, and while the relay has a conversation open
+// (`listen`) everything goes up.
+static const int PREROLL = (GATE_PREROLL_MS > WAKE_PREROLL_MS ? GATE_PREROLL_MS : WAKE_PREROLL_MS) / 20;
 static int16_t* pre = nullptr;  // PREROLL frames, PSRAM
 static int preHead = 0, preCount = 0;
 static bool gateOpen = false, listening = false, gateDebug = false;
 static uint32_t lastSpeech = 0;
+static bool deviceWake = false;  // the relay trusts our wake word (welcome)
+static uint32_t wokeAt = 0;      // our last wake: the relay's echo of it doesn't replay the face
 
 static bool voiced(const int16_t* f) {
   uint32_t age;
@@ -75,10 +81,11 @@ static void pushPreroll(const int16_t* f) {
   if (preCount < PREROLL) preCount++;
 }
 
-static void sendPreroll() {
+static void sendPreroll(int ms) {
   if (!pre) return;
-  int start = (preHead - preCount + PREROLL) % PREROLL;
-  for (int i = 0; i < preCount; i++) {
+  int n = min(preCount, ms / 20);
+  int start = (preHead - n + PREROLL) % PREROLL;
+  for (int i = 0; i < n; i++) {
     ws.sendBIN((uint8_t*)(pre + ((start + i) % PREROLL) * FRAME_SAMPLES), FRAME_SAMPLES * 2);
   }
   preCount = 0;
@@ -98,9 +105,9 @@ static void micUp() {
       continue;
     }
     if (!gateOpen) {
-      if (v) {
+      if (v && !deviceWake) {
         setGate(true);
-        sendPreroll();
+        sendPreroll(GATE_PREROLL_MS);
         ws.sendBIN((uint8_t*)frame, sizeof(frame));
       } else {
         pushPreroll(frame);
@@ -113,6 +120,24 @@ static void micUp() {
       preCount = 0;
     }
   }
+}
+
+// "Reedus", heard here: react now, tell the relay, then the pre-roll and live audio (micUp).
+// the relay answers with wake + listen like it does for its own wake word
+static void onDeviceWake(float score) {
+  wokeAt = millis();
+  face::wake();
+  head::onWake();
+  audio::setDuck(true);
+  if (audio::playing()) audio::flush();  // barge-in: quiet now, the relay cancels the reply
+  char b[48];
+  snprintf(b, sizeof(b), "{\"type\":\"wake\",\"score\":%.2f}", score);
+  ws.sendTXT(b);
+  if (!gateOpen) {
+    setGate(true);
+    sendPreroll(WAKE_PREROLL_MS);
+  }
+  lastSpeech = millis();  // hold the gate while the relay switches to listening
 }
 
 // ---------- events from the relay ----------
@@ -129,8 +154,10 @@ static void handleText(const char* txt, size_t len) {
     listening = doc["open"] | false;
     if (!listening) lastSpeech = 0;  // let the gate close on its own schedule
   } else if (!strcmp(t, "wake")) {
-    face::wake();
-    head::onWake();
+    if (millis() - wokeAt > 1500) {  // not just the echo of ours
+      face::wake();
+      head::onWake();
+    }
     audio::setDuck(true);
   } else if (!strcmp(t, "emotion")) {
     face::setEmotion(doc["emotion"] | "neutral", doc["strength"] | 1.0f, doc["hold"] | 3.0f);
@@ -161,7 +188,11 @@ static void handleText(const char* txt, size_t len) {
     proto = doc["proto"] | 1;
     audio::setVolume(doc["volume"] | DEFAULT_VOLUME);
     face::setBrightness(doc["brightness"] | 100);
-    Serial.printf("[relay] linked to the relay (%s) as %s\n", desc, (const char*)(doc["device"] | "?"));
+    // an older relay says nothing about it, and runs the wake word itself
+    deviceWake = wake::ready() && !strcmp(doc["wake"] | "relay", "device");
+    Serial.printf("[relay] linked to the relay (%s) as %s, wake word %s\n", desc,
+                  (const char*)(doc["device"] | "?"),
+                  deviceWake ? "on the S3" : "on the relay (speech gate)");
   }
 }
 
@@ -176,6 +207,7 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t len) {
       hello["caps"].add("local_ring");
       hello["caps"].add("bulletin");
       if (audio::musicSupported()) hello["caps"].add("music24");
+      if (wake::ready()) hello["caps"].add("wake");  // we can say {"type":"wake"} ourselves
       hello["device"] = DEVICE_NAME;
       hello["fw"] = FW_VERSION;
       hello["token"] = LITE_TOKEN;
@@ -187,14 +219,14 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t len) {
       ws.sendTXT(out);
       lastSentBatt = -2;
       proto = 1;
-      gateOpen = listening = false;
+      gateOpen = listening = deviceWake = false;
       preCount = 0;
       break;
     }
     case WStype_DISCONNECTED:
       if (connected) Serial.println("[relay] relay link down");
       connected = false;
-      gateOpen = listening = false;
+      gateOpen = listening = deviceWake = false;
       audio::flush();
       audio::musicFlush();
       audio::setDuck(false);
@@ -248,6 +280,8 @@ void begin() {
 }
 
 void update() {
+  float score;
+  bool heard = wake::take(&score);  // always drained, so a stale one never fires later
   bool up = WiFi.status() == WL_CONNECTED;
   if (!up) {
     wifiSince = 0;
@@ -271,6 +305,7 @@ void update() {
     return;
   }
 
+  if (heard && deviceWake) onDeviceWake(score);
   micUp();
 
   uint32_t now = millis();
@@ -308,14 +343,15 @@ void update() {
   }
   if (now - lastStatus > 10000) {
     lastStatus = now;
-    char b[220];
+    char b[256];
     snprintf(b, sizeof(b),
              "{\"type\":\"status\",\"rssi\":%d,\"heap\":%u,\"psram\":%u,\"buffered_ms\":%u,"
-             "\"underruns\":%u,\"mic_drops\":%u,\"uptime\":%u,\"head\":%.0f,\"gate\":%s}",
+             "\"underruns\":%u,\"mic_drops\":%u,\"uptime\":%u,\"head\":%.0f,\"gate\":%s,"
+             "\"wake\":\"%s\"}",
              WiFi.RSSI(), (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getFreePsram(),
              (unsigned)audio::bufferedMs(), (unsigned)audio::underruns(),
              (unsigned)audio::micDropped(), (unsigned)(now / 1000), head::angle(),
-             gateOpen ? "true" : "false");
+             gateOpen ? "true" : "false", deviceWake ? "device" : "relay");
     ws.sendTXT(b);
   }
 }
@@ -324,6 +360,7 @@ bool wifiUp() { return WiFi.status() == WL_CONNECTED; }
 bool linked() { return connected; }
 bool streaming() { return connected && gateOpen; }
 bool listenOpen() { return listening; }
+bool deviceWakeOn() { return connected && deviceWake; }
 void sendJson(const char* json) {
   if (connected) ws.sendTXT(json);
 }

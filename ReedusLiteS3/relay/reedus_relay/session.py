@@ -1,12 +1,15 @@
 """one connected Reedus Lite: the conversation loop that used to run on the Xeon.
 
-    idle ──"hey reedus"──► listening ──pause──► thinking ──► speaking ──► listening (follow-up)
-      ▲                        │ nothing said                    │ "hey reedus" = barge-in
-      └────────────────────────┴──────── goodbye / silence ◄─────┘
+    idle ──"Reedus"──► listening ──pause──► thinking ──► speaking ──► listening (follow-up)
+      ▲                     │ nothing said                    │ "Reedus" = barge-in
+      └─────────────────────┴──────── goodbye / silence ◄─────┘
 
-audio up: the S3 sends 20 ms frames only while its speech gate is open, or while the relay has
-said `listen` (a conversation is going). audio down: speech frames paced against the device's
-playhead, exactly like the run box hub (ReedusLite/PROTOCOL.md), so barge-in stays instant.
+the wake word: an S3 with the `wake` cap hears "Reedus" itself and sends {"type": "wake"}
+(wake.py); for one without it the relay runs openWakeWord on what its speech gate sends.
+audio up: the S3 sends 20 ms frames only after its wake word (or while its speech gate is open),
+or while the relay has said `listen` (a conversation is going). audio down: speech frames paced
+against the device's playhead, exactly like the run box hub (ReedusLite/PROTOCOL.md), so
+barge-in stays instant.
 
 every cost in a turn (speech-to-text, LLM, web search, Inworld) is metered and taken from the
 account's pool when the turn ends; the memory gets the turn, the bulletin is refreshed once the
@@ -49,7 +52,8 @@ class Session:
         self.out: asyncio.Queue = asyncio.Queue()
         self.mode = IDLE
         self.state = "idle"
-        self.wake = wake if wake is not None else speech.wake_detector()
+        self.wake = wake if wake is not None else speech.wake_detector(hello.get("caps") or [])
+        self.device_wake = bool(getattr(self.wake, "on_device", False))
         self.ep: Optional[speech.Endpointer] = None
         self.cancel = threading.Event()
         self.task: Optional[asyncio.Task] = None
@@ -121,6 +125,7 @@ class Session:
         s = self.device.get("settings") or {}
         self.send({"type": "welcome", "proto": 3, "volume": int(s.get("volume", 70)),
                    "brightness": int(s.get("brightness", 100)),
+                   "wake": "device" if self.device_wake else "relay",
                    "account": self.account.get("name", ""), "device": self.device.get("name", "")})
         self.set_state("idle")
         self.listen(False)
@@ -172,7 +177,12 @@ class Session:
 
     def on_text(self, msg: dict) -> None:
         t = msg.get("type")
-        if t == "gate":
+        if t == "wake":
+            # the S3 heard the name. already listening: it's part of what's being said
+            self.info["wake"] = msg
+            if self.device_wake and self.mode != LISTEN:
+                self.on_wake()
+        elif t == "gate":
             if msg.get("open") and self.mode == IDLE:
                 self.wake.reset()
                 if self.wake.gate_opened():

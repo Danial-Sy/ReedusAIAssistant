@@ -1,8 +1,9 @@
 // Reedus Lite, standalone: the XIAO ESP32-S3 talks straight to the Reedus relay in the cloud
 // (ReedusLiteS3/relay on Railway). no run box. the S3 runs the body (face, head, audio, battery),
-// gates the mic so nothing streams while the room is quiet, keeps a copy of Reedus's notes
-// about you, and rings timers and alarms on its own if the link drops. the relay does the wake
-// word (for now), speech-to-text, the LLM, memory and Inworld.
+// listens for "Reedus" itself (wake.cpp) so nothing streams until the name is said, keeps a
+// copy of Reedus's notes about you, and rings timers and alarms on its own if the link drops.
+// the relay does speech-to-text, the LLM, memory and Inworld (and the wake word, for a relay
+// that doesn't trust the S3's or when the model can't load).
 // bring-up: open the serial monitor and type `help`.
 #include <Arduino.h>
 
@@ -14,6 +15,7 @@
 #include "head.h"
 #include "relay.h"
 #include "store.h"
+#include "wake.h"
 #include "xvf.h"
 
 static String line;
@@ -23,6 +25,8 @@ static void help() {
       "commands:\n"
       "  info              relay link, battery, head, face, gate\n"
       "  gate              print the speech gate opening/closing (toggle)\n"
+      "  wake              wake word: live probabilities (toggle), with memory and timing\n"
+      "  wake <0.5-0.99>   try another cutoff until reboot (keep it: WAKE_CUTOFF in config.h)\n"
       "  bulletin          what Reedus remembers about you (the copy on this device)\n"
       "  test              LED corner test (toggle): red=top-left green=top-right\n"
       "                    blue=bottom-left white=bottom-right, as seen from the front\n"
@@ -81,7 +85,7 @@ static void command(String c) {
     arg.trim();
     c = c.substring(0, sp);
   }
-  static bool testOn = false, doaOn = false, gateOn = false;
+  static bool testOn = false, doaOn = false, gateOn = false, wakeOn = false;
   if (c == "help" || c == "?") {
     help();
   } else if (c == "info") {
@@ -98,9 +102,23 @@ static void command(String c) {
                   (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getFreePsram(),
                   (unsigned)store::bulletinRev());
     Serial.printf("face %s  glance %s\n", face::describe(), glance::describe());
+    Serial.printf("wake word %s%s\n", wake::describe(),
+                  wake::ready() && relay::linked() && !relay::deviceWakeOn()
+                      ? " (the relay runs its own: speech gate)" : "");
   } else if (c == "gate") {
     gateOn = !gateOn;
     relay::setGateDebug(gateOn);
+  } else if (c == "wake") {
+    if (arg.length()) {
+      float v = arg.toFloat();
+      if (v >= 0.3f && v < 1.0f) wake::setCutoff(v);
+      Serial.printf("wake word cutoff %.2f\n", wake::cutoff());
+    } else {
+      wakeOn = !wakeOn;
+      wake::report();
+      wake::setDebug(wakeOn);
+      Serial.printf("wake word live view %s\n", wakeOn ? "on (type wake again to stop)" : "off");
+    }
   } else if (c == "bulletin") {
     String b = store::bulletin();
     Serial.printf("rev %u:\n%s\n", (unsigned)store::bulletinRev(), b.length() ? b.c_str() : "(nothing yet)");
@@ -151,6 +169,7 @@ void setup() {
   xvf::begin();
   store::begin();
   if (!audio::begin()) Serial.println("[audio] I2S init FAILED");
+  wake::begin();  // before wifi + TLS, so its arena gets internal RAM
   makeRing();
   relay::begin();
   face::setBattery(battery::percent());

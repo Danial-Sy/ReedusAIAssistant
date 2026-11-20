@@ -12,6 +12,11 @@ bool begin();
 bool popMicFrame(int16_t* out);
 uint32_t micDropped();
 
+// the wake word detector's own feed (WAKE_CHANNEL), independent of the relay link
+void startWakeFeed();  // frames are only copied after this
+bool waitWakeFrame(int16_t* out, uint32_t timeoutMs);
+uint32_t wakeDropped();
+
 // speaker
 void pushSpeech(const uint8_t* pcm, size_t bytes);  // int16 LE @ 16k, from the socket
 void flush();                                       // barge-in: drop everything queued

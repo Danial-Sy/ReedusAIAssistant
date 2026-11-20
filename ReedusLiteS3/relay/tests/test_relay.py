@@ -283,6 +283,14 @@ check(len(ep.audio()) >= 10 * 640, "endpointer keeps the speech")
 ep2 = speech.Endpointer(start_timeout=0.2)
 check([ep2.feed(SILENT) for _ in range(12)][-3:].count("timeout") >= 1, "endpointer times out on silence")
 check(speech.tone()[:2] != b"", "tone renders")
+check(strip_wake("Reedus, what's the weather") == "what's the weather", "just the name is stripped too")
+from reedus_relay import wake as wake_mod
+check(wake_mod.make("device", ["gate", "wake"]).on_device, "RELAY_WAKE=device trusts a Lite that hears the name")
+check(not wake_mod.make("device", ["gate"]).on_device, "a Lite without it falls back to openWakeWord")
+check(not wake_mod.make("model", ["wake"]).on_device and wake_mod.make("gate", ["wake"]).gate_opened(),
+      "RELAY_WAKE=model / gate override the Lite's")
+check(wake_mod.status("device")[0] and wake_mod.status("device")[1].startswith("on the Lite"),
+      "Setup counts the wake word as ready when the Lites have it")
 
 # ---------- accounts ----------
 print("[2] accounts and the pool")
@@ -295,6 +303,7 @@ check(accounts.device_for_token(dev_token)["id"] == did, "device token signs in"
 check(accounts.device_for_token("rld_nope") is None, "bad token refused")
 check(accounts.charge(aid, 0.25, "test") == 4.75, "charge comes out of the pool")
 check(accounts.top_up(aid, 0.25) == 5.0, "top-up goes back in")
+dev2_token = accounts.create_device(aid, "Kitchen Lite")["token"]
 broke = accounts.create_account("Broke", 0.0)
 broke_dev = accounts.create_device(broke["account"]["id"], "Broke Lite")
 
@@ -368,7 +377,8 @@ async def main():
 
     class S(real_session):
         def __init__(self, *a, **kw):
-            kw["wake"] = FakeWake()
+            if "wake" not in (a[4].get("caps") or []):    # a Lite that hears "Reedus" keeps its own
+                kw["wake"] = FakeWake()
             super().__init__(*a, **kw)
     import reedus_relay.server as server_mod
     server_mod.Session = S
@@ -393,6 +403,7 @@ async def main():
     ok = await d.wait_for(lambda: {"welcome", "state", "clock", "timers"} <= set(d.types()))
     check(ok, "welcome, state, clock and timers on connect")
     check(d.last("listen") == {"type": "listen", "open": False}, "starts gated (only streams on speech)")
+    check(d.last("welcome").get("wake") == "relay", "no wake cap: the relay does the wake word")
 
     print("[4] a conversation")
     SCRIPT[:] = ["Hey Reedus, I've got a physics exam on Friday"]
@@ -755,6 +766,46 @@ async def main():
     fnd.AUTO_GAP_S = 600.0
     await ask2(app2, {"action": "setup.forget", "name": "STRIPE_SECRET_KEY"})
     await app2.close()
+
+    print("[16] the wake word on the S3")
+    ws2 = await websockets.connect(url + "/lite")
+    await ws2.send(json.dumps({"type": "hello", "proto": 3, "device": "kitchen", "fw": "test",
+                               "token": dev2_token, "rate": 16000, "frame_ms": 20, "bulletin_rev": 0,
+                               "caps": ["gate", "local_ring", "bulletin", "wake"]}))
+    d2 = Device(ws2)
+    ok = await d2.wait_for(lambda: d2.last("welcome") is not None)
+    check(ok and d2.last("welcome").get("wake") == "device", "a Lite with the wake cap is told wake: device")
+    await d2.say(wake=True)                     # gate + audio (even the old marker frame), no wake message
+    await asyncio.sleep(0.4)
+    check("wake" not in d2.types() and d2.states()[-1] == "idle", "audio alone doesn't wake it (no openWakeWord)")
+    SCRIPT[:] = ["Reedus, tell me a joke about physics"]
+    n_before = len(BACKEND.calls)
+    await ws2.send(json.dumps({"type": "wake", "score": 0.95}))
+    await d2.say(wake=False)                    # the pre-roll and live audio right behind it
+    ok = await d2.wait_for(lambda: len(BACKEND.calls) > n_before and "speaking" in d2.states()
+                           and d2.states()[-1] == "listening", 6)
+    check(ok, f"the S3's wake → listening → thinking → speaking → listening ({d2.states()})")
+    check("wake" in d2.types() and {"type": "listen", "open": True} in d2.events,
+          "the relay answers the S3's wake with wake + listen")
+    check(BACKEND.calls[-1]["messages"][-1]["content"] == "tell me a joke about physics",
+          "the name is stripped from what was said after it")
+    BACKEND.slow = 0.15
+    SCRIPT[:] = ["tell me a long story"]
+    await d2.say(wake=False)
+    await d2.wait_for(lambda: d2.states()[-1] == "speaking", 6)
+    flushes = d2.flushes
+    await ws2.send(json.dumps({"type": "wake", "score": 0.97}))
+    ok = await d2.wait_for(lambda: d2.flushes > flushes and d2.states()[-1] == "listening", 3)
+    check(ok, "the S3's wake while he's talking is a barge-in")
+    BACKEND.slow = 0.0
+    n_wakes = d2.types().count("wake")
+    await ws2.send(json.dumps({"type": "wake", "score": 0.93}))
+    await asyncio.sleep(0.3)
+    check(d2.types().count("wake") == n_wakes, "a wake while already listening is ignored")
+    for _ in range(60):
+        await ws2.send(SILENT)
+    await d2.wait_for(lambda: d2.states()[-1] == "idle", 4)
+    await ws2.close()
 
     await ws.close()
     await asyncio.sleep(0.2)

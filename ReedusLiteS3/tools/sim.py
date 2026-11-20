@@ -5,9 +5,12 @@ for checking a Railway deploy (keys, wake word, voice, pool) before the S3 is fl
     python ReedusLiteS3/tools/sim.py wss://your-relay.up.railway.app rld_<device token> hello.wav
     python ReedusLiteS3/tools/sim.py ws://localhost:8080 rld_... question.wav --out reply.wav
 
-the WAV must be 16 kHz mono 16-bit (`ffmpeg -i in.m4a -ar 16000 -ac 1 hello.wav`). say
-"hey Reedus, …" in it, or run the relay with RELAY_WAKE=gate so any speech counts. the reply
-is saved to --out (default reply.wav) and every event the relay sends is printed.
+the WAV must be 16 kHz mono 16-bit (`ffmpeg -i in.m4a -ar 16000 -ac 1 hello.wav`). by default
+it acts like current firmware, which hears "Reedus" itself: it sends the wake message, then the
+WAV as what you said after the name. --relay-wake acts like older firmware instead: say
+"hey Reedus, …" in the WAV and the relay's openWakeWord has to catch it (or RELAY_WAKE=gate makes
+any speech count). the reply is saved to --out (default reply.wav) and every event the relay
+sends is printed.
 needs: pip install websockets
 """
 from __future__ import annotations
@@ -22,7 +25,8 @@ import wave
 FRAME = 640  # 20 ms at 16 kHz int16
 
 
-async def run(url: str, token: str, wav_path: str, out_path: str, wait: float) -> None:
+async def run(url: str, token: str, wav_path: str, out_path: str, wait: float,
+              device_wake: bool = True) -> None:
     import websockets
     with wave.open(wav_path, "rb") as w:
         if w.getframerate() != 16000 or w.getnchannels() != 1 or w.getsampwidth() != 2:
@@ -39,7 +43,8 @@ async def run(url: str, token: str, wav_path: str, out_path: str, wait: float) -
     async with websockets.connect(url, max_size=2 ** 20) as ws:
         await ws.send(json.dumps({"type": "hello", "proto": 3, "device": "sim", "fw": "sim",
                                   "token": token, "rate": 16000, "frame_ms": 20,
-                                  "caps": ["gate", "local_ring", "bulletin"], "bulletin_rev": 0}))
+                                  "caps": ["gate", "local_ring", "bulletin"] + (["wake"] if device_wake else []),
+                                  "bulletin_rev": 0}))
         first_audio = [0.0]
 
         async def recv():
@@ -69,6 +74,8 @@ async def run(url: str, token: str, wav_path: str, out_path: str, wait: float) -
         rx = asyncio.ensure_future(recv())
         await asyncio.sleep(1.0)
         print(f"{stamp()}  → saying {wav_path} ({len(pcm) / 32000:.1f}s)")
+        if device_wake:
+            await ws.send(json.dumps({"type": "wake", "score": 1.0}))   # "Reedus", heard on the S3
         await ws.send(json.dumps({"type": "gate", "open": True}))
         sent_end = 0.0
         for i in range(0, len(pcm), FRAME):
@@ -101,8 +108,10 @@ def main() -> None:
     ap.add_argument("wav", help="16 kHz mono 16-bit WAV of you talking")
     ap.add_argument("--out", default="reply.wav")
     ap.add_argument("--wait", type=float, default=20.0, help="seconds to wait for the reply")
+    ap.add_argument("--relay-wake", action="store_true",
+                    help="act like older firmware: the relay listens for \"hey Reedus\" in the WAV")
     a = ap.parse_args()
-    asyncio.run(run(a.url, a.token, a.wav, a.out, a.wait))
+    asyncio.run(run(a.url, a.token, a.wav, a.out, a.wait, device_wake=not a.relay_wake))
 
 
 if __name__ == "__main__":

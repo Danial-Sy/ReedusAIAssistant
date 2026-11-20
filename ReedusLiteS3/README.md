@@ -7,8 +7,8 @@ This is now the **primary** Reedus Lite. The run-box version in `ReedusLite/` is
 ```
  Reedus Lite (XIAO ESP32-S3 + XVF3800)            relay (Railway)                     the cloud
 ┌────────────────────────────────────┐  wss  ┌──────────────────────────────┐
-│ face, head, battery, glance cards  │◄─────►│ wake word ("hey reedus")     │──► speech-to-text (Gemini)
-│ speech gate: mic up only on a voice│ 16 kHz│ endpointing, barge-in        │──► Reedus: persona + memory
+│ face, head, battery, glance cards  │◄─────►│ endpointing, barge-in        │──► speech-to-text (Gemini)
+│ "Reedus" wake word: mic up after it│ 16 kHz│ (openWakeWord: older fw only)│──► Reedus: persona + memory
 │ speaker, ducking, music mixing     │  PCM  │ timers / alarms / lists      │    on Gemini / Claude / GPT…
 │ ring tone, rings on its own        │ + JSON│ memory: bulletin + history   │──► Inworld (his voice)
 │ bulletin copy in flash             │       │ funding pool, metering       │
@@ -21,10 +21,10 @@ This is now the **primary** Reedus Lite. The run-box version in `ReedusLite/` is
 | | ESP32-S3 | relay | provider |
 |---|---|---|---|
 | Face, head, battery, glance screens, audio I/O | ✅ | | |
-| Speech gate (stream only while someone's talking) | ✅ | | |
+| Mic gate (nothing streams until "Reedus", or while a conversation is open) | ✅ | | |
 | Timer countdowns, ringing (also when the link is down) | ✅ | decides | |
 | Bulletin copy (offline memory) | ✅ | source of truth | |
-| "Hey Reedus" | phase 2 | ✅ phase 1 | |
+| "Reedus" (the wake word) | ✅ microWakeWord | fallback for older firmware (openWakeWord "hey reedus") | |
 | End of sentence, barge-in, follow-ups without the name | | ✅ | |
 | Timers, alarms, reminders, lists (the run box's `assist` code) | | ✅ | |
 | Persona (the robot's own `persona.py`), conversation history | | ✅ | |
@@ -55,7 +55,7 @@ Four steps. Only the first happens on Railway's website; the rest is in ReedOS.
    | `TZ` | your timezone, e.g. `America/Chicago`, so "7 am" means your 7 am |
 
    Keys can still be Railway variables if you prefer (`GEMINI_API_KEY`, `INWORLD_API_KEY`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, …); a key saved in ReedOS overrides the variable.
-4. **The wake word model**: copy `hey_reedus.onnx` from the run box (`$REEDUS_ROOT/wakeword/`) into `ReedusLiteS3/relay/models/` and commit it. Without it Lite won't wake, and both the log and ReedOS's Setup say so. For a first test you can set `RELAY_WAKE=gate`, which makes any speech near Lite count as the wake word.
+4. **The wake word** needs nothing on Railway: the S3 hears "Reedus" itself (`firmware/src/wake.cpp`) and the relay trusts it (`RELAY_WAKE=device`, the default). Only a Lite on older firmware needs the relay's openWakeWord model: copy `hey_reedus.onnx` from the run box (`$REEDUS_ROOT/wakeword/`) into `ReedusLiteS3/relay/models/` and commit it. `RELAY_WAKE=model` makes every Lite use that one (they fall back to their speech gate); `RELAY_WAKE=gate` makes any speech near Lite count as the wake word, for a first test.
 5. *Settings* → *Networking* → **Generate Domain**. That's your relay, e.g. `reedus-relay.up.railway.app`. `https://<that>/health` should say `reedus relay ok`. Stripe sends people back to this address; if you use a custom domain instead, set `RELAY_PUBLIC_URL=https://<it>`.
 
 ### 2. Make your account
@@ -79,7 +79,7 @@ Open `https://<relay>/` on your phone or laptop (add it to the home screen if yo
 | **A brain** | Pick Gemini, Claude, GPT, OpenRouter, Grok, DeepSeek, Groq or Mistral. It shows where to get that key, step by step, and that the account needs money on it. Paste the key; the relay tests it with one tiny request and only saves it if it works. Your first brain key also becomes what Reedus thinks with |
 | **His voice** | The Inworld key, same way |
 | **A Lite** | Name it, and you get its `secrets.h` with the device token and your relay's address already filled in. The token is shown once |
-| **"Hey Reedus"** | Whether the relay has the wake word model (step 1.4) |
+| **Wake word** | "on the Lite" with current firmware; with `RELAY_WAKE=model`, whether the relay has the openWakeWord model (step 1.4) |
 | **One-tap top-ups** (optional) | A Stripe key. It explains test vs live mode and suggests a restricted key that can only make Checkout pages |
 | **Money in the pool** | Top up from the Pool card |
 
@@ -96,11 +96,11 @@ Keys are stored in the relay's Postgres, are only ever shown as `sk-a…good`, a
    ```bash
    cd ReedusLiteS3/firmware && pio run -t upload && pio device monitor
    ```
-4. The serial monitor's `help` lists everything. `info` shows the relay link and whether the mic is streaming, `gate` prints the speech gate opening and closing (tune `GATE_RMS` with it), `bulletin` shows what Reedus remembers.
+4. The serial monitor's `help` lists everything. `info` shows the relay link, whether the mic is streaming and where the wake word runs, `wake` shows its live probabilities with its memory and timing (`wake 0.95` tries another cutoff), `gate` prints the gate opening and closing (tune `GATE_RMS` with it, for the relay-side fallback), `bulletin` shows what Reedus remembers.
 
 Flash the XVF3800's I2S master firmware first, exactly as for the run-box Lite (`ReedusLite/WIRING.md`).
 
-**Before flashing**, you can talk to the relay from the laptop: record "Hey Reedus, what's the weather like?" as a 16 kHz mono WAV and run `python ReedusLiteS3/tools/sim.py wss://<relay> <device token> hello.wav`. It prints every event and the reply latency, and saves his answer to `reply.wav`.
+**Before flashing**, you can talk to the relay from the laptop: record "What's the weather like?" as a 16 kHz mono WAV and run `python ReedusLiteS3/tools/sim.py wss://<relay> <device token> hello.wav`. It acts like the S3 after hearing "Reedus" (`--relay-wake` acts like older firmware: then say "Hey Reedus, …" in the WAV), prints every event and the reply latency, and saves his answer to `reply.wav`.
 
 ## ReedOS, with the Xeon off
 
@@ -124,20 +124,22 @@ Every cloud cost (speech-to-text, the LLM, web searches, Inworld) is metered per
 ## Status
 
 Verified on this laptop:
-- `relay/tests/test_relay.py`: 121 checks, end to end over real WebSockets with the cloud services faked. Covers wake → listen → think → speak → follow-up, paced speech, the timer fast path, barge-in, the pool, memory (history, recall, bulletin folding and push), the app API and admin, the relay serving ReedOS (no files outside the app folder), Setup (owner-only, keys tested before they're saved, never sent back whole), top-ups against a fake Stripe (credited once, a foreign return address refused, an abandoned tab credited by the reconciler), and auto top-up (card saved through Checkout, refill only under the line, the 10-minute gap and daily cap, unique idempotency keys, a decline and a 3-D Secure request switching it off with the reason, Remove card detaching it).
+- `relay/tests/test_relay.py`: 134 checks, end to end over real WebSockets with the cloud services faked. Covers wake → listen → think → speak → follow-up, the S3's own wake word (told `wake: device`, audio alone never wakes it, its `wake` starts a conversation or barges in, ignored while listening), paced speech, the timer fast path, barge-in, the pool, memory (history, recall, bulletin folding and push), the app API and admin, the relay serving ReedOS (no files outside the app folder), Setup (owner-only, keys tested before they're saved, never sent back whole), top-ups against a fake Stripe (credited once, a foreign return address refused, an abandoned tab credited by the reconciler), and auto top-up (card saved through Checkout, refill only under the line, the 10-minute gap and daily cap, unique idempotency keys, a decline and a 3-D Secure request switching it off with the reason, Remove card detaching it).
 - ReedOS's Standalone Lite page against a real local relay (fake LLM, fake Lite connected), in the browser: sign-in (a wrong token and a revoked saved token are both refused clearly), pool and ledger, switching to Claude, volume reaching the connected Lite live, editing notes (pushed to the Lite), chat (the Chat tab included), phone width, and the demo. Then Setup and top-ups against a real local relay and a fake Stripe whose checkout page pays and redirects back: bad keys refused with the reason, good keys saved, the first Claude key switching the brain, a $20 top-up landing in the pool, cancelling, and adding a Lite with its secrets.h. And auto top-up end to end: a top-up with "save my card" (card shown as Visa •••• 4242, auto on), raising the threshold to $5, spending in chat until the pool fell under it, exactly one off-session $10 charge refilling it, and Remove card detaching it at Stripe.
 - A real local relay with no API keys, driven by `tools/sim.py`: it fails politely (confused face, back to idle, the missing key named in the log).
-- The firmware **compiles** for `seeed_xiao_esp32s3` (RAM 26.7%, flash 28.8%), both with a pinned certificate and without.
+- The firmware **compiles** for `seeed_xiao_esp32s3` with the wake word (RAM 20.1%, flash 34.9%; without it 19.6% / 28.7%: TFLite Micro with ESP-NN plus the 62 KB model is ~210 KB of flash).
+- The wake word's feature path, built on the laptop from the same sources (`firmware/tools/check_wake_features.py`, 361 clips: held-out Kokoro voices, sound-alikes, espeak, 5 min of LibriSpeech): the spectrogram is bit-identical to pymicro_features (what microWakeWord trains on), the int8 inputs are never more than one step from exact quantization, and the device's detector wakes on the same clips as `wakeword/mww_eval.py`'s path (358–360 of 361; the rest sit right at the cutoff).
 
 Not verified yet:
 - Anything on the real S3: TLS memory with a live audio stream, the gate threshold, the ring tone volume.
+- The wake word on the real S3: inference time and heap (`wake` prints both), which I2S slot hears it best (`WAKE_CHANNEL`), whether 250 ms of pre-roll keeps the first word without the end of the name, and recall on your voice through the XVF3800 (`wakeword/README.md`).
 - Real Gemini / Inworld / Stripe calls through the relay (the key tests and Checkout are written against their documented APIs, but only fakes have answered), and the relay's Postgres code path. Tests use SQLite; the SQL is written for both, but only SQLite has run.
 - A Railway deploy.
 
 ## Roadmap
 
 1. **Bring-up (next):** deploy, run `sim.py`, flash, tune `GATE_RMS`, measure reply latency.
-2. **Wake word on the S3** (microWakeWord): nothing leaves Lite until you say the name, and the relay stops running openWakeWord.
+2. **Wake word on the S3** (microWakeWord): in the firmware. Nothing leaves Lite until you say "Reedus", and the relay runs openWakeWord only for older firmware. Left: check it on the bench (`wake`) and on your own voice.
 3. ~~**ReedOS standalone mode.**~~ Done: Settings → Standalone Lite, and the relay serves the app.
 4. ~~**One-tap funding and easy setup.**~~ Done: Stripe Checkout top-ups, auto top-up from a saved card, and the Setup checklist in ReedOS.
 5. **Offline mode:** if the relay is unreachable, the S3 calls Gemini and Inworld directly with the cached bulletin.
@@ -147,7 +149,8 @@ Not verified yet:
 
 | | |
 |---|---|
-| `firmware/` | PlatformIO project. The hardware modules are forked from `ReedusLite/firmware` (same board); `relay.cpp` (link + speech gate), `store.cpp` (bulletin in NVS) and local ringing in `glance.cpp` are new |
+| `firmware/` | PlatformIO project. The hardware modules are forked from `ReedusLite/firmware` (same board); `relay.cpp` (link + mic gate), `wake.cpp` (the wake word, on TFLite Micro from `nickjgniklu/ESP_TF`), `lib/microfrontend` (the spectrogram, same code microWakeWord trains with), `store.cpp` (bulletin in NVS) and local ringing in `glance.cpp` are new |
+| `firmware/tools/` | `embed_wake_model.py` (builds the model into the firmware on every `pio run`), `check_wake_features.py` (the laptop check above) |
 | `relay/reedus_relay/` | `server.py` (sockets, app API), `session.py` (one Lite's conversation loop), `brain.py`, `speech.py`, `wake.py`, `memory.py`, `accounts.py`, `meter.py`, `assist_store.py`, `db.py` |
 | `relay/Dockerfile`, `relay/railway.json` | the Railway build (context = repo root) |
 | `relay/tests/test_relay.py` | the end-to-end test: `python ReedusLiteS3/relay/tests/test_relay.py` |
@@ -155,3 +158,4 @@ Not verified yet:
 | `ReedOS/reedos-app/src/js/relay.js`, `js/standalone.js`, `js/setup.js` | the app's relay client, the Standalone Lite page, and its Setup checklist |
 | `relay/reedus_relay/vault.py`, `funding.py` | keys set from ReedOS (tested, owner-only), and Stripe Checkout top-ups |
 | `PROTOCOL.md` | the wire protocol (v3) and the app API |
+| `wakeword/` | the on-device "Reedus" wake word: the trained model, and the pipeline that makes it (see its README) |

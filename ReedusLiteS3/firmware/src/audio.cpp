@@ -35,6 +35,9 @@ static const float FIR[NTAPS] = {
 
 static QueueHandle_t micQ;
 static volatile uint32_t micDrops = 0;
+// the wake word's own copy of the mic (WAKE_CHANNEL), made once wake.cpp asks for it
+static QueueHandle_t wakeQ = nullptr;
+static volatile uint32_t wakeDrops = 0;
 
 // speech ring (int16 @16k), producer = websocket callback, consumer = audio task
 static int16_t* ring = nullptr;
@@ -78,6 +81,9 @@ static int32_t rxBuf[I2S_FRAMES * 2];
 static int32_t txBuf[I2S_FRAMES * 2];
 // filter state: input history, newest last
 static float micHist[NTAPS - 1 + I2S_FRAMES];
+#if WAKE_CHANNEL != MIC_CHANNEL
+static float wakeHist[NTAPS - 1 + I2S_FRAMES];
+#endif
 static float spkHist[NTAPS / 3 - 1 + FRAME_SAMPLES];
 
 static void mPush(const int16_t* s, size_t n) {
@@ -162,12 +168,11 @@ static size_t ringPop(int16_t* out, size_t n) {
   return got;
 }
 
-// I2S RX (I2S_FRAMES stereo @ I2S_RATE) -> FRAME_SAMPLES mono @16k
-static void micDown(int16_t* out) {
+// I2S RX (I2S_FRAMES stereo @ I2S_RATE), one slot -> FRAME_SAMPLES mono @16k
+static void micDown(int16_t* out, int channel, float* x) {
   const int H = NTAPS - 1;
-  float* x = micHist;
   for (size_t i = 0; i < I2S_FRAMES; i++)
-    x[H + i] = (float)(rxBuf[i * 2 + MIC_CHANNEL] >> 16) * MIC_GAIN;
+    x[H + i] = (float)(rxBuf[i * 2 + channel] >> 16) * MIC_GAIN;
   for (size_t n = 0; n < FRAME_SAMPLES; n++) {
     float acc;
     if (R == 1) {
@@ -205,6 +210,16 @@ static void spkUp(const float* in, float* out) {
   memmove(x, &x[FRAME_SAMPLES], H * sizeof(float));
 }
 
+// newest audio wins when the reader is behind
+static void sendNewest(QueueHandle_t q, const MicFrame* f, volatile uint32_t* drops) {
+  if (xQueueSend(q, f, 0) != pdTRUE) {
+    MicFrame old;
+    xQueueReceive(q, &old, 0);
+    xQueueSend(q, f, 0);
+    (*drops)++;
+  }
+}
+
 static void audioTask(void*) {
   static int16_t play[FRAME_SAMPLES];
   static float playF[FRAME_SAMPLES];
@@ -217,12 +232,16 @@ static void audioTask(void*) {
     size_t n = 0;
     i2s_read(PORT, rxBuf, sizeof(rxBuf), &n, portMAX_DELAY);
     if (n == sizeof(rxBuf)) {
-      micDown(f.s);
-      if (xQueueSend(micQ, &f, 0) != pdTRUE) {  // net is behind: keep the newest audio
-        MicFrame old;
-        xQueueReceive(micQ, &old, 0);
-        xQueueSend(micQ, &f, 0);
-        micDrops++;
+      micDown(f.s, MIC_CHANNEL, micHist);
+      sendNewest(micQ, &f, &micDrops);  // net is behind: keep the newest audio
+      if (wakeQ) {
+#if WAKE_CHANNEL != MIC_CHANNEL
+        static MicFrame w;
+        micDown(w.s, WAKE_CHANNEL, wakeHist);
+        sendNewest(wakeQ, &w, &wakeDrops);
+#else
+        sendNewest(wakeQ, &f, &wakeDrops);
+#endif
       }
     }
 
@@ -275,6 +294,9 @@ bool begin() {
     if (!mring) return false;
   }
   memset(micHist, 0, sizeof(micHist));
+#if WAKE_CHANNEL != MIC_CHANNEL
+  memset(wakeHist, 0, sizeof(wakeHist));
+#endif
   memset(spkHist, 0, sizeof(spkHist));
   micQ = xQueueCreate(25, sizeof(MicFrame));  // 0.5 s of slack for a wifi hiccup
   setVolume(DEFAULT_VOLUME);
@@ -317,6 +339,19 @@ bool popMicFrame(int16_t* out) {
 }
 
 uint32_t micDropped() { return micDrops; }
+
+void startWakeFeed() {
+  if (!wakeQ) wakeQ = xQueueCreate(10, sizeof(MicFrame));  // 200 ms
+}
+
+bool waitWakeFrame(int16_t* out, uint32_t timeoutMs) {
+  MicFrame f;
+  if (!wakeQ || xQueueReceive(wakeQ, &f, pdMS_TO_TICKS(timeoutMs)) != pdTRUE) return false;
+  memcpy(out, f.s, sizeof(f.s));
+  return true;
+}
+
+uint32_t wakeDropped() { return wakeDrops; }
 
 void pushSpeech(const uint8_t* pcm, size_t bytes) {
   // websocket frames are always whole samples from our server, but don't trust it

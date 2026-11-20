@@ -200,7 +200,14 @@ def tone(freq: float = 880.0, secs: float = 0.12, level: float = 0.25) -> bytes:
     return (x * 32767).astype("<i2").tobytes()
 
 
-def wake_detector():
-    """The 'hey reedus' detector, or a stand-in chosen by RELAY_WAKE (see wake.py)."""
+def wake_detector(caps=None):
+    """One Lite's wake word: its own ("wake" in its hello caps), openWakeWord, or a stand-in,
+    as RELAY_WAKE says (see wake.py)."""
     from reedus_relay.wake import make
-    return make(os.environ.get("RELAY_WAKE", "model"))
+    return make(os.environ.get("RELAY_WAKE", "device"), caps)
+
+
+def wake_status() -> tuple:
+    """(ready, description) of the relay's wake word setup, for ReedOS's Setup."""
+    from reedus_relay.wake import status
+    return status(os.environ.get("RELAY_WAKE", "device"))

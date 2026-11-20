@@ -265,13 +265,12 @@ class Hub:
 
     # ---------- Setup: the checklist, keys, tests ----------
     def wake_status(self) -> tuple:
-        if not hasattr(self, "_wake_desc"):
+        if not hasattr(self, "_wake"):
             try:
-                desc = speech.wake_detector().describe()
+                self._wake = speech.wake_status()
             except Exception as e:                               # noqa: BLE001
-                desc = f"NONE: {e}"
-            self._wake_desc = desc
-        return (not self._wake_desc.startswith("NONE")), self._wake_desc
+                self._wake = (False, f"NONE: {e}")
+        return self._wake
 
     def _setup(self, a: str, req: dict, acc: Optional[dict], owner: bool) -> dict:
         from reedus_relay import funding, vault
@@ -326,7 +325,8 @@ class Hub:
             {"id": "lite", "title": "Lite", "done": bool(devs),
              "detail": f"{len(devs)} added, {online} online" if devs else "add one"},
             {"id": "wake", "title": "Wake word", "done": wake_ok,
-             "detail": "ready" if wake_ok else "no model yet"},
+             "detail": ("on the Lite" if wake_desc.startswith("on the Lite") else "ready")
+             if wake_ok else "no model yet"},
             {"id": "payments", "title": "Top-ups", "done": funding.enabled(), "optional": True,
              "detail": f"Stripe ({vault.stripe_mode()} mode)" if funding.enabled() else "add a Stripe key"},
             {"id": "pool", "title": "Pool", "done": bal > 0,

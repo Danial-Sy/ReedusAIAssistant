@@ -1,0 +1,13 @@
+{
+  "name": "microfrontend",
+  "version": "2.0.2",
+  "description": "The TFLite Micro audio frontend (spectrogram features for microWakeWord), as vendored by rhasspy/pymicro-features 2.0.2, plus mww_features: the frontend configured the way microWakeWord trains and ESPHome's micro_wake_word runs it.",
+  "license": "Apache-2.0",
+  "frameworks": "*",
+  "platforms": "*",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src",
+    "srcFilter": ["+<*>", "-<mfe_kissfft/>"]
+  }
+}

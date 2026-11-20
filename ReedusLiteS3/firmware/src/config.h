@@ -15,6 +15,22 @@
 #define GATE_RMS 700.0f            // MEASURE with `gate`: beam level (int16 RMS) that counts as a
                                    // voice when the XVF3800's own speech flag hasn't fired
 
+// ---------- the wake word, on the S3 (wake.cpp) ----------
+// "Reedus" (microWakeWord, ReedusLiteS3/wakeword/models). when the relay agrees (welcome says
+// wake: "device"), the mic stays here until the name is heard, and the speech gate above is
+// only the fallback for a relay that runs openWakeWord itself
+#define WAKE_ON_DEVICE 1           // 0: don't load the model; the relay does the wake word
+#define WAKE_CHANNEL MIC_CHANNEL   // MEASURE: the I2S slot it listens to. on the 48 kHz master
+                                   // firmware slot 1 is the XVF3800's wake-word beam
+#define WAKE_CUTOFF 0.0f           // 0 = the manifest's probability_cutoff (0.90). higher: fewer
+                                   // false wakes, more misses. try values live with `wake 0.95`
+#define WAKE_PREROLL_MS 250        // audio from just before the detection that goes up with it:
+                                   // the detector fires ~0.2 s after the name ends, so "Reedus
+                                   // what time is it" in one breath keeps its first word
+#define WAKE_REFRACTORY_MS 2000    // one "Reedus" = one wake
+#define WAKE_WARMUP_SLICES 100     // ignore the first second (the noise estimate settling)
+#define WAKE_TASK_CORE 0           // wifi's core has the idle time; audio + the loop are on 1
+
 // ---------- ringing on its own (glance.cpp localTick) ----------
 #define LOCAL_RING_MAX_MS 60000    // a timer/alarm the relay never rang: ring here for a minute
 
