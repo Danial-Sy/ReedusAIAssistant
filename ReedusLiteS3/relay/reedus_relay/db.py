@@ -18,7 +18,7 @@ SCHEMA = [
     """CREATE TABLE IF NOT EXISTS accounts (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        token_hash TEXT NOT NULL,          -- the ReedOS app signs in with this account token
+        token_hash TEXT NOT NULL,          -- the first sign-in token (later ones: app_tokens)
         balance_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
         spent_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
         settings TEXT NOT NULL DEFAULT '{}',
@@ -48,7 +48,7 @@ SCHEMA = [
         usd DOUBLE PRECISION NOT NULL DEFAULT 0)""",
     "CREATE INDEX IF NOT EXISTS turns_account_at ON turns(account_id, at)",
     """CREATE TABLE IF NOT EXISTS secrets (
-        name TEXT PRIMARY KEY,             -- e.g. GEMINI_API_KEY, set from ReedOS Setup (vault.py)
+        name TEXT PRIMARY KEY,             -- e.g. GEMINI_API_KEY, set on the website (vault.py)
         value TEXT NOT NULL,
         updated DOUBLE PRECISION NOT NULL)""",
     """CREATE TABLE IF NOT EXISTS topups (
@@ -60,6 +60,16 @@ SCHEMA = [
         kind TEXT NOT NULL DEFAULT 'checkout',  -- checkout | auto (off-session, saved card)
         save_card INTEGER NOT NULL DEFAULT 0,   -- checkout that also saves the card for auto top-up
         detail TEXT NOT NULL DEFAULT '',
+        created DOUBLE PRECISION NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS app_tokens (
+        token_hash TEXT PRIMARY KEY,       -- one per signed-in browser (the site mints these)
+        account_id TEXT NOT NULL REFERENCES accounts(id),
+        created DOUBLE PRECISION NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS codes (
+        code TEXT PRIMARY KEY,             -- invite links and sign-in-on-another-device codes
+        kind TEXT NOT NULL,                -- invite | login
+        account_id TEXT NOT NULL,          -- invite: who invited; login: who signs in
+        expires DOUBLE PRECISION NOT NULL,
         created DOUBLE PRECISION NOT NULL)""",
     """CREATE TABLE IF NOT EXISTS ledger (
         id BIGSERIAL PRIMARY KEY,

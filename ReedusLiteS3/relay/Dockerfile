@@ -30,8 +30,8 @@ COPY reedus_llm/reedus_companion/voice/__init__.py reedus_llm/reedus_companion/v
 COPY reedus_llm/reedus_companion/data/__init__.py reedus_llm/reedus_companion/data/reedus_voice.jsonl \
      /app/reedus_llm/reedus_companion/data/
 COPY ReedusLiteS3/relay /app/relay
-# the ReedOS app, served at the relay's root so it works with the Xeon off
-COPY ReedOS/reedos-app/src /app/ui
+# the website (setup, pairing, credit, chat), served at the relay's root
+COPY ReedusLiteS3/web /app/ui
 
 RUN mkdir -p /data /app/reedus_llm/reedus_companion/memory
 EXPOSE 8080

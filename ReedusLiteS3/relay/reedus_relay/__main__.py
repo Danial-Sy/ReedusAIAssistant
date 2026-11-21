@@ -1,5 +1,5 @@
 """python -m reedus_relay                     run the relay (Railway runs this)
-python -m reedus_relay account "Danial" 10  make an account with $10 in its pool; prints the app token
+python -m reedus_relay account "Your name" 10  make an account with $10 in its pool; prints the app token
 python -m reedus_relay device <account-id> "Desk Lite"   add a Lite; prints the device token
 python -m reedus_relay topup <account-id> 20             add $20 to the pool
 python -m reedus_relay accounts                          list accounts and balances
@@ -32,7 +32,7 @@ def _setup() -> None:
     mode.set_current(mode.CLOUD)
     from reedus_relay import meter, vault
     meter.install()
-    vault.load()          # keys saved from ReedOS Setup override Railway variables
+    vault.load()          # keys saved on the website override Railway variables
 
 
 def main(argv=None) -> None:
@@ -43,7 +43,7 @@ def main(argv=None) -> None:
         out = accounts.create_account(argv[1] if len(argv) > 1 else "Reedus",
                                       float(argv[2]) if len(argv) > 2 else 0.0)
         print(f"account {out['account']['id']}  balance ${out['account']['balance_usd']:.2f}")
-        print(f"app token (ReedOS signs in with this, shown once): {out['token']}")
+        print(f"app token (shown once): {out['token']}")
         return
     if argv and argv[0] == "device":
         out = accounts.create_device(argv[1], argv[2] if len(argv) > 2 else "Reedus Lite")
@@ -73,7 +73,7 @@ async def _run() -> None:
     print(f"[relay] speech-to-text: {speech.stt_provider()}  wake: {speech.wake_detector().describe()}",
           flush=True)
     server = await serve(Hub())
-    print(f"[relay] listening on {config.HOST}:{config.PORT} (/lite devices, /app ReedOS, /health)",
+    print(f"[relay] listening on {config.HOST}:{config.PORT} (/ website, /lite devices, /app, /health)",
           flush=True)
     asyncio.ensure_future(_reconcile_forever())
     await server.serve_forever()

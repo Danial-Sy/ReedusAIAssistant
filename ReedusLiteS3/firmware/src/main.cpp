@@ -24,7 +24,10 @@ static String line;
 static void help() {
   Serial.println(
       "commands:\n"
-      "  info              relay link, battery, head, face, gate\n"
+      "  info              relay link, pairing, battery, head, face, gate\n"
+      "  unpair            forget this Lite's token: it shows a new pairing code\n"
+      "  wifi <ssid> <pw>  join another network (saved; the password is the last word,\n"
+      "                    `-` for an open network). `wifi` alone shows what's saved\n"
       "  gate              print the speech gate opening/closing (toggle)\n"
       "  wake              wake word: live probabilities (toggle), with memory and timing\n"
       "  wake <0.5-0.99>   try another cutoff until reboot (keep it: WAKE_CUTOFF in config.h)\n"
@@ -140,6 +143,9 @@ static void command(String c) {
                   relay::wifiUp() ? "up" : "down", relay::linked() ? "linked" : "down",
                   relay::serverDesc(), relay::streaming() ? "streaming" : "gated",
                   relay::listenOpen() ? " (conversation open)" : "");
+    if (relay::paired()) Serial.println("paired: yes");
+    else if (relay::pairingCode()[0]) Serial.printf("paired: no, pairing code %s\n", relay::pairingCode());
+    else Serial.println("paired: no (a code shows once the relay is reachable)");
     Serial.printf("xvf3800 %s  head %.1f deg  vol %d  buffered %u ms  underruns %u  mic drops %u\n",
                   xvf::present() ? "ok" : "MISSING", head::angle(), audio::volume(),
                   (unsigned)audio::bufferedMs(), (unsigned)audio::underruns(),
@@ -203,6 +209,21 @@ static void command(String c) {
     calCommand(arg);
   } else if (c == "glance") {
     glance::demo(arg.length() ? arg.c_str() : "clock");
+  } else if (c == "unpair") {
+    relay::unpair();
+  } else if (c == "wifi") {
+    int last = arg.lastIndexOf(' ');
+    if (!arg.length()) {
+      String s = store::wifiSsid();
+      Serial.printf("wifi: %s\n", s.length() ? s.c_str() : "from secrets.h");
+    } else if (last <= 0) {
+      Serial.println("wifi <network name> <password>   (`-` as the password for an open network)");
+    } else {
+      String ssid = arg.substring(0, last), pass = arg.substring(last + 1);
+      ssid.trim();
+      if (pass == "-") pass = "";
+      relay::setWifi(ssid.c_str(), pass.c_str());
+    }
   } else if (c == "reboot") {
     ESP.restart();
   } else if (c.length()) {
@@ -242,7 +263,7 @@ void loop() {
     if (ch == '\n' || ch == '\r') {
       if (line.length()) command(line);
       line = "";
-    } else if (line.length() < 64) {
+    } else if (line.length() < 160) {  // room for `wifi <ssid> <password>`
       line += ch;
     }
   }

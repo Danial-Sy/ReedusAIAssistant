@@ -61,7 +61,9 @@ def block(n: Optional[int] = None) -> str:
     except ValueError:
         limit = 14
 
-    usable = [(u, a) for u, a in _pairs(path) if 16 <= len(a) <= 200]
+    # no exchange that teaches him a name: Lite talks to whoever's account it is
+    usable = [(u, a) for u, a in _pairs(path) if 16 <= len(a) <= 200
+              and "my name" not in u.lower() and "name is" not in u.lower()]
     if not usable:
         _CACHE = ""
         return _CACHE

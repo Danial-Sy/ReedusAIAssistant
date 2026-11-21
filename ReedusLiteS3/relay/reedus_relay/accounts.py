@@ -1,7 +1,7 @@
 """accounts, devices and the shared pool of funds.
 
 an account is a person (or household): one balance that every cloud cost comes out of (LLM,
-speech-to-text, Inworld, web searches), one memory, one ReedOS sign-in. devices belong to an
+speech-to-text, Inworld, web searches), one memory, its own sign-ins. devices belong to an
 account; each S3 has its own token so a lost Lite can be revoked without touching the rest.
 
 tokens are random, shown once, stored only as sha256 hashes.
@@ -28,7 +28,7 @@ def new_token(prefix: str) -> str:
 # ---------- accounts ----------
 def create_account(name: str, balance_usd: float = 0.0, owner: Optional[bool] = None) -> dict:
     """Returns the account and its app token (the only time the token is visible).
-    The first account on a relay is its owner: it can set the relay's keys from ReedOS."""
+    The first account on a relay is its owner: it can set the relay's keys from the website."""
     d = db()
     aid = uuid.uuid4().hex[:12]
     token = new_token("rla")
@@ -57,10 +57,87 @@ def is_owner(acc: Optional[dict]) -> bool:
 
 
 def account_for_token(token: str) -> Optional[dict]:
-    row = db().one("SELECT id, token_hash FROM accounts WHERE token_hash = %s", (_hash(token),))
-    if row and hmac.compare_digest(row["token_hash"], _hash(token)):
+    """The account behind an app token: the original one, or any browser signed in since."""
+    if not token:
+        return None
+    h = _hash(token)
+    row = db().one("SELECT id, token_hash FROM accounts WHERE token_hash = %s", (h,))
+    if row and hmac.compare_digest(row["token_hash"], h):
         return account(row["id"])
+    row = db().one("SELECT account_id, token_hash FROM app_tokens WHERE token_hash = %s", (h,))
+    if row and hmac.compare_digest(row["token_hash"], h):
+        return account(row["account_id"])
     return None
+
+
+_claimed = False
+
+
+def claimed() -> bool:
+    """Has anyone set this relay up yet? (The first account is its owner.)"""
+    global _claimed
+    if not _claimed:
+        _claimed = db().one("SELECT id FROM accounts LIMIT 1") is not None
+    return _claimed
+
+
+def owner_account() -> Optional[dict]:
+    for r in db().all("SELECT id FROM accounts ORDER BY created"):
+        acc = account(r["id"])
+        if is_owner(acc):
+            return acc
+    return None
+
+
+def members() -> list:
+    rows = db().all("SELECT id, name, balance_usd, spent_usd, settings, created FROM accounts ORDER BY created")
+    return [{"id": r["id"], "name": r["name"], "balance": round(float(r["balance_usd"]), 4),
+             "spent": round(float(r["spent_usd"]), 4), "owner": bool(db().loads(r["settings"]).get("owner"))}
+            for r in rows]
+
+
+def new_app_token(aid: str) -> str:
+    """Sign one more browser in to an account. Returns the token (shown once, stored hashed)."""
+    token = new_token("rla")
+    d = db()
+    d.execute("INSERT INTO app_tokens (token_hash, account_id, created) VALUES (%s, %s, %s)",
+              (_hash(token), aid, d.now()))
+    return token
+
+
+def drop_app_token(token: str) -> None:
+    db().execute("DELETE FROM app_tokens WHERE token_hash = %s", (_hash(token),))
+
+
+# ---------- short codes: invite links, signing in on another device ----------
+_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"     # no 0/O, 1/I/L
+
+
+def make_code(kind: str, aid: str, ttl_s: float, digits: bool = False) -> str:
+    d = db()
+    d.execute("DELETE FROM codes WHERE expires < %s", (d.now(),))
+    for _ in range(20):
+        code = (f"{secrets.randbelow(10 ** 6):06d}" if digits
+                else "".join(secrets.choice(_CODE_ALPHABET) for _ in range(8)))
+        if not d.one("SELECT code FROM codes WHERE code = %s", (code,)):
+            d.execute("INSERT INTO codes (code, kind, account_id, expires, created) VALUES (%s, %s, %s, %s, %s)",
+                      (code, kind, aid, d.now() + ttl_s, d.now()))
+            return code
+    raise RuntimeError("couldn't make a unique code")
+
+
+def use_code(kind: str, code: str, keep: bool = False) -> Optional[str]:
+    """The account id behind a live code (and the code is spent, unless keep)."""
+    code = "".join(ch for ch in (code or "").upper() if ch.isalnum())
+    if not code:
+        return None
+    d = db()
+    row = d.one("SELECT account_id, expires FROM codes WHERE code = %s AND kind = %s", (code, kind))
+    if not row or row["expires"] < d.now():
+        return None
+    if not keep:
+        d.execute("DELETE FROM codes WHERE code = %s", (code,))
+    return row["account_id"]
 
 
 def set_account_settings(aid: str, patch: dict) -> dict:
@@ -120,6 +197,15 @@ def touch(did: str) -> None:
 
 def revoke_device(did: str) -> None:
     db().execute("UPDATE devices SET token_hash = %s WHERE id = %s", (_hash(secrets.token_hex(32)), did))
+
+
+def rename_device(did: str, name: str) -> None:
+    db().execute("UPDATE devices SET name = %s WHERE id = %s", ((name or "").strip()[:40] or "Reedus Lite", did))
+
+
+def remove_device(did: str) -> None:
+    """Forget a Lite: its token stops working and it goes back to showing a pairing code."""
+    db().execute("DELETE FROM devices WHERE id = %s", (did,))
 
 
 # ---------- the pool ----------

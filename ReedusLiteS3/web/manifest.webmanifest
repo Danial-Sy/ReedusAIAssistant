@@ -1,0 +1,14 @@
+{
+  "name": "Reedus Lite",
+  "short_name": "Reedus Lite",
+  "description": "Set up, pair and top up your Reedus Lite.",
+  "start_url": "./#home",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0C1510",
+  "theme_color": "#0C1510",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

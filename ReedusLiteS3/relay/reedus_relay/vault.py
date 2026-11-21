@@ -1,4 +1,4 @@
-"""the relay's API keys: set from ReedOS (Settings → Standalone Lite → Setup) or Railway variables.
+"""the relay's API keys: set from the website (Settings → Service keys) or Railway variables.
 
 keys saved from the app live in the relay database (table `secrets`) and win over the Railway
 variable of the same name. on load they're placed in this process's environment, which is where
@@ -28,24 +28,24 @@ SERVICES = {
         "billingUrl": "https://platform.inworld.ai/",
         "steps": [
             "Sign up at platform.inworld.ai.",
-            "Billing: add a card. The free minutes run out fast.",
-            "API Keys: create one and copy the Base64 version.",
-            "Paste it below.",
+            "Under Billing, add a card (the free minutes run out quickly).",
+            "Open API Keys, create a key, and copy the Base64 version (the long one).",
+            "Paste it here and press Save & test.",
         ],
-        "billing": "Pay-as-you-go, under a cent per reply.",
+        "billing": "Pay-as-you-go, well under a cent per reply.",
     },
     "STRIPE_SECRET_KEY": {
         "id": "stripe", "name": "Stripe", "what": "one-tap top-ups", "required": False,
         "keyUrl": "https://dashboard.stripe.com/apikeys",
         "billingUrl": "https://dashboard.stripe.com/settings/payouts",
         "steps": [
-            "Sign up at dashboard.stripe.com. Test mode works right away; real payments need your "
-            "business and bank details.",
-            "Developers → API keys → Create restricted key with Write on Checkout Sessions, "
+            "Sign up at dashboard.stripe.com. Start in test mode: nothing real is charged.",
+            "Developers → API keys → Create restricted key. Give it Write on Checkout Sessions, "
             "Customers, PaymentIntents and PaymentMethods.",
-            "Paste it below.",
+            "Paste it here. For real payments, finish Stripe's account setup and do the same "
+            "with a live key.",
         ],
-        "billing": "Stripe keeps about 2.9% + 30¢ per payment. The full amount goes into the pool.",
+        "billing": "Stripe keeps about 2.9% + 30¢ per payment; the full amount becomes credit.",
     },
 }
 

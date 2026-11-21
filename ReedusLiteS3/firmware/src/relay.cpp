@@ -42,6 +42,22 @@ static int proto = 1;  // what the relay agreed to in welcome
 static uint32_t lastMusic = 0, musicIdleAt = 0;
 static char desc[64] = "-";
 
+// ---------- pairing ----------
+// a Lite with no token asks the relay to pair: the relay sends a 6-digit code (shown on the face
+// as a scrolling card, and printed here), you type it into the website, and the relay hands
+// back this Lite's token, which lives in NVS from then on. "unpaired" (removed in the app)
+// forgets it and goes back to showing a code. LITE_TOKEN in secrets.h is only a fallback.
+static String token;
+static char pairCode[8] = "";
+static bool compiledTokenOk = true;  // cleared once the relay refuses it
+
+static bool realToken(const char* t) { return t && strlen(t) > 8 && strncmp(t, "rld_...", 7) != 0; }
+
+static void loadToken() {
+  token = store::token();
+  if (!token.length() && compiledTokenOk && realToken(LITE_TOKEN)) token = LITE_TOKEN;
+}
+
 // ---------- the speech gate ----------
 // nothing goes up while the room is quiet. with the wake word on the S3 (wake.cpp, and the
 // relay said wake: "device" in welcome) the gate opens only on "Reedus": the last
@@ -157,6 +173,36 @@ static void handleText(const char* txt, size_t len) {
   JsonDocument doc;
   if (deserializeJson(doc, txt, len)) return;
   const char* t = doc["type"] | "";
+  if (!strcmp(t, "pair")) {
+    const char* code = doc["code"] | "";
+    if (strcmp(code, pairCode)) {
+      strncpy(pairCode, code, sizeof(pairCode) - 1);
+      pairCode[sizeof(pairCode) - 1] = 0;
+      Serial.printf("[relay] not paired yet. Pairing code: %s (type it in the website: Pair a Lite)\n",
+                    pairCode);
+    }
+    return;
+  }
+  if (!strcmp(t, "paired")) {
+    const char* tok = doc["token"] | "";
+    if (realToken(tok)) {
+      store::saveToken(tok);
+      token = tok;
+      pairCode[0] = 0;
+      Serial.printf("[relay] paired as \"%s\". Reconnecting with the new token\n",
+                    (const char*)(doc["name"] | "Reedus Lite"));
+      face::expr("happy", 2.0f);
+      sounds::wake();
+    }
+    return;
+  }
+  if (!strcmp(t, "unpaired")) {
+    store::saveToken("");
+    compiledTokenOk = false;
+    token = "";
+    Serial.println("[relay] this Lite was removed from its account: showing a pairing code again");
+    return;
+  }
   if (!strcmp(t, "state")) {
     const char* s = doc["state"] | "idle";
     face::setState(s);
@@ -223,7 +269,9 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t len) {
       if (wake::ready()) hello["caps"].add("wake");  // we can say {"type":"wake"} ourselves
       hello["device"] = DEVICE_NAME;
       hello["fw"] = FW_VERSION;
-      hello["token"] = LITE_TOKEN;
+      hello["caps"].add("pair");  // no token: the relay shows a code and hands one over
+      if (token.length()) hello["token"] = token;
+      else hello["pair"] = true;
       hello["rate"] = AUDIO_RATE;
       hello["frame_ms"] = FRAME_SAMPLES * 1000 / AUDIO_RATE;
       hello["bulletin_rev"] = store::bulletinRev();
@@ -282,15 +330,44 @@ static void startSocket() {
   wsStarted = true;
 }
 
+static void joinWifi() {
+  String ssid = store::wifiSsid(), pass = store::wifiPass();
+  if (!ssid.length()) {
+    ssid = WIFI_SSID;
+    pass = WIFI_PASS;
+  }
+  WiFi.begin(ssid.c_str(), pass.c_str());
+  Serial.printf("[relay] wifi: joining %s\n", ssid.c_str());
+}
+
 void begin() {
   pre = (int16_t*)ps_malloc(PREROLL * FRAME_SAMPLES * 2);
   if (!pre) pre = (int16_t*)malloc(PREROLL * FRAME_SAMPLES * 2);
+  loadToken();
+  if (!token.length()) Serial.println("[relay] not paired: Lite will show a code once it's online");
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);  // modem sleep adds 100+ ms of jitter to every packet
   WiFi.setHostname(DEVICE_NAME);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  Serial.printf("[relay] wifi: joining %s\n", WIFI_SSID);
+  joinWifi();
 }
+
+void setWifi(const char* ssid, const char* pass) {
+  store::saveWifi(ssid, pass);
+  WiFi.disconnect();
+  joinWifi();
+}
+
+void unpair() {
+  store::saveToken("");
+  compiledTokenOk = false;
+  token = "";
+  pairCode[0] = 0;
+  if (wsStarted) ws.disconnect();  // reconnects on its own and asks for a code
+  Serial.println("[relay] token forgotten: Lite will show a pairing code");
+}
+
+bool paired() { return token.length() > 0; }
+const char* pairingCode() { return pairCode; }
 
 void update() {
   float score;

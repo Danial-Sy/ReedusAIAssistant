@@ -30,8 +30,8 @@ from reedus_relay.brain import Brain, is_goodbye
 
 IDLE, LISTEN, BUSY = "idle", "listen", "busy"
 FRAME_S = config.FRAME_SAMPLES / config.RATE
-OUT_OF_CREDIT = ("I'm out of cloud credit, so I can't think right now. "
-                 "Top up the pool in ReedOS and I'm all yours.")
+OUT_OF_CREDIT = ("I'm out of credit, so I can't think right now. "
+                 "Add some in the Reedus Lite app and I'm all yours.")
 TROUBLE = "Sorry, my brain hiccuped there. Try me again in a second."
 _WAKE_PREFIX = re.compile(r"^\W*(?:hey|hi|okay|ok|yo)?[\s,]*(?:reedus|reed us|reedis|redis)\b[\s,.!?]*", re.I)
 
@@ -135,7 +135,7 @@ class Session:
         if rev and int(self.hello.get("bulletin_rev") or 0) != rev:
             await asyncio.to_thread(self.send_bulletin)
         if not await asyncio.to_thread(accounts.funded, self.aid):
-            self.send({"type": "glance", "card": "text", "text": "TOP UP IN REEDOS", "hold": 20})
+            self.send({"type": "glance", "card": "text", "text": "ADD CREDIT IN THE APP", "hold": 20})
 
     async def housekeeping(self) -> None:
         while not self.closed:
@@ -274,10 +274,14 @@ class Session:
             def _on_sentence(s: str) -> None:
                 self.loop.call_soon_threadsafe(sentences.put_nowait, s)
 
+            def _on_face(tag: str) -> None:
+                self.loop.call_soon_threadsafe(sentences.put_nowait, {"face": tag})
+
             def _think() -> str:
                 with meter.metering(m):
                     try:
-                        return self.brain.reply(said, self.conversation, _on_sentence, cancel)
+                        return self.brain.reply(said, self.conversation, _on_sentence, cancel,
+                                                on_face=_on_face)
                     finally:
                         self.loop.call_soon_threadsafe(sentences.put_nowait, None)
 
@@ -339,18 +343,31 @@ class Session:
                         while await sentences.get() is not None:
                             pass
                     return
+                if isinstance(s, dict):          # a face tag: keep it in line with the speech
+                    await pending.put(s)
+                    continue
                 frames: asyncio.Queue = asyncio.Queue()
                 task = asyncio.ensure_future(asyncio.to_thread(self._synth, s, frames, m, cancel))
                 await pending.put((s, frames, task))
 
         async def play():
             first = True
+            mood = None              # what he tagged himself as feeling, until he tags again
             while True:
                 item = await pending.get()
                 if item is None:
                     return
+                if isinstance(item, dict):
+                    tag = item.get("face")
+                    if tag == "wink":
+                        self.send({"type": "expr", "name": "wink", "hold": 1.2})
+                    else:
+                        mood = None if tag == "neutral" else tag
+                        # straight away: the face reacts while his voice is still being made
+                        self.send({"type": "emotion", "emotion": tag, "strength": 0.9, "hold": 3.0})
+                    continue
                 s, frames, task = item
-                emo, strength = emotion.classify(s)
+                emo, strength = (mood, 0.9) if mood else emotion.classify(s)
                 if emo != "neutral":
                     self.send({"type": "emotion", "emotion": emo, "strength": strength,
                                "hold": emotion.speech_seconds(s)})

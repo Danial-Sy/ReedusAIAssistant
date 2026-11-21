@@ -2,7 +2,17 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
     "builder": "DOCKERFILE",
-    "dockerfilePath": "ReedusLiteS3/relay/Dockerfile"
+    "dockerfilePath": "ReedusLiteS3/relay/Dockerfile",
+    "watchPatterns": [
+      "ReedusLiteS3/relay/**",
+      "ReedusLiteS3/web/**",
+      "reedus_llm/reedus_companion/cloud/**",
+      "reedus_llm/reedus_companion/assist/**",
+      "reedus_llm/reedus_companion/lite/**",
+      "reedus_llm/reedus_companion/serve/persona.py",
+      "reedus_llm/reedus_companion/voice/**",
+      "reedus_llm/reedus_companion/data/reedus_voice.jsonl"
+    ]
   },
   "deploy": {
     "startCommand": "python -m reedus_relay",

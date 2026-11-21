@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """run the relay's admin actions from your laptop (through its /app socket, RELAY_ADMIN_TOKEN).
 
-    python ReedusLiteS3/tools/admin.py <relay> <admin token> account "Danial" 10
+    python ReedusLiteS3/tools/admin.py <relay> <admin token> account "Your name" 10
     python ReedusLiteS3/tools/admin.py <relay> <admin token> device <account-id> "Desk Lite"
     python ReedusLiteS3/tools/admin.py <relay> <admin token> topup <account-id> 20
     python ReedusLiteS3/tools/admin.py <relay> <admin token> accounts

@@ -20,12 +20,33 @@ LITE_VOICE = (
     "lights, cat ears, a speaker. Everything you write is spoken, so talk, don't type: usually one "
     "to three sentences, longer only when they ask for detail. No lists, no markdown, no emoji, "
     "no stage directions. Timers, alarms, reminders and lists are handled for you before a "
-    "message reaches you."
+    "message reaches you.\n\n"
+    "Your face shows how you feel, so react to what they said. Start every reply with one face "
+    "tag in square brackets: [happy], [laugh], [love], [sad], [surprised], [angry], [confused], "
+    "[sleepy], [excited], [smug], [shy], [curious], [wink] or [neutral]. For example: "
+    "\"[excited] Wait, you got the internship?\" or \"[sad] Oh no, I'm sorry.\" Put a new tag "
+    "in front of a later sentence only when your feeling changes. Tags are never spoken."
 )
+
+# what the face can show (firmware face.cpp); wink is a one-off expression, not a mood
+FACE_TAGS = ("neutral", "happy", "laugh", "love", "sad", "surprised", "angry", "confused",
+             "sleepy", "excited", "smug", "shy", "curious", "wink")
+_TAG = re.compile(r"\[\s*([A-Za-z]+)\s*\]")
+
+
+def face_tag(text: str) -> tuple:
+    """('excited', text without tags) for '[excited] Whoa'. The last known tag wins; unknown
+    bracketed words are left for speakable() to drop."""
+    tag = None
+    for m in _TAG.finditer(text or ""):
+        if m.group(1).lower() in FACE_TAGS:
+            tag = m.group(1).lower()
+    clean = _TAG.sub(lambda m: "" if m.group(1).lower() in FACE_TAGS else m.group(0), text or "")
+    return tag, clean
 
 REPLY_TOKENS = int(config.env_float("RELAY_REPLY_TOKENS", 220))
 
-_SENTENCE_END = re.compile(r"(?<=[.!?…])[\"')\]]?\s+(?=[A-Z0-9\"'(])")
+_SENTENCE_END = re.compile(r"(?<=[.!?…])[\"')\]]?\s+(?=[A-Z0-9\"'(\[])")   # "[" : a face tag
 _FILLER = r"(?:(?:ok(?:ay)?|alright|all right|cool|great|thanks|thank you|cheers|perfect)[,.!\s]+)*"
 _BYE_WORDS = (r"(?:good ?bye|bye(?: bye)?|see (?:you|ya)(?: later| tomorrow)?|good ?night|"
               r"night night|later|that'?s all(?: for now)?|go to sleep)")
@@ -48,8 +69,17 @@ def speakable(text: str) -> str:
 class SentenceSplitter:
     """Feed streamed tokens; get complete sentences as soon as each one closes."""
 
-    def __init__(self, emit: Callable[[str], None], min_chars: int = 24):
+    def __init__(self, emit: Callable[[str], None], min_chars: int = 24,
+                 on_face: Optional[Callable[[str], None]] = None):
         self.emit, self.min_chars, self.buf = emit, min_chars, ""
+        self.on_face = on_face
+
+    def _out(self, head: str) -> None:
+        tag, head = face_tag(head)
+        if tag and self.on_face:
+            self.on_face(tag)               # before its sentence, so the face leads the voice
+        if speakable(head):
+            self.emit(speakable(head))
 
     def feed(self, tok: str) -> None:
         self.buf += tok
@@ -62,13 +92,41 @@ class SentenceSplitter:
             if not m:
                 return
             head, self.buf = self.buf[:m.start()], self.buf[m.end():]
-            if speakable(head):
-                self.emit(speakable(head))
+            self._out(head)
 
     def flush(self) -> None:
-        if speakable(self.buf):
-            self.emit(speakable(self.buf))
+        self._out(self.buf)
         self.buf = ""
+
+
+def usable(pid: str) -> bool:
+    """Can the relay think with this provider right now? (a key, and a base URL for custom)"""
+    from reedus_companion.cloud import llm_settings, providers
+    if not providers.known(pid) or not llm_settings.has_key(pid):
+        return False
+    return pid != "custom" or bool(llm_settings.base_url("custom"))
+
+
+def default_provider() -> str:
+    """The relay-wide default (REEDUS_LLM_PROVIDER), or else the first provider with a key."""
+    from reedus_companion.cloud import llm_settings, providers
+    pid = llm_settings.provider()
+    if usable(pid):
+        return pid
+    return next((p for p in providers.ORDER if usable(p)), pid)
+
+
+def llm_choice(account: Optional[dict]) -> tuple:
+    """(provider, model) an account thinks with. Its own pick wins while that provider has a
+    key; otherwise whatever provider does, so a relay with only a Claude key never claims to
+    be thinking with Gemini."""
+    from reedus_companion.cloud import llm_settings
+    s = ((account or {}).get("settings") or {}).get("llm") or {}
+    pid = s.get("provider") or ""
+    if not usable(pid):
+        pid = default_provider()
+    model = (s.get("model") if s.get("provider") == pid else "") or llm_settings.model(pid)
+    return pid, model
 
 
 class Brain:
@@ -85,11 +143,7 @@ class Brain:
 
     # ---------- the LLM ----------
     def llm_choice(self) -> tuple:
-        from reedus_companion.cloud import llm_settings
-        s = (self.account.get("settings") or {}).get("llm") or {}
-        provider = s.get("provider") or llm_settings.provider()
-        model = s.get("model") or llm_settings.model(provider)
-        return provider, model
+        return llm_choice(self.account)
 
     def backend(self):
         if self._backend is not None and self._backend_key is None:
@@ -129,8 +183,10 @@ class Brain:
             + "\n\n" + LITE_VOICE
 
     def reply(self, said: str, conversation: str, on_sentence: Callable[[str], None],
-              cancel: Optional[threading.Event] = None) -> str:
-        """Speakable reply text; each sentence also goes to on_sentence as soon as it's ready."""
+              cancel: Optional[threading.Event] = None,
+              on_face: Optional[Callable[[str], None]] = None) -> str:
+        """Speakable reply text; each sentence also goes to on_sentence as soon as it's ready,
+        and each face tag ([excited], [sad]…) to on_face just before the sentence it leads."""
         fast = self.fast_path(said)
         if fast:
             on_sentence(speakable(fast))
@@ -139,16 +195,16 @@ class Brain:
         msgs = [{"role": "system", "content": self.system(said, conversation)}]
         msgs += self.history[-2 * config.HISTORY_TURNS:]
         msgs.append({"role": "user", "content": said})
-        split = SentenceSplitter(on_sentence)
+        split = SentenceSplitter(on_sentence, on_face=on_face)
         text = self.backend().chat(msgs, REPLY_TOKENS, use_adapter=True, on_token=split.feed,
                                    name="persona", cancel=cancel)
         if cancel is not None and cancel.is_set():
             split.buf = ""
         else:
             split.flush()
-        text = speakable(text)
-        self._remember(said, text)
-        return text
+        # history keeps the tags, so he keeps seeing (and copying) them; what's said and saved doesn't
+        self._remember(said, re.sub(r"\s+", " ", _MD.sub("", text or "")).strip())
+        return speakable(face_tag(text)[1])
 
     def _remember(self, said: str, reply: str) -> None:
         with self.lock:

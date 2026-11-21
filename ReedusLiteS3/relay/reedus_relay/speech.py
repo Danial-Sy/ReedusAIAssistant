@@ -100,7 +100,20 @@ _clients: dict = {}
 
 
 def stt_provider() -> str:
-    return (config.env("RELAY_STT", "gemini") or "gemini").lower()
+    """Who turns speech into text: RELAY_STT if set, else Gemini if there's a Gemini key, else
+    OpenAI if there's an OpenAI key. (Claude and the rest can't take audio.)"""
+    explicit = config.env("RELAY_STT").lower()
+    if explicit in ("gemini", "openai"):
+        return explicit
+    from reedus_companion.cloud import llm_settings
+    if not llm_settings.key("gemini") and llm_settings.key("openai"):
+        return "openai"
+    return "gemini"
+
+
+def stt_ready() -> bool:
+    from reedus_companion.cloud import llm_settings
+    return bool(llm_settings.key(stt_provider()))
 
 
 def transcribe(pcm: bytes, provider: Optional[str] = None) -> str:
@@ -119,7 +132,7 @@ def _gemini_stt(pcm: bytes) -> str:
     from reedus_companion.cloud import budget, llm_settings
     key = llm_settings.key("gemini")
     if not key:
-        raise RuntimeError("speech-to-text needs GEMINI_API_KEY (or set RELAY_STT=openai)")
+        raise RuntimeError("to understand speech the relay needs a Gemini or OpenAI key (Settings → Service keys)")
     client = _clients.get(("gemini", key))
     if client is None:
         client = _clients[("gemini", key)] = genai.Client(api_key=key)
@@ -151,7 +164,7 @@ def _openai_stt(pcm: bytes) -> str:
     from reedus_relay import meter
     key = llm_settings.key("openai")
     if not key:
-        raise RuntimeError("RELAY_STT=openai needs OPENAI_API_KEY")
+        raise RuntimeError("to understand speech the relay needs a Gemini or OpenAI key (Settings → Service keys)")
     client = _clients.get(("openai", key))
     if client is None:
         client = _clients[("openai", key)] = openai.OpenAI(api_key=key, max_retries=1, timeout=20)
@@ -208,6 +221,6 @@ def wake_detector(caps=None):
 
 
 def wake_status() -> tuple:
-    """(ready, description) of the relay's wake word setup, for ReedOS's Setup."""
+    """(ready, description) of the relay's wake word setup, for the website's checklist."""
     from reedus_relay.wake import status
     return status(os.environ.get("RELAY_WAKE", "device"))

@@ -25,6 +25,23 @@ void saveBulletin(uint32_t rev, const char* text) {
   prefs.putUInt("brev", rev);
 }
 
+String token() { return ok ? prefs.getString("token", "") : String(); }
+
+void saveToken(const char* token) {
+  if (!ok) return;
+  if (token && *token) prefs.putString("token", token);
+  else prefs.remove("token");
+}
+
+String wifiSsid() { return ok ? prefs.getString("ssid", "") : String(); }
+String wifiPass() { return ok ? prefs.getString("wpass", "") : String(); }
+
+void saveWifi(const char* ssid, const char* pass) {
+  if (!ok) return;
+  prefs.putString("ssid", ssid ? ssid : "");
+  prefs.putString("wpass", pass ? pass : "");
+}
+
 int getInt(const char* key, int def) { return calOk ? cal.getInt(key, def) : def; }
 
 void putInt(const char* key, int value) {

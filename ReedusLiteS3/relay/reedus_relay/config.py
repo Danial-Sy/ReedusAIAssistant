@@ -3,14 +3,15 @@
     DATABASE_URL            postgres://… from Railway's Postgres plugin. unset = SQLite at
                             RELAY_DATA/relay.sqlite (local runs and tests)
     PORT                    Railway sets it. default 8080
-    RELAY_ADMIN_TOKEN       guards the admin actions (make accounts and devices, top up)
+    RELAY_ADMIN_TOKEN       the setup code: the website asks for it to set the relay up, and the
+                            owner can always sign in with it. also guards tools/admin.py
     RELAY_DATA              scratch dir for SQLite and models. default ./data
 
     keys the relay spends from (never sent to devices):
     GEMINI_API_KEY / ANTHROPIC_API_KEY / OPENAI_API_KEY / … (reedus_companion/cloud/providers.py)
     INWORLD_API_KEY         his voice
 
-    defaults a device can override from ReedOS:
+    defaults an account can override on the website:
     REEDUS_LLM_PROVIDER / REEDUS_LLM_MODEL / REEDUS_LLM_SEARCH   as on the run box
     RELAY_STT               gemini | openai. default gemini (one key fewer)
     RELAY_STT_MODEL         default gemini-3.7-flash / gpt-4o-mini-transcribe
@@ -37,11 +38,11 @@ DATA = Path(env("RELAY_DATA", str(Path.cwd() / "data"))).expanduser()
 
 
 def _ui_dir() -> Path:
-    """The ReedOS app the relay serves at / (Docker copies it to /app/ui)."""
+    """The website the relay serves at / (ReedusLiteS3/web; Docker copies it to /app/ui)."""
     explicit = env("RELAY_UI")
     if explicit:
         return Path(explicit).expanduser()
-    for cand in (Path("/app/ui"), Path(__file__).resolve().parents[3] / "ReedOS" / "reedos-app" / "src"):
+    for cand in (Path("/app/ui"), Path(__file__).resolve().parents[2] / "web"):
         if (cand / "index.html").exists():
             return cand
     return Path("/nonexistent")

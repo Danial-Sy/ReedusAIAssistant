@@ -9,5 +9,6 @@
 #define RELAY_PORT 443
 #define RELAY_TLS 1        // 0 only for a relay on your own laptop: ws://<laptop-ip>:8080
 
-// this Lite's device token: `python -m reedus_relay device <account-id> "Desk Lite"` prints it
+// leave this as is: on first boot Lite shows a 6-digit code on its face, you type it into the
+// website (Pair a Lite) and the relay hands this Lite its own token, kept in flash
 #define LITE_TOKEN "rld_..."

@@ -19,4 +19,9 @@ void sendJson(const char* json);
 const char* serverDesc();
 void setGateDebug(bool on);
 
+bool paired();              // has a device token (from pairing, or LITE_TOKEN)
+const char* pairingCode();  // the code the relay gave us while unpaired, "" otherwise
+void unpair();              // forget the token: show a pairing code again
+void setWifi(const char* ssid, const char* pass);  // saved in NVS, beats secrets.h
+
 }  // namespace relay

@@ -1,9 +1,9 @@
 """one-tap top-ups with Stripe Checkout, and auto top-up from a saved card.
 
-    ReedOS "Top up $10" ──► start(): the relay asks Stripe for a Checkout page
+    website "Pay $10"      ──► start(): the relay asks Stripe for a Checkout page
            ◄── url ────────  (card, Apple Pay, Google Pay: one tap on a phone)
     Stripe sends you back to https://<relay>/?topup=<session>#standalone
-    ReedOS ──► confirm(): the relay asks Stripe "paid?" and credits the pool, exactly once
+    website ──► confirm(): the relay asks Stripe "paid?" and credits the pool, exactly once
 
 no webhook needed (the relay's websocket server doesn't take POSTs): reconcile() re-checks open
 sessions every 30 s, so closing the tab before coming back still credits the pool. every session
@@ -15,9 +15,9 @@ auto top-up: tick "save my card" on a top-up and Checkout keeps the card for lat
 the consent line). after that, whenever a charge leaves the pool under `below`, maybe_auto()
 charges the card `amount` off-session. guard rails: one automatic charge per AUTO_GAP_S, at most
 AUTO_PER_DAY a day, an Idempotency-Key per attempt so a retry can't charge twice, and any decline
-or bank check (3-D Secure) switches auto top-up off and says why in ReedOS.
+or bank check (3-D Secure) switches auto top-up off and says why on the website.
 
-STRIPE_SECRET_KEY        from Setup in ReedOS, or a Railway variable (sk_/rk_, test or live).
+STRIPE_SECRET_KEY        from the website, or a Railway variable (sk_/rk_, test or live).
                          a restricted key needs Checkout Sessions, Customers, PaymentIntents and
                          PaymentMethods = Write for auto top-up (Checkout Sessions alone otherwise)
 RELAY_PUBLIC_URL         https://<relay>; defaults to https://$RAILWAY_PUBLIC_DOMAIN
@@ -71,7 +71,7 @@ def public_base() -> str:
 
 
 def _allowed_return(url: str) -> bool:
-    """Where Stripe may send people back: this relay, or a ReedOS on your own network."""
+    """Where Stripe may send people back: this relay, or a page on your own network."""
     try:
         u = urllib.parse.urlparse(url)
     except ValueError:
@@ -196,7 +196,7 @@ def start(account: dict, usd: float, return_to: str = "", save_card: bool = Fals
           auto: Optional[dict] = None) -> dict:
     """A Checkout page for `usd`. Returns {"url", "session"} or {"error"}."""
     if not enabled():
-        return {"error": "top-ups aren't set up on this relay yet (Setup → Payments)"}
+        return {"error": "card payments aren't set up on this relay yet. The owner adds a Stripe key in Settings → Service keys"}
     try:
         usd = round(float(usd), 2)
     except (TypeError, ValueError):
@@ -216,8 +216,8 @@ def start(account: dict, usd: float, return_to: str = "", save_card: bool = Fals
             "Cloud credit for Reedus Lite: thinking, his voice, speech-to-text",
         "client_reference_id": account["id"],
         "metadata[account]": account["id"],
-        "success_url": f"{base}/?topup={{CHECKOUT_SESSION_ID}}#standalone",
-        "cancel_url": f"{base}/?topup=cancel#standalone",
+        "success_url": f"{base}/?topup={{CHECKOUT_SESSION_ID}}#credit",
+        "cancel_url": f"{base}/?topup=cancel#credit",
     }
     try:
         if save_card:

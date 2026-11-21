@@ -121,7 +121,7 @@ def make(kind: str = "device", caps=None):
 
 
 def status(kind: str = "device") -> tuple:
-    """(ready, description) for ReedOS's Setup checklist."""
+    """(ready, description) for the website's checklist."""
     kind = _kind(kind)
     if kind == "gate":
         return True, GateWake().describe()

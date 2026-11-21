@@ -106,8 +106,8 @@ class FakeBackend:
         if m is not None:
             m.add(0.001, "llm")
         if name == "bulletin":
-            return "- Their name is Danial.\n- They have a physics exam on Friday."
-        text = "Sure thing, mate. That sounds great! What happens next?"
+            return "- Their name is Sam.\n- They have a physics exam on Friday."
+        text = "[excited] Sure thing, mate. That sounds great! [curious] What happens next?"
         for word in text.split(" "):
             if cancel is not None and cancel.is_set():
                 break
@@ -269,6 +269,17 @@ check(all(is_goodbye(x) for x in ("goodbye", "okay thanks, goodbye", "alright co
 check(not any(is_goodbye(x) for x in ("what does goodbye mean in french", "later today I have class",
                                        "say bye to my friend")), "not every 'bye' is a goodbye")
 got = []
+from reedus_relay.brain import face_tag
+check(face_tag("[Excited] Whoa! [weird] ok") == ("excited", " Whoa! [weird] ok"),
+      "face tags are found (any case) and only known ones are taken out")
+faces = []
+sp2 = SentenceSplitter(got.append, on_face=faces.append)
+sp2.feed("[sad] Oh no, that sounds really rough. ")
+sp2.feed("[happy] But hey, you'll get through it, I promise.")
+sp2.flush()
+check(faces == ["sad", "happy"] and got[-1].startswith("But hey") and "[" not in "".join(got),
+      "the splitter hands each tag over before its sentence and never speaks it")
+got.clear()
 sp = SentenceSplitter(got.append)
 for tok in "Well hello there my old friend. How are you doing today? Good.".split(" "):
     sp.feed(tok + " ")
@@ -294,7 +305,7 @@ check(wake_mod.status("device")[0] and wake_mod.status("device")[1].startswith("
 
 # ---------- accounts ----------
 print("[2] accounts and the pool")
-acc = accounts.create_account("Danial", 5.0)
+acc = accounts.create_account("Sam", 5.0)
 aid, app_token = acc["account"]["id"], acc["token"]
 dev = accounts.create_device(aid, "Desk Lite")
 did, dev_token = dev["device"]["id"], dev["token"]
@@ -412,6 +423,13 @@ async def main():
     ok = await d.wait_for(lambda: "speaking" in d.states() and d.states()[-1] == "listening", 6)
     check(ok, f"wake → listening → thinking → speaking → listening ({d.states()})")
     check("wake" in d.types(), "wake event sent")
+    emos = [e["emotion"] for e in d.events if e["type"] == "emotion"]
+    check(emos[:1] == ["excited"] and "curious" in emos and emos.index("curious") > 0,
+          f"his own face tags drive the face, in order ({emos})")
+    await d.wait_for(lambda: bool(memory.recent(aid, 1)), 3)
+    check(memory.recent(aid, 1) and "[" not in memory.recent(aid, 1)[0]["reply"]
+          and memory.recent(aid, 1)[0]["reply"].startswith("Sure thing"),
+          "the tags are never spoken or saved")
     check(d.last("listen") == {"type": "listen", "open": True}, "listen opened for the conversation")
     check(d.speech_frames >= 8, f"speech frames streamed with the kind byte ({d.speech_frames})")
     check(any(e["type"] == "emotion" for e in d.events), "emotion from the reply")
@@ -491,7 +509,7 @@ async def main():
     app = await websockets.connect(url + "/app")
     await app.send(json.dumps({"type": "auth", "token": app_token}))
     auth = json.loads(await app.recv())
-    check(auth["type"] == "auth.ok" and auth["account"]["name"] == "Danial", "app signs in with the account token")
+    check(auth["type"] == "auth.ok" and auth["account"]["name"] == "Sam", "app signs in with the account token")
 
     async def ask(req):
         req["id"] = int(time.time() * 1000) % 100000
@@ -519,7 +537,7 @@ async def main():
     check(r.get("ok") and ok, "volume from the app reaches the device")
     r = await ask({"action": "memory.get"})
     check("physics" in r["bulletin"] and r["recent"], "memory: bulletin and recent turns")
-    r = await ask({"action": "memory.set", "bulletin": "- Their name is Danial.\n- Likes chess."})
+    r = await ask({"action": "memory.set", "bulletin": "- Their name is Sam.\n- Likes chess."})
     ok = await d.wait_for(lambda: "chess" in (d.last("bulletin") or {}).get("text", ""), 2)
     check(r.get("ok") and ok, "editing the bulletin pushes it to the S3")
     r = await ask({"action": "chat", "text": "hello from the app"})
@@ -542,8 +560,8 @@ async def main():
     ws2 = await websockets.connect(url + "/lite")
     await ws2.send(json.dumps({"type": "hello", "proto": 3, "token": broke_dev["token"], "rate": 16000}))
     d2 = Device(ws2)
-    ok = await d2.wait_for(lambda: any(e["type"] == "glance" and "TOP UP" in e.get("text", "") for e in d2.events), 3)
-    check(ok, "an empty pool shows TOP UP IN REEDOS on the face")
+    ok = await d2.wait_for(lambda: any(e["type"] == "glance" and "ADD CREDIT" in e.get("text", "") for e in d2.events), 3)
+    check(ok, "an empty pool shows ADD CREDIT IN THE APP on the face")
     n_stt = len(HEARD_AUDIO)
     await d2.say()
     ok = await d2.wait_for(lambda: d2.speech_frames > 0 and d2.states()[-1] == "idle", 6)
@@ -557,7 +575,7 @@ async def main():
         lambda: urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=3).read())).decode()
     check("ok" in body, "GET /health answers plain HTTP")
 
-    print("[12] the relay serves ReedOS (works with the Xeon off)")
+    print("[12] the relay serves the website")
 
     def get(path):
         try:
@@ -566,11 +584,16 @@ async def main():
         except Exception as e:                                   # noqa: BLE001
             return getattr(e, "code", 0), "", b""
     st, ct, html = await asyncio.to_thread(get, "/")
-    check(st == 200 and "text/html" in ct and b"view-standalone" in html, "/ is the ReedOS app")
-    st, ct, js = await asyncio.to_thread(get, "/js/relay.js")
-    check(st == 200 and "javascript" in ct and b"const Relay" in js, "its scripts are served")
+    check(st == 200 and "text/html" in ct and b"Pair a Lite" in html and b"g-setup" in html,
+          "/ is the Reedus Lite website")
+    check(b"view-reedus" not in html and b"Run box" not in html and b"demo" not in html.lower(),
+          "no robot, no run box, no demo on it")
+    st, ct, js = await asyncio.to_thread(get, "/app.js")
+    check(st == 200 and "javascript" in ct and b"const Relay" in js, "its script is served")
     st, _, rj = await asyncio.to_thread(get, "/relay.json")
-    check(st == 200 and json.loads(rj).get("relay") is True, "/relay.json tells the app it's on a relay")
+    rj = json.loads(rj) if st == 200 else {}
+    check(rj.get("relay") is True and rj.get("claimed") is True and rj.get("setup_code") is True,
+          "/relay.json: a relay, already set up, setup needs a code")
     st, _, _ = await asyncio.to_thread(get, "/../../ReedusLiteS3/relay/reedus_relay/config.py")
     st2, _, _ = await asyncio.to_thread(get, "/%2e%2e/%2e%2e/reedus_llm/reedus_companion/config.py")
     check(st == 404 and st2 == 404, "nothing outside the app folder is served")
@@ -598,9 +621,10 @@ async def main():
 
     st = await ask2(app, {"action": "setup.status"})
     items = {i["id"]: i for i in st["items"]}
-    check(set(items) == {"brain", "voice", "lite", "wake", "payments", "pool"}, "a six-step checklist")
-    check(items["brain"]["done"] and not items["voice"]["done"] and items["lite"]["done"],
-          f"brain ready (env keys), voice missing, a Lite exists ({items['voice']['detail']})")
+    check(set(items) == {"brain", "hearing", "voice", "lite", "money", "payments"}, "the owner's checklist")
+    check(items["brain"]["done"] and items["hearing"]["done"] and not items["voice"]["done"] and items["lite"]["done"],
+          f"brain and hearing ready (env keys), voice missing, a Lite exists ({items['voice']['detail']})")
+    check(not st["relay_ready"], "the relay isn't ready without a voice")
     check(items["payments"]["optional"] and not items["payments"]["done"], "payments optional and not set")
     check(any(b["id"] == "anthropic" and b["key"]["set"] and b["key"]["source"] == "railway" for b in st["brains"]),
           "brains list which keys are set and where from")
@@ -629,8 +653,8 @@ async def main():
     r = await ask2(other, {"action": "setup.key", "name": "INWORLD_API_KEY", "value": "abc"})
     check("owner" in r.get("error", ""), "non-owners can't change the relay's keys")
     r = await ask2(other, {"action": "setup.status"})
-    check("brains" not in r and "services" not in r and len(r["items"]) == 6,
-          "non-owners see the checklist, not the keys")
+    check("brains" not in r and "services" not in r and [i["id"] for i in r["items"]] == ["lite", "money"]
+          and "relay_ready" in r, "non-owners see their own two steps and whether the relay is ready, not the keys")
     r = await ask2(other, {"action": "device.create", "name": "x"})
     check("owner" in r.get("error", ""), "non-owners can't add Lites")
 
@@ -806,6 +830,160 @@ async def main():
         await ws2.send(SILENT)
     await d2.wait_for(lambda: d2.states()[-1] == "idle", 4)
     await ws2.close()
+
+    print("[17] signing in without tokens: setup, owner code, invites, device codes")
+
+    async def first(msg):
+        """Open /app, send a sign-in message, return (socket, reply)."""
+        sock = await websockets.connect(url + "/app")
+        await sock.send(json.dumps(msg))
+        return sock, json.loads(await sock.recv())
+
+    sock, r = await first({"type": "setup", "name": "Intruder", "code": "admin-secret"})
+    check(r["type"] == "auth.fail" and "already set up" in r["error"], "a relay that's set up can't be set up again")
+    await sock.close()
+    sock, r = await first({"type": "owner", "code": "wrong"})
+    check(r["type"] == "auth.fail", "the owner sign-in needs the real setup code")
+    await sock.send(json.dumps({"type": "owner", "code": "admin-secret"}))
+    r = json.loads(await sock.recv())
+    check(r["type"] == "auth.ok" and r["owner"] and r["account"]["id"] == aid and r["token"].startswith("rla_"),
+          "a wrong code can be retried; the setup code signs in as the owner with a fresh token")
+    owner_tok = r["token"]
+    check(accounts.account_for_token(owner_tok)["id"] == aid and accounts.account_for_token(app_token)["id"] == aid,
+          "the new browser token works, and so does the old one")
+    inv = await ask2(sock, {"action": "invite.create"})
+    login = await ask2(sock, {"action": "login.code"})
+    check(len(inv.get("code", "")) == 8 and len(login.get("code", "")) == 6 and login["code"].isdigit(),
+          "an 8-character invite and a 6-digit sign-in code")
+    r = await ask2(sock, {"action": "members"})
+    check({m["name"] for m in r["members"]} >= {"Sam", "Broke"} and any(m["owner"] for m in r["members"]),
+          "the owner sees everyone")
+    b0 = accounts.balance(broke["account"]["id"])
+    r = await ask2(sock, {"action": "credit.add", "account": broke["account"]["id"], "usd": 2})
+    check(r.get("ok") and abs(accounts.balance(broke["account"]["id"]) - (b0 + 2)) < 1e-9,
+          "the owner adds credit by hand")
+    r = await ask2(sock, {"action": "credit.add", "account": broke["account"]["id"], "usd": -1})
+    check("error" in r and abs(accounts.balance(broke["account"]["id"]) - (b0 + 2)) < 1e-9, "only positive amounts")
+
+    j, r = await first({"type": "join", "invite": inv["code"].lower(), "name": "Alex"})
+    check(r["type"] == "auth.ok" and not r["owner"] and r["account"]["name"] == "Alex" and r["token"],
+          "an invite makes a new account (codes aren't case-sensitive)")
+    alex_tok = r["token"]
+    r = await ask2(j, {"action": "members"})
+    check("owner" in r.get("error", ""), "a member can't list everyone")
+    r = await ask2(j, {"action": "invite.create"})
+    check("owner" in r.get("error", ""), "or invite people")
+    r = await ask2(j, {"action": "credit.add", "usd": 50})
+    check("owner" in r.get("error", ""), "or add credit for free")
+    await j.close()
+    j, r = await first({"type": "join", "invite": inv["code"], "name": "Again"})
+    check(r["type"] == "auth.fail", "an invite works once")
+    await j.close()
+
+    rd, r = await first({"type": "redeem", "code": login["code"]})
+    check(r["type"] == "auth.ok" and r["account"]["id"] == aid, "a 6-digit code signs another device in")
+    rd_tok = r["token"]
+    await ask2(rd, {"action": "signout"})
+    await rd.close()
+    check(accounts.account_for_token(rd_tok) is None, "Sign out kills that device's token")
+    rd, r = await first({"type": "redeem", "code": login["code"]})
+    check(r["type"] == "auth.fail", "and a sign-in code works once")
+    await rd.close()
+
+    print("[18] pairing: the code on Lite's face")
+    lw = await websockets.connect(url + "/lite")
+    await lw.send(json.dumps({"type": "hello", "proto": 3, "pair": True, "rate": 16000,
+                              "caps": ["gate", "wake", "pair"]}))
+    pd = Device(lw)
+    ok = await pd.wait_for(lambda: pd.last("pair") is not None and pd.last("glance") is not None, 3)
+    code = (pd.last("pair") or {}).get("code", "")
+    check(ok and len(code) == 6 and code.isdigit() and code in pd.last("glance")["text"],
+          f"an unpaired Lite gets a 6-digit code, scrolled on its face ({(pd.last('glance') or {}).get('text')})")
+    st = await ask2(sock, {"action": "status"})
+    check(st.get("pairing") == 1, "the website can tell a Lite is waiting")
+    wrong = "000000" if code != "000000" else "111111"
+    r = await ask2(sock, {"action": "pair", "code": wrong, "name": "Den Lite"})
+    check("code" in r.get("error", ""), "a wrong code pairs nothing")
+    n_dev = len(accounts.devices(aid))
+    r = await ask2(sock, {"action": "pair", "code": f"{code[:3]} {code[3:]}", "name": "Den Lite"})
+    ok = await pd.wait_for(lambda: pd.last("paired") is not None, 3)
+    tok = (pd.last("paired") or {}).get("token", "")
+    check(r.get("ok") and ok and tok.startswith("rld_") and len(accounts.devices(aid)) == n_dev + 1,
+          "typing the code pairs it: the Lite is handed its own token")
+    await asyncio.sleep(0.8)
+    check(pd.task.done(), "and the relay closes the pairing link so it reconnects")
+    r = await ask2(sock, {"action": "pair", "code": code, "name": "Twice"})
+    check("error" in r, "a code can't be used again")
+    lw = await websockets.connect(url + "/lite")
+    await lw.send(json.dumps({"type": "hello", "proto": 3, "token": tok, "rate": 16000, "caps": ["gate", "wake", "pair"]}))
+    pd = Device(lw)
+    ok = await pd.wait_for(lambda: pd.last("welcome") is not None, 3)
+    check(ok and pd.last("welcome")["device"] == "Den Lite", "it comes back with that token as Den Lite")
+    new_id = next(x["id"] for x in accounts.devices(aid) if x["name"] == "Den Lite")
+    r = await ask2(sock, {"action": "device.rename", "device": new_id, "name": "Study Lite"})
+    check(r.get("ok") and accounts.device(new_id)["name"] == "Study Lite", "rename a Lite")
+    j, _ = await first({"type": "auth", "token": alex_tok})
+    r = await ask2(j, {"action": "device.remove", "device": new_id})
+    check("no such device" in r.get("error", ""), "nobody else can remove your Lite")
+    await j.close()
+    r = await ask2(sock, {"action": "device.remove", "device": new_id})
+    ok = await pd.wait_for(lambda: pd.last("unpaired") is not None and pd.task.done(), 3)
+    check(r.get("ok") and ok and accounts.device(new_id) is None, "Remove: the Lite is told it's unpaired and dropped")
+    lw = await websockets.connect(url + "/lite")
+    await lw.send(json.dumps({"type": "hello", "proto": 3, "token": tok, "rate": 16000, "caps": ["gate", "wake", "pair"]}))
+    pd = Device(lw)
+    ok = await pd.wait_for(lambda: pd.last("unpaired") is not None and pd.last("pair") is not None, 3)
+    check(ok, "its old token now gets unpaired + a fresh pairing code")
+    await lw.close()
+    try:
+        async with websockets.connect(url + "/lite") as old:
+            await old.send(json.dumps({"type": "hello", "proto": 3, "token": tok, "rate": 16000}))
+            await old.recv()
+        check(False, "older firmware without the pair cap still gets 4001")
+    except websockets.ConnectionClosed as e:
+        check(e.rcvd.code == 4001, "older firmware without the pair cap still gets 4001")
+
+    print("[19] any model, and who hears")
+    from reedus_relay import brain as brain_mod
+    from reedus_companion.cloud import llm_settings
+    r = await ask2(sock, {"action": "llm.set", "provider": "anthropic", "model": "claude-opus-5-5"})
+    check(r.get("ok") and r["label"] == "Claude Opus 5.5", "pick any listed model")
+    r = await ask2(sock, {"action": "llm.set", "provider": "anthropic", "model": "claude-some-future-model"})
+    st = await ask2(sock, {"action": "status"})
+    check(r.get("ok") and st["llm"]["model"] == "claude-some-future-model" and st["llm"]["ready"],
+          "or type any model id")
+    saved_ant = os.environ.pop("ANTHROPIC_API_KEY")
+    st = await ask2(sock, {"action": "status"})
+    check(st["llm"]["provider"] == "gemini" and st["llm"]["ready"],
+          "the picked provider's key is gone: it says Gemini (which has one) instead of a dead pick")
+    saved_gem = os.environ.pop("GEMINI_API_KEY")
+    os.environ["ANTHROPIC_API_KEY"] = saved_ant
+    st = await ask2(sock, {"action": "status"})
+    check(st["llm"]["provider"] == "anthropic" and st["llm"]["model"] == "claude-some-future-model",
+          "only a Claude key: the account's Claude pick is back")
+    acc_x = accounts.create_account("Nobody picked", 0.0, False)["account"]
+    check(brain_mod.llm_choice(acc_x)[0] == "anthropic",
+          "an account that never picked thinks with whatever has a key, not a keyless Gemini")
+    check(not speech.stt_ready() and speech.stt_provider() == "gemini", "no Gemini or OpenAI key: nobody can hear")
+    su = await ask2(sock, {"action": "setup.status"})
+    check(not {i["id"]: i for i in su["items"]}["hearing"]["done"], "and the checklist says hearing needs one")
+    os.environ["OPENAI_API_KEY"] = "fake-openai"
+    check(speech.stt_provider() == "openai" and speech.stt_ready(), "an OpenAI key alone: OpenAI does the hearing")
+    os.environ["GEMINI_API_KEY"] = saved_gem
+    check(speech.stt_provider() == "gemini", "Gemini wins when both are there")
+    os.environ.pop("OPENAI_API_KEY")
+    real_list = cloud_llm.list_models
+    cloud_llm.list_models = lambda pid, key=None, base=None: [
+        {"id": "claude-sonnet-5-5", "label": "Claude Sonnet 5.5", "note": ""},
+        {"id": "claude-new-thing", "label": "Claude New Thing", "note": ""}]
+    r = await ask2(sock, {"action": "models", "provider": "anthropic"})
+    check([m["id"] for m in r.get("models", [])] == ["claude-sonnet-5-5", "claude-new-thing"] and not r["error_note"],
+          "the website can list every model the key can use")
+    cloud_llm.list_models = real_list
+    from reedus_companion.cloud import persona_shots
+    persona_shots._CACHE = None
+    check("my name is" not in persona_shots.block().lower(), "no name-teaching example in his prompt")
+    await sock.close()
 
     await ws.close()
     await asyncio.sleep(0.2)

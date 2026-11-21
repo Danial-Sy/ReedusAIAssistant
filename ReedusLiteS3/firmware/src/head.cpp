@@ -127,7 +127,8 @@ void begin() {
   centerUs = constrain(store::getInt("srv_c", SERVO_CENTER_US), 800, 2200);
   dir = store::getInt("srv_dir", SERVO_DIR) < 0 ? -1 : 1;
   doaFront = store::getInt("doa_f", DOA_FRONT_DEG);
-  doaSign = store::getInt("doa_s", DOA_SIGN) < 0 ? -1 : 1;
+  // "doa_s2": a sign saved under the old "doa_s" key was backwards, so it's ignored now
+  doaSign = store::getInt("doa_s2", DOA_SIGN) < 0 ? -1 : 1;
   ledcSetup(SERVO_CH, 1000000 / SERVO_PERIOD_US, SERVO_BITS);
   ledcAttachPin(PIN_SERVO, SERVO_CH);
   cur = target = 0;
@@ -228,7 +229,7 @@ void setCal(const Cal& c, bool save) {
     store::putInt("srv_c", centerUs);
     store::putInt("srv_dir", dir);
     store::putInt("doa_f", doaFront);
-    store::putInt("doa_s", doaSign);
+    store::putInt("doa_s2", doaSign);
   }
   if (moved) writeServo(cur);  // show the new center right away
   arrivedAt = millis();
