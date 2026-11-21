@@ -263,7 +263,7 @@ class Hub:
             if not config.ADMIN_TOKEN or not hmac.compare_digest(str(m.get("code") or "").strip(),
                                                                  config.ADMIN_TOKEN):
                 self._bad_code()
-                return {"error": "that isn't this relay's setup code"}
+                return {"error": "wrong password (it's RELAY_ADMIN_TOKEN on Railway)"}
             acc = await asyncio.to_thread(accounts.owner_account)
             if not acc:
                 return {"error": "this relay has no owner yet, set it up instead"}
@@ -282,11 +282,16 @@ class Hub:
             token = await asyncio.to_thread(accounts.new_app_token, out["account"]["id"])
             return {"ok": True, "account": out["account"], "admin": False, "new_token": token}
         if kind == "redeem":
-            aid = await asyncio.to_thread(accounts.use_code, "login", str(m.get("code") or ""))
+            raw = "".join(ch for ch in str(m.get("code") or "") if ch.isdigit())
+            if raw in self.pairing:
+                return {"error": "that's the code on your Lite. Sign in first, then type it under "
+                                 "Pair a Lite"}
+            aid = await asyncio.to_thread(accounts.use_code, "login", raw)
             acc = await asyncio.to_thread(accounts.account, aid) if aid else None
             if not acc:
                 self._bad_code()
-                return {"error": "that code didn't work. Codes last 10 minutes"}
+                return {"error": "that code didn't work. Sign-in codes come from Settings on a "
+                                 "device that's already signed in, and last 10 minutes"}
             token = await asyncio.to_thread(accounts.new_app_token, acc["id"])
             return {"ok": True, "account": acc, "admin": False, "new_token": token}
         return {"error": "sign in first"}

@@ -259,3 +259,12 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
 @media (min-width: 760px) { #toasts { bottom: 24px; } }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* sign-in: the owner box first, then the other-device code */
+.g-box { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line-hi); border-radius: 16px; background: var(--bg2); }
+.g-or { display: flex; align-items: center; gap: 10px; color: var(--ink-faint); font-size: 13px; }
+.g-or::before, .g-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+/* iPhone: Safari zooms the page into any field under 16px when you tap it */
+input, select, textarea { font-size: 16px; }
+.code-input { font-size: 30px; }

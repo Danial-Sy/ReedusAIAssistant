@@ -183,7 +183,7 @@ function showGate(why) {
     setTimeout(() => $("#g-setup-name").focus(), 50);
   } else {
     $("#g-signin").hidden = false;
-    setTimeout(() => $("#g-code").focus(), 50);
+    setTimeout(() => $("#g-owner-code").focus(), 50);
   }
 }
 
@@ -212,21 +212,11 @@ function wireGate() {
   });
   $("#g-signin").addEventListener("submit", (e) => {
     e.preventDefault();
-    const code = $("#g-code").value.replace(/\D/g, "");
-    if (code.length !== 6) { gateErr("The code is 6 digits."); return; }
-    gateSubmit(e.submitter, { type: "redeem", code });
-  });
-  $("#g-owner-toggle").addEventListener("click", () => {
-    $("#g-owner").hidden = !$("#g-owner").hidden;
-    if (!$("#g-owner").hidden) $("#g-owner-code").focus();
-  });
-  $("#g-owner-go").addEventListener("click", (e) => {
     const code = $("#g-owner-code").value.trim();
-    if (!code) { gateErr("Paste the setup code (RELAY_ADMIN_TOKEN on Railway)."); return; }
-    gateSubmit(e.target, { type: "owner", code });
+    if (!code) { gateErr("Type the password (the setup code, RELAY_ADMIN_TOKEN on Railway)."); return; }
+    gateSubmit(e.submitter, { type: "owner", code });
   });
-  $("#g-owner-code").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("#g-owner-go").click(); } });
-  for (const id of ["#g-code", "#pair-code"]) {
+  for (const id of ["#pair-code"]) {
     $(id).addEventListener("input", (e) => {
       const d = e.target.value.replace(/\D/g, "").slice(0, 6);
       e.target.value = d.length > 3 ? `${d.slice(0, 3)} ${d.slice(3)}` : d;
@@ -843,7 +833,6 @@ async function loadSettings() {
   if (!mem.error && document.activeElement !== ta && !ta.dataset.dirty) ta.value = mem.bulletin || "";
 }
 
-let loginTimer = null;
 function wireSettings() {
   $("#invite").addEventListener("click", async (e) => {
     busy(e.target, true);
@@ -875,25 +864,6 @@ function wireSettings() {
     $("#thread").querySelectorAll(".msg").forEach((m) => m.remove());
     $("#chat-empty").hidden = false;
   }));
-  $("#login-code").addEventListener("click", async (e) => {
-    busy(e.target, true);
-    const r = await Relay.call("login.code");
-    busy(e.target, false);
-    if (r.error) { toast(r.error); return; }
-    $("#login-digits").textContent = `${r.code.slice(0, 3)} ${r.code.slice(3)}`;
-    $("#login-out").hidden = false;
-    let left = r.expires_in;
-    clearInterval(loginTimer);
-    const tick = () => {
-      left--;
-      $("#login-note").textContent = left > 0
-        ? `Type this on the other device: Reedus Lite's sign-in page. Good for ${Math.ceil(left / 60)} more min, once.`
-        : "Expired. Get a new one.";
-      if (left <= 0) { clearInterval(loginTimer); $("#login-digits").textContent = "------"; }
-    };
-    tick();
-    loginTimer = setInterval(tick, 1000);
-  });
   $$("#theme button").forEach((b) => b.addEventListener("click", () => { saved.set("rl.theme", b.dataset.val); applyTheme(); }));
   $("#signout").addEventListener("click", async () => {
     await Relay.call("signout");

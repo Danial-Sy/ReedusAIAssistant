@@ -12,7 +12,9 @@
 <meta name="relay" content="relay-production-228857fe.up.railway.app">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<!-- iPhone/iPad home screen: iOS ignores SVG here, so a 180px PNG (it rounds the corners itself) -->
+<link rel="apple-touch-icon" href="apple-touch-icon.png" sizes="180x180">
 <title>Reedus Lite</title>
 <link rel="stylesheet" href="app.css">
 </head>
@@ -57,7 +59,7 @@
 
     <!-- an invite link -->
     <form id="g-join" class="g-pane" hidden>
-      <p class="lead">You've been invited to use Reedus Lite.</p>
+      <p class="lead">You've been invited to use Reedus Lite with your own account.</p>
       <label class="field"><span>Your name</span>
         <input id="g-join-name" maxlength="40" autocomplete="name" placeholder="What Lite should call you"></label>
       <button class="cta wide" type="submit">Join</button>
@@ -65,18 +67,12 @@
 
     <!-- signing in -->
     <form id="g-signin" class="g-pane" hidden>
-      <p class="lead">Sign in with a code from a phone or computer that's already signed in:
-        <b>Settings → Sign in another device</b>.</p>
-      <input id="g-code" class="code-input" inputmode="numeric" autocomplete="one-time-code"
-             maxlength="7" placeholder="000000" aria-label="6-digit code">
+      <label class="field"><span>Password</span>
+        <input id="g-owner-code" type="password" autocomplete="current-password" spellcheck="false"
+               placeholder="the setup code (RELAY_ADMIN_TOKEN)"></label>
       <button class="cta wide" type="submit">Sign in</button>
-      <button class="link-btn" type="button" id="g-owner-toggle">I own this relay</button>
-      <div id="g-owner" hidden>
-        <label class="field"><span>Setup code</span>
-          <input id="g-owner-code" type="password" autocomplete="off" spellcheck="false"
-                 placeholder="RELAY_ADMIN_TOKEN from Railway"></label>
-        <button class="ghost-btn wide" type="button" id="g-owner-go">Sign in as owner</button>
-      </div>
+      <p class="note">This device stays signed in. The code on your Lite goes in
+        <b>Pair a Lite</b> once you're in.</p>
     </form>
 
     <p class="g-err" id="g-err" role="alert"></p>
@@ -216,11 +212,6 @@
 
       <div class="card">
         <h3>This device</h3>
-        <button class="ghost-btn" id="login-code" type="button">Sign in another device</button>
-        <div class="login-out" id="login-out" hidden>
-          <b class="login-digits" id="login-digits"></b>
-          <p class="note" id="login-note">Type this on the other device. It works once, for 10 minutes.</p>
-        </div>
         <div class="field"><span>Theme</span>
           <div class="seg" id="theme">
             <button type="button" data-val="auto">Auto</button><button type="button" data-val="night">Dark</button><button type="button" data-val="day">Light</button>
