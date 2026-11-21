@@ -115,7 +115,16 @@
 #define HEAD_TURN_SCALE 0.85f      // turn this share of the way to the voice; the eyes cover the rest
 #define HEAD_FOLLOW_DELAY_MS 200   // eyes glance first, the head follows
 #define HEAD_DEADBAND_DEG 12.0f    // closer than this, the eyes alone handle it
-#define HEAD_IDLE_FOLLOW 1         // turn toward sustained talking while idle
+#define HEAD_IDLE_FOLLOW 0         // 0: the head only turns when it hears "Reedus" (1: also toward
+                                   // anyone who keeps talking while it's idle)
+// after "Reedus", while the conversation is open and you're the one talking, the head keeps
+// drifting after your voice: slowly, and only once you've clearly moved. it stops when the
+// conversation ends (quiet for long enough, or goodbye) and stays where it is
+#define HEAD_TRACK_IN_CONVO 1
+#define HEAD_TRACK_DPS 30.0f       // top speed while following (deg/s), a quarter of a wake turn
+#define HEAD_TRACK_ACCEL_DPS2 80.0f  // and a gentle start and stop
+#define HEAD_TRACK_EVERY_MS 1200   // at most one adjustment this often
+#define HEAD_TRACK_DEADBAND_DEG 15.0f  // smaller moves are left to the eyes
 #define HEAD_DETACH_MS 500         // stop pulsing once there, an idle SG90 buzzes
 
 // ---------- face timing ----------

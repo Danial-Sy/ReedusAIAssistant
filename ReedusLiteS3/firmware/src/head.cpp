@@ -18,7 +18,9 @@ static float cur = 0, target = 0, vel = 0;  // deg, deg, deg/s
 static uint32_t lastUpdate = 0, arrivedAt = 0, settleUntil = 0, pendingAt = 0;
 static float pendingTarget = 0;
 static bool pending = false, attached = false, printDoa = false, manual = false;
-static uint32_t lastPoll = 0, lastIdleTurn = 0;
+static uint32_t lastPoll = 0, lastIdleTurn = 0, lastTrack = 0;
+// how fast the current move may go: a wake turn is brisk, following you is slow
+static float speedCap = HEAD_MAX_DPS, accelCap = HEAD_ACCEL_DPS2;
 
 // recent speech bearings (world frame) for "where was that voice"
 static const int HIST = 16;
@@ -52,8 +54,10 @@ static void release() {
   attached = false;
 }
 
-static void turnTo(float deg, uint32_t delayMs) {
+static void turnTo(float deg, uint32_t delayMs, bool slow = false) {
   deg = constrain(deg, -HEAD_LIMIT_DEG, HEAD_LIMIT_DEG);
+  speedCap = slow ? HEAD_TRACK_DPS : HEAD_MAX_DPS;
+  accelCap = slow ? HEAD_TRACK_ACCEL_DPS2 : HEAD_ACCEL_DPS2;
   if (fabsf(deg - target) < 1.0f && !pending) return;
   pendingTarget = deg;
   pendingAt = millis() + delayMs;
@@ -62,13 +66,13 @@ static void turnTo(float deg, uint32_t delayMs) {
 
 // median of speech bearings heard in the last `ms`: the name is ~0.6 s, so this is the
 // direction the wake word came from even if the next reading is the speaker's echo
-static bool recentBearing(uint32_t ms, float& out) {
+static bool recentBearing(uint32_t ms, float& out, int minN = 1) {
   float v[HIST];
   int n = 0;
   uint32_t now = millis();
   for (int i = 0; i < histN; i++)
     if (now - histAt[i] <= ms) v[n++] = histDeg[i];
-  if (!n) return false;
+  if (n < minN || !n) return false;
   for (int i = 1; i < n; i++)
     for (int j = i; j > 0 && v[j] < v[j - 1]; j--) {
       float t = v[j];
@@ -121,6 +125,18 @@ static void pollDoa(uint32_t now) {
     }
   }
 #endif
+
+#if HEAD_TRACK_IN_CONVO
+  // a conversation is open and he's listening to you: drift after your voice if you've moved.
+  // the median of the last second (at least 4 readings) so one stray bearing never moves it
+  if (mode == M_LISTEN && !manual && !pending && now - lastTrack > HEAD_TRACK_EVERY_MS) {
+    float b;
+    if (recentBearing(1000, b, 4) && fabsf(wrap180(b - cur)) > HEAD_TRACK_DEADBAND_DEG) {
+      lastTrack = now;
+      turnTo(cur + wrap180(b - cur) * HEAD_TURN_SCALE, 0, true);
+    }
+  }
+#endif
 }
 
 void begin() {
@@ -154,15 +170,15 @@ void update() {
     // ramp up, cruise, ease out: the speed it wants falls off as it nears the target (so it
     // can always stop in time), and the speed it has can only change by HEAD_ACCEL_DPS2. no
     // instant full-speed starts, no hard stops: that's what made the SG90 look twitchy
-    float stopDist = vel * vel / (2.0f * HEAD_ACCEL_DPS2);
+    float stopDist = vel * vel / (2.0f * accelCap);
     float want = 0;
     if (fabsf(err) > 0.3f) {
-      want = sqrtf(2.0f * HEAD_ACCEL_DPS2 * fabsf(err)) * 0.9f;  // the most it can stop from
-      want = min(want, (float)HEAD_MAX_DPS);
+      want = sqrtf(2.0f * accelCap * fabsf(err)) * 0.9f;  // the most it can stop from
+      want = min(want, speedCap);
       if (fabsf(err) <= stopDist) want = 0;
       if (err < 0) want = -want;
     }
-    float dv = constrain(want - vel, -HEAD_ACCEL_DPS2 * dt, HEAD_ACCEL_DPS2 * dt);
+    float dv = constrain(want - vel, -accelCap * dt, accelCap * dt);
     vel += dv;
     float step = vel * dt;
     if ((err > 0 && step > err) || (err < 0 && step < err)) {  // would pass it: land exactly
@@ -194,6 +210,7 @@ void setState(const char* s) {
 
 void onWake() {
   manual = false;
+  lastTrack = millis();  // the wake turn first; following starts after it
   float b;
   if (!recentBearing(1500, b)) return;  // didn't catch it: the eyes stay put too
   face::hearVoice(wrap180(b - cur));

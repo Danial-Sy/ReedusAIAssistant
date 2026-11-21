@@ -4,14 +4,39 @@
     {
       "name": "reedos-ui",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "5178", "--bind", "127.0.0.1", "--directory", "ReedOS/reedos-app/src"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "5178",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "ReedOS/reedos-app/src"
+      ],
       "port": 5178
     },
     {
       "name": "lite-relay",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-c", "import os,sys,tempfile; d=os.path.join(tempfile.gettempdir(),'reedus-relay-dev'); os.environ.update(RELAY_DATA=d, PORT='8091', RELAY_HOST='127.0.0.1', RELAY_ADMIN_TOKEN='dev-setup-code', DATABASE_URL='', PYTHONIOENCODING='utf-8'); sys.path.insert(0,'ReedusLiteS3/relay'); from reedus_relay.__main__ import main; main([])"],
+      "runtimeArgs": [
+        "-c",
+        "import os,sys,tempfile; d=os.path.join(tempfile.gettempdir(),'reedus-relay-dev'); os.environ.update(RELAY_DATA=d, PORT='8091', RELAY_HOST='127.0.0.1', RELAY_ADMIN_TOKEN='dev-setup-code', DATABASE_URL='', PYTHONIOENCODING='utf-8'); sys.path.insert(0,'ReedusLiteS3/relay'); from reedus_relay.__main__ import main; main([])"
+      ],
       "port": 8091
+    },
+    {
+      "name": "lite-web",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "5179",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "ReedusLiteS3/web"
+      ],
+      "port": 5179
     }
   ]
 }

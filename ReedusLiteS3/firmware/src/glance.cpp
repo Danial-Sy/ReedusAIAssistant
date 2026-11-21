@@ -367,8 +367,33 @@ static void drawCard(uint32_t now) {
 }
 
 // ---------- api ----------
+// not paired yet: the 6-digit code held still in two rows ("653" over "470") so it can be read
+// and typed, with "PAIR" flashed up for a second every 7
+static char pairDigits[8] = "";
+
+void showPair(const char* code) {
+  strncpy(pairDigits, code ? code : "", sizeof(pairDigits) - 1);
+  pairDigits[sizeof(pairDigits) - 1] = 0;
+}
+
+static void drawPair(uint32_t now) {
+  if ((now / 1000) % 7 == 0) {
+    drawSmallCentered("PAIR", 5, GOLD);
+    return;
+  }
+  char top[4] = {pairDigits[0], pairDigits[1], pairDigits[2], 0};
+  char bottom[4] = {pairDigits[3], pairDigits[4], pairDigits[5], 0};
+  drawSmallCentered(top, 2, MINT);
+  drawSmallCentered(bottom, 9, MINT);
+}
+
 bool draw(uint32_t now, bool idle, bool asleep, PxFn fn, float* dim) {
   P = fn;
+  if (pairDigits[0]) {
+    drawPair(now);
+    snprintf(desc, sizeof(desc), "pairing %s", pairDigits);
+    return true;
+  }
   if (ring && idle) {
     drawRing(now);
     snprintf(desc, sizeof(desc), "ring %s %s", ringKind, ringLabel);

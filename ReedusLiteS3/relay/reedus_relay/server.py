@@ -608,12 +608,14 @@ _TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=
           ".ico": "image/x-icon", ".woff2": "font/woff2"}
 
 
-def _response(body: bytes, ctype: str):
+def _response(body: bytes, ctype: str, cors: bool = False):
     from websockets.datastructures import Headers
     from websockets.http11 import Response
-    return Response(200, "OK", Headers([("Content-Type", ctype), ("Content-Length", str(len(body))),
-                                        ("Cache-Control", "no-cache"),
-                                        ("X-Content-Type-Options", "nosniff")]), body)
+    h = [("Content-Type", ctype), ("Content-Length", str(len(body))), ("Cache-Control", "no-cache"),
+         ("X-Content-Type-Options", "nosniff")]
+    if cors:        # the website can live elsewhere (reedos.vercel.app) and still ask
+        h.append(("Access-Control-Allow-Origin", "*"))
+    return Response(200, "OK", Headers(h), body)
 
 
 def _file_response(path: str):
@@ -649,7 +651,7 @@ async def serve(hub: Hub, host: str = config.HOST, port: int = config.PORT):
             return _response(json.dumps({"relay": True, "name": config.RELAY_NAME, "app": "/app",
                                          "claimed": accounts.claimed(),
                                          "setup_code": bool(config.ADMIN_TOKEN)}).encode(),
-                             "application/json")
+                             "application/json", cors=True)
         if not upgrade:
             got = _file_response(path)
             if got is not None:

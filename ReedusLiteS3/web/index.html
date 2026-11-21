@@ -8,6 +8,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Reedus Lite">
+<!-- where the relay is when this page isn't served by the relay itself (e.g. reedos.vercel.app) -->
+<meta name="relay" content="relay-production-228857fe.up.railway.app">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
@@ -234,8 +236,8 @@
     <form class="sheet" id="pair-form">
       <div class="card-head"><h3>Pair a Lite</h3><button class="icon-btn" type="button" data-close aria-label="Close"><svg><use href="#i-x"/></svg></button></div>
       <ol class="how">
-        <li>Plug your Lite in. Once it's on Wi-Fi it scrolls <b>PAIR CODE</b> and 6 digits across its face.</li>
-        <li>Type the digits here.</li>
+        <li>Turn your Lite on. Once it's online its face flashes <b>PAIR</b>, then shows 6 digits in two rows.</li>
+        <li>Type the top row, then the bottom row.</li>
       </ol>
       <input id="pair-code" class="code-input" inputmode="numeric" maxlength="7" placeholder="000000" aria-label="Pairing code" autocomplete="off">
       <label class="field"><span>Name it</span><input id="pair-name" maxlength="40" value="Desk Lite"></label>

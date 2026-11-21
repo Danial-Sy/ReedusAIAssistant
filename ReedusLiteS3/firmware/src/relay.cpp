@@ -178,6 +178,7 @@ static void handleText(const char* txt, size_t len) {
     if (strcmp(code, pairCode)) {
       strncpy(pairCode, code, sizeof(pairCode) - 1);
       pairCode[sizeof(pairCode) - 1] = 0;
+      glance::showPair(pairCode);
       Serial.printf("[relay] not paired yet. Pairing code: %s (type it in the website: Pair a Lite)\n",
                     pairCode);
     }
@@ -189,6 +190,7 @@ static void handleText(const char* txt, size_t len) {
       store::saveToken(tok);
       token = tok;
       pairCode[0] = 0;
+      glance::showPair("");
       Serial.printf("[relay] paired as \"%s\". Reconnecting with the new token\n",
                     (const char*)(doc["name"] | "Reedus Lite"));
       face::expr("happy", 2.0f);
@@ -231,6 +233,8 @@ static void handleText(const char* txt, size_t len) {
   } else if (!strcmp(t, "look")) {
     head::look(doc["angle"] | 0.0f);
   } else if (!strcmp(t, "clock") || !strcmp(t, "timers") || !strcmp(t, "glance")) {
+    // the relay also scrolls "PAIR CODE …" for older firmware; ours holds the code still instead
+    if (!strcmp(t, "glance") && !strncmp(doc["text"] | "", "PAIR CODE", 9)) return;
     glance::onMessage(t, doc);
   } else if (!strcmp(t, "music")) {
     const char* op = doc["op"] | "";
@@ -287,6 +291,8 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t len) {
     case WStype_DISCONNECTED:
       if (connected) Serial.println("[relay] relay link down");
       connected = false;
+      pairCode[0] = 0;  // a code only means something while this link is up
+      glance::showPair("");
       gateOpen = listening = deviceWake = false;
       audio::flush();
       audio::musicFlush();
@@ -396,6 +402,12 @@ void update() {
     return;
   }
 
+  if (!token.length()) {  // waiting to be paired: nobody's listening yet, keep the mic home
+    int16_t frame[FRAME_SAMPLES];
+    while (audio::popMicFrame(frame)) {
+    }
+    return;
+  }
   if (heard && deviceWake) onDeviceWake(score);
   micUp();
 

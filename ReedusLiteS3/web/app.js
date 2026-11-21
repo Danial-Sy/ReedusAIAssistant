@@ -5,6 +5,8 @@
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 
+let relayHost = location.host;    // relayInfo() points this at the relay when the page lives elsewhere
+
 const saved = {
   get(k) { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
   set(k, v) { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch { /* private mode */ } },
@@ -53,7 +55,9 @@ const Relay = (() => {
   let ws = null, authed = false, me = null, nextId = 1, retry = null;
   const pending = new Map();
   const hooks = { down: [], up: [], lost: [] };
-  const url = () => `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/app`;
+  const url = () => (relayHost === location.host
+    ? `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/app`
+    : `wss://${relayHost}/app`);
   const fire = (k, v) => hooks[k].forEach((f) => f(v));
 
   /* open a socket and sign in with `first` ({type:"auth"|"setup"|"join"|"redeem"|"owner", …}) */
@@ -905,11 +909,24 @@ function wireSettings() {
 }
 
 /* ======================= boot ======================= */
+/* the relay serves this page itself, or the page lives elsewhere (Vercel) and the
+   <meta name="relay"> tag says where the relay is */
 async function relayInfo() {
-  try {
-    const r = await fetch("/relay.json", { cache: "no-store" });
-    if (r.ok) return await r.json();
-  } catch { /* opened from a file, or offline */ }
+  const ask = async (base) => {
+    try {
+      const r = await fetch(`${base}/relay.json`, { cache: "no-store" });
+      if (!r.ok) return null;
+      const j = await r.json();
+      return j && j.relay ? j : null;
+    } catch { return null; }   // not a relay (or an HTML fallback page), or offline
+  };
+  const here = await ask("");
+  if (here) { relayHost = location.host; return here; }
+  const meta = ($('meta[name="relay"]') || {}).content || "";
+  if (meta && meta !== location.host) {
+    relayHost = meta;
+    return (await ask(`https://${meta}`)) || {};
+  }
   return {};
 }
 

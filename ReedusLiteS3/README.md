@@ -85,7 +85,7 @@ Open `https://<relay>/` on a phone or laptop (*Add to Home Screen* makes it an a
    ```bash
    cd ReedusLiteS3/firmware && pio run -t upload && pio device monitor
    ```
-4. Once it's online, Lite scrolls **PAIR CODE** and six digits across its face (the serial monitor prints them too). Tap **Pair a Lite** on the website and type them. Lite gets its own token, keeps it in flash, and reconnects as itself.
+4. Once it's online, Lite's face flashes **PAIR** and then holds six digits in two rows: top row first, then the bottom (the serial monitor prints them too). Tap **Pair a Lite** on the website and type them. Lite gets its own token, keeps it in flash, and reconnects as itself.
 
 Serial commands worth knowing: `info` (link, pairing, wake word), `unpair` (forget the token and show a new code), `wifi <network> <password>` (join another network without reflashing), `help` for the rest.
 

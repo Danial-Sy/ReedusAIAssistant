@@ -21,6 +21,8 @@ bool draw(uint32_t now, bool idle, bool asleep, PxFn px, float* dim);
 
 bool ringing();                     // something is ringing right now: wakes the face up
 
+void showPair(const char* code);    // hold a pairing code on the face; "" puts the face back
+
 // standalone S3: a countdown that runs out with no ring from the relay (link down, or the
 // relay more than 2.5 s late) rings here anyway, for up to LOCAL_RING_MAX_MS. the relay's next
 // `timers` message is the truth again. call every loop.
