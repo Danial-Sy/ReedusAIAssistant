@@ -1,5 +1,6 @@
 #include "head.h"
 
+#include "audio.h"
 #include "config.h"
 #include "face.h"
 #include "store.h"
@@ -28,7 +29,7 @@ static float histDeg[HIST];
 static uint32_t histAt[HIST];
 static int histN = 0, histI = 0;
 static float lastWorld = 0, lastRel = 0;
-static uint32_t lastVoiceAt = 0;
+static uint32_t lastVoiceAt = 0, lastPlayAt = 0;
 static int sustained = 0;
 
 // calibration: config.h's defaults, overridden by `cal` (saved in NVS, see store.cpp)
@@ -64,22 +65,39 @@ static void turnTo(float deg, uint32_t delayMs, bool slow = false) {
   pending = true;
 }
 
-// median of speech bearings heard in the last `ms`: the name is ~0.6 s, so this is the
-// direction the wake word came from even if the next reading is the speaker's echo
-static bool recentBearing(uint32_t ms, float& out, int minN = 1) {
+// the bearing of whoever is talking: in the last `ms`, the biggest group of readings that agree
+// within HEAD_CLUSTER_DEG, and only if that group is at least HEAD_CLUSTER_SHARE of them. a
+// median of two people (you on one side, your mom on the other) lands in the empty middle and
+// the head goes nowhere useful; this picks the one who's actually talking, or waits
+static bool recentBearing(uint32_t ms, float& out, int minN = 1, float share = HEAD_CLUSTER_SHARE) {
   float v[HIST];
   int n = 0;
   uint32_t now = millis();
   for (int i = 0; i < histN; i++)
     if (now - histAt[i] <= ms) v[n++] = histDeg[i];
   if (n < minN || !n) return false;
-  for (int i = 1; i < n; i++)
-    for (int j = i; j > 0 && v[j] < v[j - 1]; j--) {
-      float t = v[j];
-      v[j] = v[j - 1];
-      v[j - 1] = t;
+  int best = -1, bestCount = 0;
+  for (int i = 0; i < n; i++) {
+    int c = 0;
+    for (int j = 0; j < n; j++)
+      if (fabsf(wrap180(v[j] - v[i])) <= HEAD_CLUSTER_DEG) c++;
+    if (c > bestCount) {
+      bestCount = c;
+      best = i;
     }
-  out = v[n / 2];
+  }
+  if (best < 0 || bestCount < minN || bestCount < share * n) return false;
+  // circular mean of that group, around its seed
+  float sum = 0;
+  int c = 0;
+  for (int j = 0; j < n; j++) {
+    float d = wrap180(v[j] - v[best]);
+    if (fabsf(d) <= HEAD_CLUSTER_DEG) {
+      sum += d;
+      c++;
+    }
+  }
+  out = wrap180(v[best] + sum / c);
   return true;
 }
 
@@ -94,15 +112,25 @@ static void pollDoa(uint32_t now) {
     lastRawAt = now;
   }
   float rel = wrap180(doaSign * ((float)raw - doaFront));
+  // his own voice: the echo canceller takes most of it out, but what's left still trips the
+  // speech flag and points at the speaker. those readings used to fill the history, so after he
+  // talked, a wake or a new voice was outvoted by himself
+  bool talking = audio::playing();
+  if (talking) lastPlayAt = now;
+  bool ownVoice = talking || now - lastPlayAt < HEAD_ECHO_GUARD_MS;
   if (printDoa)
-    Serial.printf("[doa] raw=%3u rel=%+6.1f head=%+6.1f world=%+6.1f %s\n", raw, rel, cur,
-                  wrap180(rel + cur), speech ? "SPEECH" : "");
+    Serial.printf("[doa] raw=%3u rel=%+6.1f head=%+6.1f world=%+6.1f %s%s\n", raw, rel, cur,
+                  wrap180(rel + cur), speech ? "SPEECH" : "", speech && ownVoice ? " (his own voice, ignored)" : "");
   // the mics ride on the head: while it's turning, the array is spinning under the voice
   if (!speech || now < settleUntil) {
     if (!speech) sustained = 0;
     return;
   }
   float world = wrap180(rel + cur);
+  // while he talks, his speaker (in the base, firing straight out the front) is a voice at
+  // world ~0. keep only readings well away from it: that's someone talking over him (usually
+  // saying "Reedus"), which is exactly who the head should turn to
+  if (ownVoice && fabsf(world) < HEAD_SPEAKER_CONE_DEG) return;
   histDeg[histI] = world;
   histAt[histI] = now;
   histI = (histI + 1) % HIST;
@@ -127,13 +155,18 @@ static void pollDoa(uint32_t now) {
 #endif
 
 #if HEAD_TRACK_IN_CONVO
-  // a conversation is open and he's listening to you: drift after your voice if you've moved.
-  // the median of the last second (at least 4 readings) so one stray bearing never moves it
+  // a conversation is open and he's listening: look at whoever is talking. someone new across
+  // the room (a big jump) gets a proper turn right away; you shifting in your seat gets a slow
+  // drift. it needs HEAD_TRACK_MIN_N readings that agree, so noise and crosstalk don't move it
   if (mode == M_LISTEN && !manual && !pending && now - lastTrack > HEAD_TRACK_EVERY_MS) {
     float b;
-    if (recentBearing(1000, b, 4) && fabsf(wrap180(b - cur)) > HEAD_TRACK_DEADBAND_DEG) {
-      lastTrack = now;
-      turnTo(cur + wrap180(b - cur) * HEAD_TURN_SCALE, 0, true);
+    if (recentBearing(HEAD_TRACK_WINDOW_MS, b, HEAD_TRACK_MIN_N)) {
+      float off = wrap180(b - cur);
+      if (fabsf(off) > HEAD_TRACK_DEADBAND_DEG) {
+        lastTrack = now;
+        bool newPerson = fabsf(off) > HEAD_NEW_SPEAKER_DEG;
+        turnTo(cur + off * HEAD_TURN_SCALE, 0, !newPerson);
+      }
     }
   }
 #endif
@@ -212,7 +245,9 @@ void onWake() {
   manual = false;
   lastTrack = millis();  // the wake turn first; following starts after it
   float b;
-  if (!recentBearing(1500, b)) return;  // didn't catch it: the eyes stay put too
+  // whoever said the name: the readings during the last ~1.2 s that agree (his own voice is
+  // already left out). the share is lower than in conversation: the name is short
+  if (!recentBearing(1200, b, 2, 0.5f) && !recentBearing(2000, b, 1, 0.4f)) return;
   face::hearVoice(wrap180(b - cur));
   // the array's bearing runs a little wide, so turn most of the way and let the eyes
   // (already looking at the voice) cover the rest. better short than past you

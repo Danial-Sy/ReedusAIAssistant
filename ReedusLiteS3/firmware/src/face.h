@@ -29,4 +29,15 @@ const char* describe();
 
 bool knownExpr(const char* name);
 
+// drawings and animations from the app (relay binary kind 3). rgb = 16x16x3, rows top to
+// bottom, as seen from the front. the last frame (idx == count-1) starts playback. holdS 0 =
+// until cleared; anyone talking to him (wake, listening) brings the face back
+void artFrame(int idx, int count, int fps, int holdS, bool loop, const uint8_t* rgb);
+void artClear();
+bool artActive();
+bool artTakeEnded();  // true once after a drawing finished on its own (tell the relay)
+
+// firmware update progress bar (ota.cpp): pct 0-100, <0 = off
+void setUpdating(int pct);
+
 }  // namespace face

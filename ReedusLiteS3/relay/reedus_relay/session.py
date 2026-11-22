@@ -67,6 +67,14 @@ class Session:
         self.stt = stt or speech.transcribe
         self._last_clock = self._last_timers = 0.0
         self.closed = False
+        self.spec = None                 # an early transcript in flight (speech.Endpointer 'pause')
+        self.spec_meters: list = []
+        self.spec_at = 0.0
+        self.t_end = self.t_first_audio = 0.0
+        self.idle_since = time.monotonic()
+        self.next_glance = time.monotonic() + 25.0
+        self.art_until = 0.0             # something drawn from the app is on the face
+        self.funded_hint = True          # last known: does the pool have money (no early STT if not)
 
         if assistant is None:
             from reedus_relay.assist_store import DbAssistant
@@ -93,6 +101,9 @@ class Session:
         self._put(json.dumps(msg, separators=(",", ":")))
 
     def set_state(self, state: str) -> None:
+        if state == "idle" and self.state != "idle":
+            self.idle_since = time.monotonic()
+            self.next_glance = max(self.next_glance, self.idle_since + 20.0)
         self.state = state
         self.send({"type": "state", "state": state})
 
@@ -134,7 +145,8 @@ class Session:
         _, rev = await asyncio.to_thread(memory.bulletin, self.aid)
         if rev and int(self.hello.get("bulletin_rev") or 0) != rev:
             await asyncio.to_thread(self.send_bulletin)
-        if not await asyncio.to_thread(accounts.funded, self.aid):
+        self.funded_hint = await asyncio.to_thread(accounts.funded, self.aid)
+        if not self.funded_hint:
             self.send({"type": "glance", "card": "text", "text": "ADD CREDIT IN THE APP", "hold": 20})
 
     async def housekeeping(self) -> None:
@@ -148,6 +160,41 @@ class Session:
             # listening but the device went quiet (it should be streaming): don't hang there
             if self.mode == LISTEN and now - self.last_frame > 4.0:
                 self.end_conversation()
+            if self.mode == IDLE and now >= self.next_glance:
+                await self.glance_round(now)
+
+    def glance_settings(self) -> dict:
+        return ((self.account or {}).get("settings") or {}).get("glance") or {}
+
+    async def glance_round(self, now: float) -> None:
+        """The idle weather card (turned on in the app): every `every` seconds while nobody's
+        talking, not at night, not over a timer or a ring or a drawing from the app."""
+        g = self.glance_settings()
+        self.next_glance = now + max(30.0, float(g.get("every") or 90))
+        if not g.get("weather") or not (g.get("place") or "").strip():
+            return
+        if self.state != "idle" or now - self.idle_since < 15.0 or now < self.art_until:
+            return
+        try:
+            if self.assist.ringing() or any(i.get("kind") == "timer" for i in self.assist.active()):
+                return
+        except Exception:                                        # noqa: BLE001
+            pass
+        quiet = g.get("night") if isinstance(g.get("night"), list) else [23, 7]
+        h = time.localtime().tm_hour
+        if len(quiet) == 2 and (h >= quiet[0] or h < quiet[1] if quiet[0] > quiet[1]
+                                else quiet[0] <= h < quiet[1]):
+            return
+        from reedus_relay import weather
+        try:
+            w = await asyncio.to_thread(weather.current, g["place"], g.get("unit") or "F")
+        except Exception as e:                                   # noqa: BLE001
+            print(f"[relay] weather card failed: {type(e).__name__}: {e}", flush=True)
+            return
+        if w and self.mode == IDLE and self.state == "idle":
+            self.send({"type": "glance", "card": "weather", "temp": w["temp"], "unit": w["unit"],
+                       "icon": w["icon"], "hold": 8})
+            self.info["glance"] = {"card": "weather", **w, "at": time.time()}
 
     def close(self) -> None:
         self.closed = True
@@ -166,7 +213,12 @@ class Session:
         self.last_frame = time.monotonic()
         if self.mode == LISTEN and self.ep is not None:
             ev = self.ep.feed(pcm)
-            if ev in ("end", "max"):
+            if ev == "pause":
+                self._speculate(self.ep.audio())
+            elif ev == "resume":
+                self.spec = None                 # they went on: that early transcript is short
+            elif ev in ("end", "max"):
+                self.t_end = time.monotonic()
                 self.begin_turn(self.ep.audio())
             elif ev == "timeout":
                 self.end_conversation()
@@ -188,7 +240,15 @@ class Session:
                 if self.wake.gate_opened():
                     self.on_wake()
         elif t in ("status", "battery", "doa", "music"):
-            self.info[t] = msg
+            self.info[t] = {**msg, "at": time.time()} if t == "doa" else msg
+        elif t == "ota":                     # a firmware update's progress, for the app
+            self.info["ota"] = {**(self.info.get("ota") or {}), **msg, "at": time.time()}
+            if msg.get("state") in ("done", "error"):
+                print(f"[relay] {self.device.get('name')}: firmware update {msg.get('state')}"
+                      f"{': ' + str(msg.get('error')) if msg.get('error') else ''}", flush=True)
+        elif t == "draw":                    # the drawing finished playing on its own
+            if msg.get("op") == "done":
+                self.art_until = 0.0
         elif t == "bulletin_ack":
             self.info["bulletin_rev"] = msg.get("rev")
 
@@ -199,10 +259,12 @@ class Session:
             self.barge()
         self.send({"type": "wake"})
         self.start_listening(follow_up=False)
+        self.warm()
 
     # ---------- conversation ----------
     def start_listening(self, follow_up: bool) -> None:
         self.mode = LISTEN
+        self.spec = None
         self.ep = speech.Endpointer(start_timeout=config.FOLLOW_UP_S if follow_up
                                     else config.START_TIMEOUT_S)
         self.last_frame = time.monotonic()
@@ -238,21 +300,76 @@ class Session:
     def _stale(self, cancel: threading.Event) -> bool:
         return cancel.is_set() or cancel is not self.cancel or self.closed
 
+    # ---------- speculative speech-to-text ----------
+    def _speculate(self, audio: bytes) -> None:
+        """They paused: start transcribing now. If the pause turns out to be the end of the
+        sentence (it usually is), the transcript is already on its way when 'end' fires."""
+        if len(audio) < speech.FRAME_BYTES * 10 or not self.funded_hint:
+            return
+        m = meter.Meter()
+        self.spec_meters.append(m)
+
+        def _hear():
+            with meter.metering(m):
+                return self.stt(audio)
+        self.spec = asyncio.ensure_future(asyncio.to_thread(_hear))
+        self.spec_at = time.monotonic()
+
+    async def _hear(self, audio: bytes, m) -> tuple:
+        """(text, how): the early transcript when it's still good, else a fresh one."""
+        spec, self.spec = self.spec, None
+        spent, self.spec_meters = self.spec_meters, []
+        got = None
+        if spec is not None:
+            try:
+                got = (await spec, "early")
+            except Exception as e:                               # noqa: BLE001
+                print(f"[relay] early transcript failed ({type(e).__name__}), asking again", flush=True)
+        for sm in spent:                     # early attempts are paid for either way
+            for what, usd in sm.parts:
+                m.add(usd, what)
+        if got is not None:
+            return got
+
+        def _go():
+            with meter.metering(m):
+                return self.stt(audio)
+        return await asyncio.to_thread(_go), "after"
+
+    def warm(self) -> None:
+        """Someone said "Reedus": open the voice's connection while they talk, so the first
+        sentence doesn't pay for a TLS handshake."""
+        def _go():
+            try:
+                v = self.voice_factory(self.voice_prefs())
+            except TypeError:
+                v = self.voice_factory()
+            except Exception:                                    # noqa: BLE001
+                return
+            if hasattr(v, "warm"):
+                v.warm()
+        threading.Thread(target=_go, name="voice-warm", daemon=True).start()
+
+    def voice_prefs(self) -> dict:
+        return ((self.account or {}).get("settings") or {}).get("voice") or {}
+
     async def turn(self, audio: bytes, cancel: threading.Event) -> None:
         m = meter.Meter()
         said, reply = "", ""
+        t_end = getattr(self, "t_end", 0.0) or time.monotonic()
+        self.t_first_audio = 0.0
         try:
-            if not await asyncio.to_thread(accounts.funded, self.aid):
+            self.funded_hint = await asyncio.to_thread(accounts.funded, self.aid)
+            if not self.funded_hint:
                 await self.speak_lines([OUT_OF_CREDIT], m, cancel)
                 await self._finish_playback(cancel)
                 if not self._stale(cancel):
                     self.end_conversation()
                 return
 
-            def _hear():
-                with meter.metering(m):
-                    return self.stt(audio)
-            said = strip_wake(await asyncio.to_thread(_hear))
+            raw, how = await self._hear(audio, m)
+            said = strip_wake(raw)
+            t_heard = time.monotonic()
             if self._stale(cancel):
                 return
             if not said:
@@ -288,6 +405,13 @@ class Session:
             think = asyncio.ensure_future(asyncio.to_thread(_think))
             await self.speak_stream(sentences, m, cancel)
             reply = await think
+            if self.t_first_audio:
+                st = speech.last_stt
+                print(f"[relay] {self.device.get('name')}: heard in {int((t_heard - t_end) * 1000)} ms "
+                      f"({st.get('model', 'stt')}, {how}), voice started "
+                      f"{int((self.t_first_audio - t_end) * 1000)} ms after you stopped "
+                      f"(thinking + first sentence {int((self.t_first_audio - t_heard) * 1000)} ms)",
+                      flush=True)
             if self._stale(cancel):
                 return
             await self._finish_playback(cancel)
@@ -317,6 +441,7 @@ class Session:
             if usd > 0:
                 await asyncio.to_thread(accounts.charge, self.aid, usd,
                                         f"{self.device.get('name', 'Lite')}: {m.summary()}")
+                self.funded_hint = await asyncio.to_thread(accounts.funded, self.aid)
             if said and reply:
                 await asyncio.to_thread(memory.record_turn, self.aid, self.did, self.conversation,
                                         said, reply, usd)
@@ -379,16 +504,23 @@ class Session:
                         continue
                     if first:
                         self.set_state("speaking")
+                        self.t_first_audio = time.monotonic()
                         first = False
                     await self._send_speech(fr)
                 await task
 
         await asyncio.gather(dispatch(), play())
 
+    def _voice(self):
+        try:
+            return self.voice_factory(self.voice_prefs())
+        except TypeError:                     # a factory that takes no prefs (tests)
+            return self.voice_factory()
+
     def _synth(self, text: str, frames: asyncio.Queue, m, cancel) -> None:
         try:
             with meter.metering(m):
-                for fr in self.voice_factory().frames(text):
+                for fr in self._voice().frames(text):
                     if self._stale(cancel):
                         break
                     self.loop.call_soon_threadsafe(frames.put_nowait, fr)

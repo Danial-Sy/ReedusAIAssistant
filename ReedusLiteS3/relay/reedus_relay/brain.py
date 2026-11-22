@@ -47,6 +47,7 @@ def face_tag(text: str) -> tuple:
 REPLY_TOKENS = int(config.env_float("RELAY_REPLY_TOKENS", 220))
 
 _SENTENCE_END = re.compile(r"(?<=[.!?…])[\"')\]]?\s+(?=[A-Z0-9\"'(\[])")   # "[" : a face tag
+_CLAUSE_END = re.compile(r"(?<=[,;:—])\s+(?=\S)")
 _FILLER = r"(?:(?:ok(?:ay)?|alright|all right|cool|great|thanks|thank you|cheers|perfect)[,.!\s]+)*"
 _BYE_WORDS = (r"(?:good ?bye|bye(?: bye)?|see (?:you|ya)(?: later| tomorrow)?|good ?night|"
               r"night night|later|that'?s all(?: for now)?|go to sleep)")
@@ -60,6 +61,26 @@ def is_goodbye(said: str) -> bool:
     return bool(_BYE.search(said or ""))
 
 
+# does this sentence need the live web? searching costs 1-3 s per turn, so the brain only gets
+# the search tool when it plausibly does (RELAY_SEARCH=always/off overrides)
+_NEEDS_SEARCH = re.compile(
+    r"\b(?:news|latest|newest|recent(?:ly)?|current(?:ly)?|today'?s|tonight|this (?:week|weekend|"
+    r"month|year)|right now|score|scores|who won|won the|game (?:last night|today|tonight)|"
+    r"standings|playoffs?|election|stock|stocks|price of|how much (?:is|does|are)|cost of|"
+    r"release(?:d| date)?|come out|came out|coming out|open (?:right )?now|hours|near me|"
+    r"look (?:it |that )?up|search|google|what happened|who is the (?:current|new)|"
+    r"is .{1,40} (?:still|dead|alive)|traffic|flight|forecast)\b", re.I)
+
+
+def needs_search(said: str) -> bool:
+    mode = config.LITE_SEARCH
+    if mode == "always":
+        return True
+    if mode == "off":
+        return False
+    return bool(_NEEDS_SEARCH.search(said or ""))
+
+
 def speakable(text: str) -> str:
     t = _MD.sub("", text or "")
     t = re.sub(r"\[(?:[^\]]{0,40})\]", "", t)                # [laughs]-style directions
@@ -70,9 +91,13 @@ class SentenceSplitter:
     """Feed streamed tokens; get complete sentences as soon as each one closes."""
 
     def __init__(self, emit: Callable[[str], None], min_chars: int = 24,
-                 on_face: Optional[Callable[[str], None]] = None):
+                 on_face: Optional[Callable[[str], None]] = None, first_clause: int = 0):
         self.emit, self.min_chars, self.buf = emit, min_chars, ""
         self.on_face = on_face
+        # >0: the very first piece may end at a comma once it's this long, so the voice can
+        # start on "Oh, that's a great question," while the rest is still being written
+        self.first_clause = first_clause
+        self.sent = 0
 
     def _out(self, head: str) -> None:
         tag, head = face_tag(head)
@@ -80,6 +105,7 @@ class SentenceSplitter:
             self.on_face(tag)               # before its sentence, so the face leads the voice
         if speakable(head):
             self.emit(speakable(head))
+            self.sent += 1
 
     def feed(self, tok: str) -> None:
         self.buf += tok
@@ -89,6 +115,11 @@ class SentenceSplitter:
                 if cand.start() >= self.min_chars:
                     m = cand
                     break
+            if not m and self.first_clause and not self.sent:
+                for cand in _CLAUSE_END.finditer(self.buf):
+                    if len(face_tag(self.buf[:cand.start()])[1].strip()) >= self.first_clause:
+                        m = cand
+                        break
             if not m:
                 return
             head, self.buf = self.buf[:m.start()], self.buf[m.end():]
@@ -179,8 +210,28 @@ class Brain:
         bulletin, _ = memory.bulletin(self.account["id"])
         recalled = memory.recall(self.account["id"], said, conversation)
         today = datetime.now().strftime("%A, %B %d, %Y, %I:%M %p").replace(" 0", " ")
-        return persona.build_runtime_system(today=today, bulletin=bulletin, recalled=recalled) \
+        out = persona.build_runtime_system(today=today, bulletin=bulletin, recalled=recalled) \
             + "\n\n" + LITE_VOICE
+        fact = self.weather_fact(said)
+        if fact:
+            out += "\n\n" + fact + " (Live data. Use it if they asked about the weather.)"
+        return out
+
+    def weather_fact(self, said: str) -> str:
+        """Open-Meteo for the place set in the app, when they ask about the weather at home:
+        instant, and no web search."""
+        try:
+            from reedus_companion.serve.weather import _WEATHER_ASK, place_hint_from_message
+            if not _WEATHER_ASK.search(said or "") or place_hint_from_message(said):
+                return ""
+            g = ((self.account or {}).get("settings") or {}).get("glance") or {}
+            place = (g.get("place") or "").strip()
+            if not place:
+                return ""
+            from reedus_relay import weather
+            return weather.spoken(place, g.get("unit") or "F")
+        except Exception:                                        # noqa: BLE001
+            return ""
 
     def reply(self, said: str, conversation: str, on_sentence: Callable[[str], None],
               cancel: Optional[threading.Event] = None,
@@ -193,11 +244,19 @@ class Brain:
             self._remember(said, fast)
             return fast
         msgs = [{"role": "system", "content": self.system(said, conversation)}]
-        msgs += self.history[-2 * config.HISTORY_TURNS:]
+        # an empty turn (a reply cut off by "Reedus" before it said anything) makes Gemini
+        # refuse the whole request ("Missing text in content"), so those never go in
+        msgs += [h for h in self.history[-2 * config.HISTORY_TURNS:] if (h.get("content") or "").strip()]
         msgs.append({"role": "user", "content": said})
-        split = SentenceSplitter(on_sentence, on_face=on_face)
-        text = self.backend().chat(msgs, REPLY_TOKENS, use_adapter=True, on_token=split.feed,
-                                   name="persona", cancel=cancel)
+        split = SentenceSplitter(on_sentence, on_face=on_face, first_clause=36)
+        backend = self.backend()
+        searchable = getattr(backend, "_search_default", None)
+        if searchable is None and hasattr(backend, "_search"):
+            searchable = backend._search_default = bool(backend._search)
+        if searchable is not None:
+            backend._search = bool(searchable) and needs_search(said) and not self.weather_fact(said)
+        text = backend.chat(msgs, REPLY_TOKENS, use_adapter=True, on_token=split.feed,
+                            name="persona", cancel=cancel)
         if cancel is not None and cancel.is_set():
             split.buf = ""
         else:
@@ -207,6 +266,8 @@ class Brain:
         return speakable(face_tag(text)[1])
 
     def _remember(self, said: str, reply: str) -> None:
+        if not (said or "").strip() or not (reply or "").strip():
+            return
         with self.lock:
             self.history += [{"role": "user", "content": said},
                              {"role": "assistant", "content": reply}]

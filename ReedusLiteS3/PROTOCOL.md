@@ -21,6 +21,8 @@ The standalone S3 firmware (`firmware/src/relay.cpp`) talks to the relay (`relay
 | `wake` | `score` | the S3 heard "Reedus" (`score`: the sliding-window average probability, 0–1). Only after `welcome` said `wake: "device"`. A `gate` open and `WAKE_PREROLL_MS` of pre-roll follow right behind it, then live audio |
 | `gate` | `open` | the gate opened (the wake word; or, with the relay doing the wake word, a voice or a loud beam) or closed (`GATE_HOLD_MS` after the voice stopped). Mic frames only flow between an open and a close, plus the pre-roll sent right after the open |
 | `bulletin_ack` | `rev` | the bulletin was saved to flash |
+| `ota` | `state` (`downloading`, `error`), `pct?`, `error?` | a firmware update's progress. The S3 drops the link to download; on success it reboots on the new firmware, on failure it reconnects and sends `error` right after `hello` |
+| `draw` | `op: "done"` | a drawing from the app finished playing on its own |
 | `doa`, `battery`, `music` | as v2 | |
 | `status` | v2 fields + `gate`, `wake` (`device` or `relay`) | every 10 s |
 
@@ -36,7 +38,11 @@ Mic frames are unchanged: 16 kHz mono int16, 20 ms (640 bytes) per binary messag
 | `welcome` | `proto: 3, volume, brightness, account, device, wake` | reply to `hello`. `wake: "device"`: the relay trusts the S3's wake word, so the S3 keeps the mic to itself until it hears the name. `"relay"` (or missing, from an older relay): the S3 uses its speech gate and the relay listens for the name |
 | `listen` | `open` | `true`: a conversation is open, stream every mic frame (the relay is listening for the end of a sentence or a follow-up). `false`: back to the gate |
 | `bulletin` | `rev, text` | Reedus's notes about this account. Saved to NVS, acknowledged with `bulletin_ack` |
-| `state`, `wake`, `emotion`, `expr`, `flush`, `volume`, `brightness`, `look`, `clock`, `timers`, `glance`, `music` | as v2 | |
+| `state`, `wake`, `emotion`, `expr`, `flush`, `volume`, `brightness`, `look`, `clock`, `timers`, `glance`, `music` | as v2 | `glance` `card: "weather"` is the idle weather card (turned on in the app) |
+| `draw` | `op: "clear"` | back to his face (drawings arrive as binary kind 3, below) |
+| `ota` | `url, size, md5, version` | download this firmware image over HTTPS, check its MD5, flash the other app slot and reboot. Only to a Lite whose `caps` has `ota` |
+
+Binary kind `3` (relay to device): a drawing or animation frame from the app. `[3, index, count, fps, hold seconds (0 = until cleared), loop]` then 768 bytes of RGB, 16x16, rows top to bottom as seen from the front. The frame with `index == count-1` starts playback. Only to a Lite whose `caps` has `draw`.
 
 Speech comes down exactly as in v2 (kind byte `1`, then 16 kHz int16), paced to stay at most `RELAY_LEAD_S` (0.35 s) ahead of the device's playhead, so a `flush` silences him within one frame.
 
@@ -71,6 +77,7 @@ Removing a Lite in the website deletes it, sends `unpaired` to it if it's online
 | path | |
 |---|---|
 | `/health` | `reedus relay ok` (Railway's health check) |
+| `/fw/<token>.bin` | a firmware image for a Lite that was told to update (link lives 15 minutes) |
 | `/relay.json` | `{"relay": true, "name", "app": "/app", "claimed", "setup_code"}`: whether anyone has set this relay up yet, and whether setting it up needs `RELAY_ADMIN_TOKEN` |
 | `/`, `/app.js`, `/app.css`, … | the website (`ReedusLiteS3/web`, copied to `/app/ui` in the image) |
 
@@ -101,6 +108,18 @@ Then each request is `{"id", "action", …}` and each reply echoes `id`.
 | `memory.forget` | | deletes the notes and all history |
 | `ledger` | `limit?` | top-ups and spend, newest first |
 | `chat` | `text` | type to Reedus: same brain and memory, no voice |
+| `device.expr` | `device, name, hold?` | an expression on the face |
+| `device.state` | `device, state` | preview listening / thinking / sleep / idle (not mid-conversation) |
+| `device.look` | `device, angle` | turn the head (-90 to 90, + = his left) |
+| `device.draw` | `device, frames[] (base64 RGB 16x16), fps?, hold?, loop?` | a drawing or animation, up to 32 frames |
+| `device.draw.clear` | `device` | back to his face |
+| `voices` | | Inworld's English voices (or a built-in list), the account's `voice` and the relay `default` |
+| `voice.preview` | `voice, speed?, text?` | a sample as base64 WAV (`wav`), charged to the account |
+| `voice.set` | `voice, speed?, style?` | the account's voice; Lites use it from the next sentence |
+| `glance.set` | `weather?, place?, unit? (F/C), every? (s)` | the idle weather card. A place it can't find is refused |
+| owner `fw.upload` | `upload?, index, count, data` (base64, up to 512 KB a piece) | firmware.bin; the last piece returns `fw, size, version` |
+| owner `fw.latest` | | the newest CI build (GitHub release `lite-fw-latest`, `RELAY_FW_URL`) as `fw` |
+| owner `device.ota` | `device, fw` | tell that Lite to update; progress shows in `status` (`devices[].ota`) |
 | `login.code` | | a 6-digit code to sign another device in (`expires_in` seconds) |
 | `signout` | | this browser's token stops working |
 | `topup.start` | `usd` ($5–$200), `return_to?`, `save_card?`, `auto? {below, amount}` | a Stripe Checkout `url`. Stripe sends you back to `/?topup=<session>#credit`. `return_to` is honoured only for this relay or a private-network address. `save_card` keeps the card (under a Stripe Customer for the account) for auto top-up |

@@ -104,6 +104,14 @@ Nothing to set up: the S3 hears "Reedus" itself (`firmware/src/wake.cpp`). Only 
 - **Credit**: what's left, **Pay** by card (Stripe Checkout: card, Apple Pay, Google Pay) with *Save my card and refill automatically*, auto refill settings, the owner's *Add credit by hand*, and recent activity (each turn's cost).
 - **Settings**: the AI model, *Service keys* and *People* (owner), what Reedus remembers (editable, pushed to each Lite), *Sign in another device*, theme, sign out.
 
+## Listening, speed, and what the app controls
+
+- **End of a sentence**: Silero VAD (`relay/models/silero_vad.onnx`) decides what's speech, so a fan or a TV doesn't hold the turn open; anything 15 dB quieter than the person talking to Lite counts as background. The sentence ends 0.6 s after they stop (`RELAY_END_SILENCE_S`). `RELAY_VAD=energy` goes back to loudness only.
+- **Speed**: transcription starts at the first 0.3 s pause, so it's usually done when the sentence ends; it uses `gemini-3.5-transcribe` (falls back to Flash). The brain thinks at the lowest level the model allows and only gets web search when the sentence sounds like it needs it (`RELAY_SEARCH=auto|always|off`). Weather at home comes from Open-Meteo, no search. Every turn logs `heard in … ms … voice started … ms after you stopped`.
+- **Voice**: Settings → Voice lists Inworld's voices, plays a sample, and sets the speed.
+- **Idle screen**: Settings → Idle screen turns on the weather card for a place you type.
+- **Controls** (Home → a Lite): expressions, state previews, the head dial, a 16x16 drawing pad with animations (up to 32 frames), and **Update** (owner): the latest CI build (`.github/workflows/lite-firmware.yml` publishes it) or a `firmware.bin` you upload. The first firmware with updates in it (0.3.0) goes on over USB once.
+
 ## Money
 
 Every cloud cost (speech-to-text, the LLM, web searches, Inworld) is metered per turn and taken from the account's pool, and `ledger` lists each charge. When the pool hits zero, Lite shows `TOP UP IN REEDOS` and says he's out of credit instead of spending more. Top-ups go through Stripe Checkout: the relay starts the payment, asks Stripe whether it was paid when you come back, and credits the pool exactly once. It re-checks open payments every 30 s, so closing the tab before you come back still credits it. Stripe's fee (about 2.9% + 30¢) is the relay owner's; the full amount goes into the pool.

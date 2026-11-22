@@ -1,0 +1,78 @@
+# Builds the Reedus Lite (S3) firmware on every push that touches it, and publishes the image as
+# the GitHub release "lite-fw-latest". The relay's app can then update a Lite to it over Wi-Fi
+# (Home → your Lite → Firmware → Latest build). Wi-Fi and the Lite's token come from the
+# device's own flash, so nothing secret goes into this build.
+name: Lite firmware
+
+on:
+  push:
+    branches: [reedus-lite, main]
+    paths:
+      - "ReedusLiteS3/firmware/**"
+      - "ReedusLiteS3/wakeword/models/**"
+      - ".github/workflows/lite-firmware.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  RELAY_HOST: relay-production-228857fe.up.railway.app
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"     # tools/fetch_ca.py needs get_verified_chain
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('ReedusLiteS3/firmware/platformio.ini') }}
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: secrets.h without secrets, and the relay's certificate
+        run: |
+          cat > ReedusLiteS3/firmware/src/secrets.h <<EOF
+          // CI build: Wi-Fi and the token live in the Lite's flash, not here
+          #pragma once
+          #define WIFI_SSID "your-network-name"
+          #define WIFI_PASS "your-password"
+          #define RELAY_HOST "${RELAY_HOST}"
+          #define RELAY_PORT 443
+          #define RELAY_TLS 1
+          #define LITE_TOKEN "rld_..."
+          EOF
+          python ReedusLiteS3/tools/fetch_ca.py "${RELAY_HOST}"
+
+      - name: Build
+        working-directory: ReedusLiteS3/firmware
+        run: |
+          export PLATFORMIO_BUILD_FLAGS="-DFW_BUILD=\\\"${GITHUB_SHA::7}\\\""
+          pio run
+          cp .pio/build/reedus_lite_s3/firmware.bin "$GITHUB_WORKSPACE/firmware.bin"
+          ls -l "$GITHUB_WORKSPACE/firmware.bin"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reedus-lite-firmware-${{ github.sha }}
+          path: firmware.bin
+
+      - name: Publish as the latest build
+        if: github.ref == 'refs/heads/reedus-lite' || github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete lite-fw-latest --yes --cleanup-tag || true
+          gh release create lite-fw-latest firmware.bin \
+            --title "Reedus Lite firmware (latest build)" \
+            --notes "Built from ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}. Update a Lite from the app: Home → the Lite → Firmware → Latest build." \
+            --target "${GITHUB_SHA}" --prerelease

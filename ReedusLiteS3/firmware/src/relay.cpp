@@ -10,6 +10,7 @@
 #include "face.h"
 #include "glance.h"
 #include "head.h"
+#include "ota.h"
 #include "sounds.h"
 #include "store.h"
 #include "wake.h"
@@ -41,6 +42,12 @@ static int lastSentBatt = -2;
 static int proto = 1;  // what the relay agreed to in welcome
 static uint32_t lastMusic = 0, musicIdleAt = 0;
 static char desc[64] = "-";
+
+// a firmware update the relay asked for (ota.cpp runs it from update(), outside the socket
+// callback), and the reason the last one failed, reported once we're back online
+static bool otaPending = false;
+static char otaUrl[200] = "", otaMd5[40] = "", otaErr[96] = "";
+static size_t otaSize = 0;
 
 // ---------- pairing ----------
 // a Lite with no token asks the relay to pair: the relay sends a 6-digit code (shown on the face
@@ -232,6 +239,18 @@ static void handleText(const char* txt, size_t len) {
     face::setBrightness(doc["level"] | 100);
   } else if (!strcmp(t, "look")) {
     head::look(doc["angle"] | 0.0f);
+  } else if (!strcmp(t, "draw")) {
+    if (!strcmp(doc["op"] | "", "clear")) face::artClear();
+  } else if (!strcmp(t, "ota")) {
+    const char* url = doc["url"] | "";
+    otaSize = doc["size"] | 0;
+    if (strlen(url) < sizeof(otaUrl) && otaSize > 0) {
+      strcpy(otaUrl, url);
+      strncpy(otaMd5, doc["md5"] | "", sizeof(otaMd5) - 1);
+      otaMd5[sizeof(otaMd5) - 1] = 0;
+      otaPending = true;
+      Serial.printf("[relay] firmware update %s requested from the app\n", (const char*)(doc["version"] | ""));
+    }
   } else if (!strcmp(t, "clock") || !strcmp(t, "timers") || !strcmp(t, "glance")) {
     // the relay also scrolls "PAIR CODE …" for older firmware; ours holds the code still instead
     if (!strcmp(t, "glance") && !strncmp(doc["text"] | "", "PAIR CODE", 9)) return;
@@ -271,6 +290,8 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t len) {
       hello["caps"].add("bulletin");
       if (audio::musicSupported()) hello["caps"].add("music24");
       if (wake::ready()) hello["caps"].add("wake");  // we can say {"type":"wake"} ourselves
+      hello["caps"].add("draw");  // drawings / animations from the app (binary kind 3)
+      hello["caps"].add("ota");   // firmware updates from the app
       hello["device"] = DEVICE_NAME;
       hello["fw"] = FW_VERSION;
       hello["caps"].add("pair");  // no token: the relay shows a code and hands one over
@@ -282,6 +303,12 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t len) {
       String out;
       serializeJson(hello, out);
       ws.sendTXT(out);
+      if (otaErr[0]) {  // the last update failed before we could say so
+        char b[160];
+        snprintf(b, sizeof(b), "{\"type\":\"ota\",\"state\":\"error\",\"error\":\"%s\"}", otaErr);
+        ws.sendTXT(b);
+        otaErr[0] = 0;
+      }
       lastSentBatt = -2;
       proto = 1;
       gateOpen = listening = deviceWake = false;
@@ -307,6 +334,8 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t len) {
         if (len < 1) break;
         if (payload[0] == 1) audio::pushSpeech(payload + 1, len - 1);
         else if (payload[0] == 2) audio::pushMusic(payload + 1, len - 1);
+        else if (payload[0] == 3 && len == 6 + 768)  // [3, index, count, fps, hold s, loop] + RGB
+          face::artFrame(payload[1], payload[2], payload[3], payload[4], payload[5] != 0, payload + 6);
       } else {
         audio::pushSpeech(payload, len);
       }
@@ -388,6 +417,10 @@ void update() {
   if (!wifiSince) {
     wifiSince = millis();
     Serial.printf("[relay] wifi up, %s rssi %d\n", WiFi.localIP().toString().c_str(), WiFi.RSSI());
+    // keep the network that works in flash: a firmware update built without your secrets.h
+    // (the app's "latest build") then still knows your Wi-Fi
+    if (!store::wifiSsid().length() && strcmp(WIFI_SSID, "your-network-name") != 0)
+      store::saveWifi(WIFI_SSID, WIFI_PASS);
   }
   if (!wsStarted) {
     startSocket();
@@ -410,6 +443,27 @@ void update() {
   }
   if (heard && deviceWake) onDeviceWake(score);
   micUp();
+
+  if (otaPending && !listening) {
+    otaPending = false;
+    // tell the app, then drop the link: the download gets the Wi-Fi (and the RAM for its own
+    // TLS session) to itself. on success we reboot; on failure the socket reconnects on its
+    // own and the error goes up right after hello
+    ws.sendTXT("{\"type\":\"ota\",\"state\":\"downloading\",\"pct\":0}");
+    for (int i = 0; i < 5; i++) {
+      ws.loop();
+      delay(20);
+    }
+    ws.disconnect();
+    connected = false;
+    face::setOnline(true, false);
+    if (!ota::run(otaUrl, otaSize, otaMd5, otaErr, sizeof(otaErr))) {
+      Serial.printf("[relay] firmware update failed: %s (still on %s)\n", otaErr, FW_VERSION);
+      face::expr("confused", 3.0f);
+    }
+    return;
+  }
+  if (face::artTakeEnded()) ws.sendTXT("{\"type\":\"draw\",\"op\":\"done\"}");
 
   uint32_t now = millis();
   float world, rel;

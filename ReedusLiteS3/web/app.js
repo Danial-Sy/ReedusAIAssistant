@@ -321,7 +321,7 @@ function liteLine(d) {
 function renderLites() {
   const box = $("#lites");
   const devs = S.status.devices || [];
-  const sig = JSON.stringify(devs.map((d) => [d.id, d.name, d.online, d.state, d.battery && d.battery.pct]));
+  const sig = JSON.stringify(devs.map((d) => [d.id, d.name, d.online]));
   if (box.dataset.sig === sig && box.children.length) {
     devs.forEach((d) => { const s = $(`[data-dev="${d.id}"] .lite-text small`); if (s) s.textContent = liteLine(d); });
     return;
@@ -344,7 +344,8 @@ function renderLites() {
       <div class="lite-head">
         <span class="lite-face"><svg><use href="#i-home"/></svg></span>
         <div class="lite-text"><b></b><small></small></div>
-        <div class="lite-menu"><button class="ghost-btn small r-name" type="button">Rename</button></div>
+        <div class="lite-menu"><button class="cta small r-ctl" type="button">Controls</button>
+          <button class="ghost-btn small r-name" type="button">Rename</button></div>
       </div>
       <label class="slider"><span>Volume</span><input type="range" min="0" max="100" class="r-vol"><b class="v-vol"></b></label>
       <label class="slider"><span>Brightness</span><input type="range" min="5" max="100" class="r-bri"><b class="v-bri"></b></label>
@@ -366,6 +367,7 @@ function renderLites() {
     };
     wire(".r-vol", "volume", ".v-vol", 70);
     wire(".r-bri", "brightness", ".v-bri", 100);
+    $(".r-ctl", c).addEventListener("click", () => Ctl.open(d.id));
     $(".r-name", c).addEventListener("click", () => {
       const row = $(".r-edit", c);
       row.hidden = !row.hidden;
@@ -825,6 +827,8 @@ function renderPeople() {
 async function loadSettings() {
   renderBrain();
   renderKeys();
+  loadVoice();
+  renderGlance();
   const me = S.status ? S.status.account : (Relay.me && Relay.me.account) || {};
   $("#who").textContent = `Signed in as ${me.name || "…"}${owner() ? ", the relay's owner" : ""}.`;
   if (owner()) loadMembers();
@@ -878,6 +882,463 @@ function wireSettings() {
   });
 }
 
+/* ---------- voice ---------- */
+const V = { list: [], loaded: false };
+
+async function loadVoice() {
+  const r = await Relay.call("voices");
+  if (r.error) { say("#voice-out", r.error, true); return; }
+  V.list = r.voices || [];
+  const cur = r.voice || {};
+  const pick = $("#voice-pick");
+  pick.innerHTML = "";
+  const now = cur.id || r.default || "Theodore";
+  if (!V.list.some((v) => v.id === now)) V.list.unshift({ id: now, name: now, desc: "" });
+  V.list.forEach((v) => {
+    const o = el("option", "", v.name + (v.id === r.default ? " (default)" : ""));
+    o.value = v.id;
+    pick.append(o);
+  });
+  pick.value = now;
+  $("#voice-speed").value = cur.speed || 1.0;
+  paintVoice();
+  $("#voice-now").textContent = `He's speaking as ${now}${cur.speed ? ` at ${cur.speed}x` : ""}.` +
+    (r.source === "builtin" ? " (Inworld's full list couldn't be loaded, these are the built-in voices.)" : "");
+}
+
+function paintVoice() {
+  const v = V.list.find((x) => x.id === $("#voice-pick").value);
+  $("#voice-desc").textContent = (v && v.desc) || "";
+  const sp = +$("#voice-speed").value;
+  $("#voice-speed-v").textContent = `${sp.toFixed(2)}x`;
+  const r = $("#voice-speed");
+  r.style.setProperty("--fill", `${(sp - r.min) / (r.max - r.min) * 100}%`);
+}
+
+function wireVoice() {
+  $("#voice-pick").addEventListener("change", paintVoice);
+  $("#voice-speed").addEventListener("input", paintVoice);
+  let audio = null;
+  $("#voice-play").addEventListener("click", async (e) => {
+    busy(e.target, true);
+    say("#voice-out", "");
+    const r = await Relay.call("voice.preview", { voice: $("#voice-pick").value, speed: +$("#voice-speed").value });
+    busy(e.target, false);
+    if (r.error) { say("#voice-out", r.error, true); return; }
+    if (audio) audio.pause();
+    audio = new Audio(`data:audio/wav;base64,${r.wav}`);
+    audio.play().catch(() => say("#voice-out", "Your browser blocked the sound. Tap again.", true));
+  });
+  $("#voice-save").addEventListener("click", async (e) => {
+    busy(e.target, true);
+    const r = await Relay.call("voice.set", { voice: $("#voice-pick").value, speed: +$("#voice-speed").value });
+    busy(e.target, false);
+    if (r.error) { say("#voice-out", r.error, true); return; }
+    say("#voice-out", "Done. He uses it from his next sentence.");
+    loadVoice();
+  });
+}
+
+/* ---------- idle screen: weather ---------- */
+function renderGlance() {
+  const g = (S.status && S.status.glance) || {};
+  $("#wx-on").checked = !!g.weather;
+  if (document.activeElement !== $("#wx-place")) $("#wx-place").value = g.place || "";
+  $$("#wx-unit button").forEach((b) => b.classList.toggle("on", b.dataset.val === (g.unit || "F")));
+  $("#wx-every").value = String(g.every || 90);
+  $("#wx-opts").hidden = !g.weather && !$("#wx-on").checked;
+}
+
+function wireGlance() {
+  const save = async (btn, patch) => {
+    busy(btn, true);
+    say("#wx-out", patch.place ? "Looking it up…" : "");
+    const r = await Relay.call("glance.set", patch);
+    busy(btn, false);
+    if (r.error) { say("#wx-out", r.error, true); return false; }
+    if (S.status) S.status.glance = r.glance;
+    const w = r.now;
+    say("#wx-out", r.glance.weather
+      ? (w ? `On. ${w.place}: ${w.temp}°${w.unit}, ${w.cond}. It shows after he's been idle a little while.` : "On.")
+      : "Off.");
+    return true;
+  };
+  $("#wx-on").addEventListener("change", async (e) => {
+    $("#wx-opts").hidden = !e.target.checked;
+    const place = $("#wx-place").value.trim();
+    if (e.target.checked && !place) { $("#wx-place").focus(); say("#wx-out", "Type where you are, then Save."); return; }
+    const ok = await save(null, { weather: e.target.checked });
+    if (!ok) e.target.checked = !e.target.checked;
+  });
+  $$("#wx-unit button").forEach((b) => b.addEventListener("click", () => {
+    $$("#wx-unit button").forEach((x) => x.classList.toggle("on", x === b));
+  }));
+  $("#wx-save").addEventListener("click", (e) => {
+    const unit = ($("#wx-unit button.on") || {}).dataset?.val || "F";
+    save(e.target, { weather: true, place: $("#wx-place").value.trim(), unit, every: +$("#wx-every").value })
+      .then((ok) => { if (ok) $("#wx-on").checked = true; });
+  });
+}
+
+/* ---------- a Lite's controls ---------- */
+const EXPRS = [
+  ["happy", "Happy", "😊"], ["laugh", "Laugh", "😆"], ["love", "Love", "😍"], ["excited", "Excited", "🤩"],
+  ["shy", "Shy", "😳"], ["smug", "Smug", "😏"], ["curious", "Curious", "🤔"], ["surprised", "Wow", "😮"],
+  ["confused", "Huh?", "😕"], ["sad", "Sad", "😢"], ["angry", "Grr", "😠"], ["sleepy", "Sleepy", "😪"],
+  ["wink", "Wink", "😉"], ["content", "Content", "😌"], ["yawn", "Yawn", "🥱"], ["dizzy", "Dizzy", "😵"], ["bye", "Bye", "👋"],
+];
+const PALETTE = ["#8ff5e2", "#ffffff", "#ff4028", "#ff5c9e", "#ffc840", "#ff9010", "#7fe04a", "#6fa8ff", "#9b6bff", "#606f70"];
+const W = 16, H = 16;
+
+const Ctl = (() => {
+  let dev = null, tab = "face";
+  let frames = [new Uint8Array(W * H * 3)], cur = 0, color = PALETTE[0], tool = "pen";
+  let painting = false, playTimer = null, fwId = "", lookTarget = null;
+
+  const device = () => (S.status && S.status.devices || []).find((d) => d.id === dev);
+  const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+
+  function open(id) {
+    dev = id;
+    const d = device();
+    $("#ctl-title").textContent = d ? d.name : "Lite";
+    $("#ctl").hidden = false;
+    $("[data-tab=fw]", $("#ctl-tabs")).hidden = !owner();
+    show(tab === "fw" && !owner() ? "face" : tab);
+    tick();
+  }
+
+  function show(t) {
+    tab = t;
+    $$("#ctl-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
+    $$(".ctl-pane").forEach((p) => { p.hidden = p.id !== `ctl-${t}`; });
+    if (t === "draw") paint();
+    if (t === "head") renderDial();
+    if (t === "fw") renderFw();
+  }
+
+  async function send(action, extra, okText) {
+    const r = await Relay.call(action, { device: dev, ...extra });
+    if (r.error) toast(r.error);
+    else if (okText) toast(okText);
+    return r;
+  }
+
+  /* ----- head dial (top-down; + = his left = screen left) ----- */
+  const CX = 130, CY = 130, R = 110;
+  const toXY = (deg, r = R) => [CX - r * Math.sin(deg * Math.PI / 180), CY - r * Math.cos(deg * Math.PI / 180)];
+  function buildDial() {
+    const g = $("#dial-ticks");
+    for (let a = -90; a <= 90; a += 15) {
+      const [x1, y1] = toXY(a, R - (a % 45 ? 5 : 10)), [x2, y2] = toXY(a, R + 0.5);
+      const l = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      l.setAttribute("x1", x1); l.setAttribute("y1", y1); l.setAttribute("x2", x2); l.setAttribute("y2", y2);
+      l.setAttribute("class", a % 45 ? "dial-tick" : "dial-tick major");
+      g.append(l);
+    }
+    const svg = $("#look-dial");
+    let drag = false;
+    const angleAt = (e) => {
+      const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+      const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+      const a = Math.atan2(CX - p.x, CY - p.y) * 180 / Math.PI;
+      return Math.round(Math.max(-90, Math.min(90, a)) / 5) * 5;
+    };
+    svg.addEventListener("pointerdown", (e) => { drag = true; svg.setPointerCapture(e.pointerId); lookTarget = angleAt(e); renderDial(); });
+    svg.addEventListener("pointermove", (e) => { if (drag) { lookTarget = angleAt(e); renderDial(); } });
+    svg.addEventListener("pointerup", (e) => { if (!drag) return; drag = false; look(angleAt(e)); });
+    svg.addEventListener("pointercancel", () => { drag = false; });
+    $("#look-center").addEventListener("click", () => look(0));
+    $("#look-voice").addEventListener("click", () => {
+      const d = device();
+      if (d && d.doa && d.doa.angle != null) look(Math.max(-90, Math.min(90, Math.round(d.doa.angle))));
+      else toast("He hasn't heard anyone lately");
+    });
+  }
+  function headNow() {
+    const d = device();
+    if (lookTarget != null) return lookTarget;
+    if (d && d.doa && d.doa.head != null && (!d.status || (d.doa.at || 0) * 1000 > Date.now() - 15000)) return +d.doa.head;
+    return d && d.status ? +d.status.head || 0 : 0;
+  }
+  function renderDial() {
+    const head = headNow();
+    $("#dial-needle").style.transform = `rotate(${-head}deg)`;
+    $("#head-read").textContent = Math.abs(head) < 3 ? "Looking straight ahead" : `Looking ${Math.abs(Math.round(head))}° to his ${head > 0 ? "left" : "right"}`;
+    const d = device(), doa = $("#dial-doa");
+    const fresh = d && d.doa && (d.doa.at || 0) * 1000 > Date.now() - 20000;
+    if (fresh) {
+      const [x, y] = toXY(Math.max(-90, Math.min(90, d.doa.angle)));
+      doa.setAttribute("cx", x); doa.setAttribute("cy", y); doa.setAttribute("opacity", "1");
+    } else doa.setAttribute("opacity", "0");
+  }
+  async function look(angle) {
+    lookTarget = angle;
+    renderDial();
+    await send("device.look", { angle });
+    setTimeout(() => { lookTarget = null; }, 12000);
+  }
+
+  /* ----- drawing ----- */
+  const cv = () => $("#pix");
+  function paint() {
+    const c = cv(), g = c.getContext("2d"), f = frames[cur], s = c.width / W;
+    g.fillStyle = "#050806"; g.fillRect(0, 0, c.width, c.height);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 3;
+      const lit = f[i] | f[i + 1] | f[i + 2];
+      g.fillStyle = lit ? `rgb(${f[i]},${f[i + 1]},${f[i + 2]})` : "#141c17";
+      g.beginPath();
+      g.roundRect ? g.roundRect(x * s + 2, y * s + 2, s - 4, s - 4, 4) : g.rect(x * s + 2, y * s + 2, s - 4, s - 4);
+      g.fill();
+    }
+    renderFrames();
+  }
+  function thumb(f) {
+    const c = document.createElement("canvas"); c.width = W; c.height = H;
+    const g = c.getContext("2d"), img = g.createImageData(W, H);
+    for (let p = 0; p < W * H; p++) { img.data[p * 4] = f[p * 3]; img.data[p * 4 + 1] = f[p * 3 + 1]; img.data[p * 4 + 2] = f[p * 3 + 2]; img.data[p * 4 + 3] = 255; }
+    g.putImageData(img, 0, 0);
+    return c;
+  }
+  function renderFrames() {
+    const box = $("#frames");
+    box.innerHTML = "";
+    frames.forEach((f, i) => {
+      const b = el("button", "frame" + (i === cur ? " on" : ""));
+      b.type = "button";
+      b.title = `Frame ${i + 1}`;
+      b.append(thumb(f));
+      b.addEventListener("click", () => { stopPlay(); cur = i; paint(); });
+      box.append(b);
+    });
+    $("#fr-del").disabled = frames.length < 2;
+  }
+  function cellAt(e) {
+    const r = cv().getBoundingClientRect();
+    const x = Math.floor((e.clientX - r.left) / r.width * W), y = Math.floor((e.clientY - r.top) / r.height * H);
+    return x >= 0 && x < W && y >= 0 && y < H ? [x, y] : null;
+  }
+  function setPx(x, y, rgb) { const i = (y * W + x) * 3; frames[cur][i] = rgb[0]; frames[cur][i + 1] = rgb[1]; frames[cur][i + 2] = rgb[2]; }
+  function fill(x, y, rgb) {
+    const f = frames[cur], i0 = (y * W + x) * 3, from = [f[i0], f[i0 + 1], f[i0 + 2]];
+    if (from.every((v, k) => v === rgb[k])) return;
+    const st = [[x, y]];
+    while (st.length) {
+      const [a, b] = st.pop();
+      if (a < 0 || a >= W || b < 0 || b >= H) continue;
+      const i = (b * W + a) * 3;
+      if (f[i] !== from[0] || f[i + 1] !== from[1] || f[i + 2] !== from[2]) continue;
+      setPx(a, b, rgb);
+      st.push([a + 1, b], [a - 1, b], [a, b + 1], [a, b - 1]);
+    }
+  }
+  function stroke(e) {
+    const c = cellAt(e);
+    if (!c) return;
+    if (tool === "fill") fill(c[0], c[1], hex(color));
+    else setPx(c[0], c[1], tool === "erase" ? [0, 0, 0] : hex(color));
+    paint();
+  }
+  function stopPlay() { if (playTimer) { clearInterval(playTimer); playTimer = null; $("#fr-play").innerHTML = "&#9654; Preview"; } }
+  const b64 = (u8) => { let s = ""; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s); };
+  const unb64 = (s) => Uint8Array.from(atob(s), (ch) => ch.charCodeAt(0));
+
+  /* animations made in code: each returns a list of frames */
+  function blank() { return new Uint8Array(W * H * 3); }
+  function put(f, x, y, rgb) { if (x < 0 || x >= W || y < 0 || y >= H) return; const i = (y * W + x) * 3; f[i] = rgb[0]; f[i + 1] = rgb[1]; f[i + 2] = rgb[2]; }
+  const hsv = (h, s = 1, v = 1) => { const f = (n) => { const k = (n + h / 60) % 6; return Math.round(255 * (v - v * s * Math.max(0, Math.min(k, 4 - k, 1)))); }; return [f(5), f(3), f(1)]; };
+  const HEART = ["..XX...XX..", ".XXXX.XXXX.", "XXXXXXXXXXX", "XXXXXXXXXXX", ".XXXXXXXXX.", "..XXXXXXX..", "...XXXXX...", "....XXX....", ".....X....."];
+  const PRESETS = {
+    "Heartbeat": () => [1, 0.75, 1, 0.55, 0.55, 0.55].map((v, k) => {
+      const f = blank(), big = k === 0 || k === 2;
+      HEART.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === "X") put(f, x + 2, y + (big ? 3 : 4), [Math.round(255 * v), Math.round(60 * v), Math.round(110 * v)]); }));
+      return f;
+    }),
+    "Rainbow": () => Array.from({ length: 16 }, (_, t) => { const f = blank(); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) put(f, x, y, hsv(((x + y) * 14 + t * 22.5) % 360, 1, 0.9)); return f; }),
+    "Spinner": () => Array.from({ length: 12 }, (_, t) => {
+      const f = blank();
+      for (let k = 0; k < 12; k++) { const a = (k / 12) * 2 * Math.PI, age = (t - k + 12) % 12, v = Math.max(0, 1 - age / 6); put(f, Math.round(7.5 + 5.5 * Math.cos(a)), Math.round(7.5 + 5.5 * Math.sin(a)), [Math.round(143 * v), Math.round(245 * v), Math.round(226 * v)]); }
+      return f;
+    }),
+    "Sparkles": () => { let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647; const pts = Array.from({ length: 22 }, () => [Math.floor(rnd() * W), Math.floor(rnd() * H), Math.floor(rnd() * 10), hsv(rnd() * 360, 0.5, 1)]);
+      return Array.from({ length: 10 }, (_, t) => { const f = blank(); pts.forEach(([x, y, ph, c]) => { const v = Math.max(0, Math.sin(((t + ph) % 10) / 10 * Math.PI)); put(f, x, y, c.map((q) => Math.round(q * v))); }); return f; }); },
+    "Pac-Man": () => Array.from({ length: 8 }, (_, t) => {
+      const f = blank(), open = [0, 0.25, 0.5, 0.25][t % 4];
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const dx = x - 6.5, dy = y - 7.5; if (dx * dx + dy * dy > 30) continue; const a = Math.abs(Math.atan2(dy, dx)); if (a < open * Math.PI * 0.8) continue; put(f, x, y, [255, 210, 0]); }
+      for (let k = 0; k < 3; k++) { const px = 12 + k * 4 - (t % 4); if (px > 9 && px < 16) put(f, px, 7, [255, 220, 200]), put(f, px, 8, [255, 220, 200]); }
+      return f;
+    }),
+    "Rain": () => { const drops = [[2, 0], [5, 6], [9, 3], [12, 10], [14, 1], [7, 12], [0, 8], [11, 14]];
+      return Array.from({ length: 16 }, (_, t) => { const f = blank(); drops.forEach(([x, y0]) => { const y = (y0 + t) % 16; put(f, x, y, [111, 168, 255]); put(f, x, (y + 15) % 16, [40, 70, 130]); }); return f; }); },
+    "Smiley": () => [0, 0, 0, 1].map((wink) => {
+      const f = blank(), Y = [255, 200, 64];
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const d = Math.hypot(x - 7.5, y - 7.5); if (d < 7.6 && d > 6.4) put(f, x, y, Y); }
+      put(f, 5, 5, Y); put(f, 5, 6, Y);
+      if (wink) { put(f, 9, 6, Y); put(f, 10, 6, Y); put(f, 11, 6, Y); } else { put(f, 10, 5, Y); put(f, 10, 6, Y); }
+      [[4, 9], [5, 10], [6, 11], [7, 11], [8, 11], [9, 11], [10, 10], [11, 9]].forEach(([x, y]) => put(f, x, y, Y));
+      return f;
+    }),
+  };
+
+  function savedList() { try { return JSON.parse(saved.get("rl.drawings") || "{}"); } catch { return {}; } }
+  function renderSaved() {
+    const sel = $("#art-saved"), list = savedList();
+    sel.innerHTML = '<option value="">My drawings…</option>';
+    Object.keys(list).sort().forEach((n) => { const o = el("option", "", n); o.value = n; sel.append(o); });
+  }
+
+  /* ----- firmware ----- */
+  function renderFw() {
+    const d = device();
+    const fw = d && d.fw ? d.fw : "unknown (offline)";
+    const can = d && (d.caps || []).includes("ota");
+    $("#fw-now").textContent = `Running ${fw}.` + (d && d.online && !can
+      ? " This firmware can't update itself yet: flash this new version over USB once, and after that every update can come from here." : "");
+    $("#fw-latest").disabled = $("#fw-file").disabled = !can;
+    const o = d && d.ota;
+    const bar = $("#fw-bar");
+    if (o && o.at && Date.now() / 1000 - o.at < 300 && o.state !== "error") {
+      bar.hidden = false;
+      $("i", bar).style.width = `${o.state === "done" ? 100 : (o.pct || 0)}%`;
+      say("#fw-out", o.state === "sent" ? "Sent. He's starting the download…" : o.state === "downloading" ? "Downloading and installing… he'll restart when it's done." : "");
+    } else if (o && o.state === "error" && Date.now() / 1000 - o.at < 600) {
+      bar.hidden = true;
+      say("#fw-out", `The update didn't go through: ${o.error || "unknown error"}. He's still on the old firmware.`, true);
+    } else bar.hidden = true;
+  }
+  async function uploadFile(file) {
+    const buf = new Uint8Array(await file.arrayBuffer());
+    const CH = 512 * 1024, count = Math.ceil(buf.length / CH);
+    let upload = "", r = null;
+    for (let i = 0; i < count; i++) {
+      say("#fw-ready", `Uploading… ${Math.round(i / count * 100)}%`);
+      r = await Relay.call("fw.upload", { upload, index: i, count, data: b64(buf.subarray(i * CH, (i + 1) * CH)) });
+      if (r.error) { say("#fw-ready", r.error, true); return; }
+      upload = r.upload;
+    }
+    ready(r);
+  }
+  function ready(r) {
+    fwId = r.fw;
+    say("#fw-ready", `Ready: ${r.version || "firmware"} (${Math.round(r.size / 1024)} KB).`);
+    $("#fw-install").hidden = false;
+  }
+
+  function wire() {
+    $("#ctl").addEventListener("click", (e) => { if (e.target.id === "ctl") { stopPlay(); closeSheets(); } });
+    $$("#ctl-tabs button").forEach((b) => b.addEventListener("click", () => show(b.dataset.tab)));
+    const grid = $("#expr-grid");
+    EXPRS.forEach(([name, label, emoji]) => {
+      const b = el("button", "expr");
+      b.type = "button";
+      b.append(el("span", "e", emoji), el("small", "", label));
+      b.addEventListener("click", () => send("device.expr", { name, hold: 3 }));
+      grid.append(b);
+    });
+    $$("#state-row button").forEach((b) => b.addEventListener("click", () => send("device.state", { state: b.dataset.state })));
+    buildDial();
+    // drawing
+    const pal = $("#palette");
+    PALETTE.forEach((c, i) => {
+      const b = el("button", "sw" + (i === 0 ? " on" : ""));
+      b.type = "button"; b.style.background = c; b.setAttribute("aria-label", c);
+      b.addEventListener("click", () => { color = c; $$(".sw", pal).forEach((x) => x.classList.toggle("on", x === b)); if (tool === "erase") setTool("pen"); });
+      pal.append(b);
+    });
+    $("#pix-color").addEventListener("input", (e) => { color = e.target.value; $$(".sw", pal).forEach((x) => x.classList.remove("on")); if (tool === "erase") setTool("pen"); });
+    const setTool = (t) => { tool = t; $$("#tools [data-tool]").forEach((x) => x.classList.toggle("on", x.dataset.tool === t)); };
+    $$("#tools [data-tool]").forEach((b) => b.addEventListener("click", () => setTool(b.dataset.tool)));
+    $("#pix-clear").addEventListener("click", () => { frames[cur] = blank(); paint(); });
+    const c = cv();
+    c.addEventListener("pointerdown", (e) => { stopPlay(); painting = true; c.setPointerCapture(e.pointerId); stroke(e); e.preventDefault(); });
+    c.addEventListener("pointermove", (e) => { if (painting && tool !== "fill") stroke(e); });
+    ["pointerup", "pointercancel"].forEach((k) => c.addEventListener(k, () => { painting = false; }));
+    $("#fr-add").addEventListener("click", () => { stopPlay(); if (frames.length >= 32) return toast("32 frames at most"); frames.splice(cur + 1, 0, blank()); cur++; paint(); });
+    $("#fr-dup").addEventListener("click", () => { stopPlay(); if (frames.length >= 32) return toast("32 frames at most"); frames.splice(cur + 1, 0, frames[cur].slice()); cur++; paint(); });
+    $("#fr-del").addEventListener("click", () => { stopPlay(); if (frames.length < 2) return; frames.splice(cur, 1); cur = Math.max(0, cur - 1); paint(); });
+    const fps = $("#fr-fps");
+    const paintFps = () => { $("#fr-fps-v").textContent = `${fps.value} fps`; fps.style.setProperty("--fill", `${(fps.value - 1) / 19 * 100}%`); };
+    fps.addEventListener("input", () => { paintFps(); if (playTimer) { stopPlay(); $("#fr-play").click(); } });
+    paintFps();
+    $("#fr-play").addEventListener("click", () => {
+      if (playTimer) return stopPlay();
+      if (frames.length < 2) return toast("Add a second frame to animate");
+      $("#fr-play").textContent = "■ Stop";
+      playTimer = setInterval(() => { cur = (cur + 1) % frames.length; paint(); }, 1000 / +fps.value);
+    });
+    const ps = $("#art-preset");
+    Object.keys(PRESETS).forEach((n) => { const o = el("option", "", n); o.value = n; ps.append(o); });
+    ps.addEventListener("change", () => {
+      if (!ps.value) return;
+      stopPlay();
+      frames = PRESETS[ps.value]();
+      cur = 0;
+      paint();
+      ps.value = "";
+    });
+    $("#art-send").addEventListener("click", async (e) => {
+      busy(e.target, true);
+      const r = await send("device.draw", { frames: frames.map(b64), fps: +fps.value, hold: +$("#art-hold").value, loop: true });
+      busy(e.target, false);
+      if (!r.error) toast(frames.length > 1 ? "Playing on his face" : "On his face now");
+    });
+    $("#art-clear").addEventListener("click", () => send("device.draw.clear", {}, "Back to his face"));
+    renderSaved();
+    $("#art-save").addEventListener("click", () => {
+      const name = (prompt("Name this drawing") || "").trim().slice(0, 30);
+      if (!name) return;
+      const list = savedList();
+      list[name] = { fps: +fps.value, frames: frames.map(b64) };
+      try { saved.set("rl.drawings", JSON.stringify(list)); toast("Saved on this device"); } catch { toast("Couldn't save (storage full?)"); }
+      renderSaved();
+      $("#art-saved").value = name;
+    });
+    $("#art-saved").addEventListener("change", (e) => {
+      const it = savedList()[e.target.value];
+      if (!it) return;
+      stopPlay();
+      frames = it.frames.map(unb64);
+      cur = 0;
+      fps.value = it.fps || 6;
+      paintFps();
+      paint();
+    });
+    $("#art-del").addEventListener("click", () => {
+      const n = $("#art-saved").value;
+      if (!n) return;
+      const list = savedList();
+      delete list[n];
+      saved.set("rl.drawings", JSON.stringify(list));
+      renderSaved();
+    });
+    // firmware
+    $("#fw-latest").addEventListener("click", async (e) => {
+      busy(e.target, true);
+      say("#fw-ready", "Fetching the latest build…");
+      const r = await Relay.call("fw.latest");
+      busy(e.target, false);
+      if (r.error) { say("#fw-ready", r.error, true); return; }
+      ready(r);
+    });
+    $("#fw-file").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) uploadFile(f); });
+    $("#fw-install").addEventListener("click", (e) => confirmFirst(e.target, "Install now? He'll restart", async () => {
+      const r = await send("device.ota", { fw: fwId });
+      if (!r.error) { $("#fw-install").hidden = true; say("#fw-out", "Sent. He's starting the download…"); }
+    }));
+  }
+
+  function tick() {
+    if ($("#ctl").hidden || !dev) return;
+    const d = device();
+    $("#ctl-offline").hidden = !!(d && d.online);
+    if (tab === "head") renderDial();
+    if (tab === "fw") renderFw();
+  }
+
+  return { open, wire, tick };
+})();
+
 /* ======================= boot ======================= */
 /* the relay serves this page itself, or the page lives elsewhere (Vercel) and the
    <meta name="relay"> tag says where the relay is */
@@ -908,11 +1369,20 @@ function poll() {
     S.status = st;
     renderTop();
     if (S.view === "home") renderLites();
+    Ctl.tick();
     if (S.view === "credit") {
       $("#balance").textContent = money(st.balance);
       $("#balance-card").classList.toggle("low", !!st.low);
     }
   }, 5000);
+  // quicker while a Lite's controls are open (the head dial, an update's progress)
+  setInterval(async () => {
+    if (document.hidden || !Relay.up || $("#ctl").hidden) return;
+    const st = await Relay.call("status");
+    if (st.error) return;
+    S.status = st;
+    Ctl.tick();
+  }, 1500);
 }
 
 async function boot() {
@@ -923,6 +1393,9 @@ async function boot() {
   wireCredit();
   wireBrain();
   wireSettings();
+  wireVoice();
+  wireGlance();
+  Ctl.wire();
   $$("[data-go]").forEach((b) => b.addEventListener("click", () => go(b.dataset.go)));
   window.addEventListener("hashchange", () => {
     const v = location.hash.replace("#", "");

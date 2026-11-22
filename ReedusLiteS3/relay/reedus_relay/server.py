@@ -29,6 +29,8 @@ INVITE_TTL_S = 7 * 86400
 LOGIN_TTL_S = 10 * 60
 PAIR_REFRESH_S = 20.0
 _MAX_BAD_CODES = 6          # wrong codes per connection before it's dropped
+ART_MAX_FRAMES = 32         # a drawing / animation from the app (firmware face.cpp keeps 32)
+ART_FRAME_BYTES = 16 * 16 * 3
 
 
 class Hub:
@@ -40,6 +42,8 @@ class Hub:
         self.session_kwargs = session_kwargs or {}
         self.started = time.time()
         self._bad_codes: list = []               # times of wrong codes, relay-wide (throttle)
+        self.firmware: Dict[str, dict] = {}      # uploaded firmware images (in memory, an hour)
+        self.fw_links: Dict[str, dict] = {}      # one-time-ish download links handed to Lites
 
     def voice(self):
         if self._voice_factory is not None:
@@ -427,6 +431,59 @@ class Hub:
                 for k, v in patch.items():
                     s.send({"type": k, "level": v})
             return {"ok": True, **patch}
+        if a.startswith(("device.expr", "device.look", "device.draw", "device.ota", "device.state")):
+            return await self._device_control(a, req, aid, owner)
+        if a == "voices":
+            out = await asyncio.to_thread(speech.list_voices)
+            return {**out, "voice": (acc.get("settings") or {}).get("voice") or {},
+                    "default": _default_voice()}
+        if a == "voice.preview":
+            prefs = _voice_prefs(req)
+            text = str(req.get("text") or "").strip()[:200] or \
+                "Hello! I'm Reedus. Is this what I should sound like?"
+            m = meter.Meter()
+            with meter.metering(m):
+                wav = await asyncio.to_thread(speech.preview_wav, prefs, text)
+            if m.usd > 0:
+                await asyncio.to_thread(accounts.charge, aid, m.usd, f"voice preview: {m.summary()}")
+            import base64
+            return {"ok": True, "wav": base64.b64encode(wav).decode(), "voice": prefs}
+        if a == "voice.set":
+            prefs = _voice_prefs(req)
+            await asyncio.to_thread(accounts.set_account_settings, aid, {"voice": prefs})
+            self.refresh_account(aid)
+            return {"ok": True, "voice": prefs}
+        if a == "glance.set":
+            cur = dict((acc.get("settings") or {}).get("glance") or {})
+            if "weather" in req:
+                cur["weather"] = bool(req.get("weather"))
+            if "place" in req:
+                cur["place"] = str(req.get("place") or "").strip()[:80]
+            if req.get("unit") in ("F", "C"):
+                cur["unit"] = req["unit"]
+            if "every" in req:
+                cur["every"] = max(30, min(900, int(req.get("every") or 90)))
+            found = None
+            if cur.get("place"):
+                from reedus_relay import weather
+                found = await asyncio.to_thread(weather.current, cur["place"], cur.get("unit") or "F")
+                if not found:
+                    return {"error": f"couldn't find the weather for {cur['place']!r}. Try a town "
+                                     f"and state, like Blacksburg, VA"}
+            await asyncio.to_thread(accounts.set_account_settings, aid, {"glance": cur})
+            self.refresh_account(aid)
+            for s in self.account_sessions(aid):
+                s.next_glance = time.monotonic() + 1.0          # show it soon, so you can see it
+                s.idle_since = min(s.idle_since, time.monotonic() - 15.0)
+            return {"ok": True, "glance": cur, "now": found}
+        if a == "fw.upload":
+            if not owner:
+                return {"error": "only the relay's owner can update firmware"}
+            return await asyncio.to_thread(self._fw_upload, req)
+        if a == "fw.latest":
+            if not owner:
+                return {"error": "only the relay's owner can update firmware"}
+            return await asyncio.to_thread(self._fw_latest)
         if a == "ledger":
             return {"ledger": await asyncio.to_thread(accounts.ledger, aid, int(req.get("limit") or 50)),
                     "balance": await asyncio.to_thread(accounts.balance, aid)}
@@ -435,6 +492,140 @@ class Hub:
         if a == "topup":
             return {"error": "use topup.start (Stripe Checkout), or ask the relay owner to top up"}
         return {"error": f"unknown action {a!r}"}
+
+    # ---------- the face, the head, drawings, firmware ----------
+    async def _device_control(self, a: str, req: dict, aid: str, owner: bool) -> dict:
+        dev = await asyncio.to_thread(accounts.device, req.get("device") or "")
+        if not dev or dev["account_id"] != aid:
+            return {"error": "no such device"}
+        s = self.sessions.get(dev["id"])
+        if s is None:
+            return {"error": f"{dev['name']} is offline"}
+        caps = s.hello.get("caps") or []
+        if a == "device.expr":
+            name = str(req.get("name") or "")
+            hold = max(0.5, min(30.0, float(req.get("hold") or 3.0)))
+            s.send({"type": "expr", "name": name, "hold": hold})
+            return {"ok": True}
+        if a == "device.state":       # preview a state (listening / thinking / sleep / idle)
+            st = str(req.get("state") or "idle")
+            if st not in ("idle", "listening", "thinking", "speaking", "sleep"):
+                return {"error": "unknown state"}
+            if s.mode != "idle":
+                return {"error": "he's in a conversation right now"}
+            s.send({"type": "state", "state": st})
+            return {"ok": True}
+        if a == "device.look":
+            angle = max(-90.0, min(90.0, float(req.get("angle") or 0)))
+            s.send({"type": "look", "angle": angle})
+            s.info["look"] = {"angle": angle, "at": time.time()}
+            return {"ok": True, "angle": angle}
+        if a == "device.draw":
+            if "draw" not in caps:
+                return {"error": "this Lite's firmware can't show drawings yet: flash the new "
+                                 "firmware once over USB, then updates can come from here"}
+            import base64
+            frames = req.get("frames") or []
+            if not isinstance(frames, list) or not 1 <= len(frames) <= ART_MAX_FRAMES:
+                return {"error": f"send 1 to {ART_MAX_FRAMES} frames"}
+            raw = []
+            for f in frames:
+                try:
+                    b = base64.b64decode(f)
+                except Exception:                                # noqa: BLE001
+                    return {"error": "a frame isn't base64"}
+                if len(b) != ART_FRAME_BYTES:
+                    return {"error": f"each frame is 16x16 RGB ({ART_FRAME_BYTES} bytes)"}
+                raw.append(b)
+            fps = max(1, min(30, int(req.get("fps") or 8)))
+            hold = max(0, min(255, int(req.get("hold") if req.get("hold") is not None else 15)))
+            loop = bool(req.get("loop", len(raw) > 1))
+            n = len(raw)
+            for i, b in enumerate(raw):
+                # kind 3: [3, index, count, fps, hold seconds (0 = until cleared), loop] + RGB
+                s._put(bytes([3, i, n, fps, hold, 1 if loop else 0]) + b)
+            s.art_until = time.monotonic() + (hold or 3600)
+            return {"ok": True, "frames": n}
+        if a == "device.draw.clear":
+            s.send({"type": "draw", "op": "clear"})
+            s.art_until = 0.0
+            return {"ok": True}
+        if a == "device.ota":
+            if not owner:
+                return {"error": "only the relay's owner can update firmware"}
+            if "ota" not in caps:
+                return {"error": "this Lite's firmware can't update itself yet: flash the new "
+                                 "firmware once over USB, and every update after that can come "
+                                 "from here"}
+            fw = self.firmware.get(str(req.get("fw") or ""))
+            if not fw or not fw.get("done"):
+                return {"error": "upload the firmware file first"}
+            if s.mode != "idle":
+                return {"error": "he's in a conversation, try again in a moment"}
+            token = secrets.token_urlsafe(18)
+            self.fw_links[token] = {"fw": fw["id"], "until": time.time() + 900}
+            base = _public_base(s)
+            s.info["ota"] = {"state": "sent", "pct": 0, "at": time.time(), "version": fw.get("version", "")}
+            s.send({"type": "ota", "url": f"{base}/fw/{token}.bin", "size": fw["size"],
+                    "md5": fw["md5"], "version": fw.get("version", "")})
+            print(f"[relay] {dev['name']}: firmware update sent ({fw['size']} bytes, "
+                  f"{fw.get('version') or 'unknown version'})", flush=True)
+            return {"ok": True}
+        return {"error": f"unknown action {a!r}"}
+
+    def _fw_upload(self, req: dict) -> dict:
+        """firmware.bin in pieces (a websocket message tops out at 1 MiB):
+        {"upload": id or "", "index", "count", "data": base64}. The last piece checks the image."""
+        import base64
+        import hashlib
+        uid = str(req.get("upload") or "") or secrets.token_hex(8)
+        idx, count = int(req.get("index") or 0), int(req.get("count") or 1)
+        if not 1 <= count <= 64 or not 0 <= idx < count:
+            return {"error": "bad piece numbers"}
+        try:
+            chunk = base64.b64decode(req.get("data") or "")
+        except Exception:                                        # noqa: BLE001
+            return {"error": "that piece isn't base64"}
+        fw = self.firmware.setdefault(uid, {"id": uid, "parts": {}, "count": count, "done": False,
+                                            "at": time.time()})
+        fw["parts"][idx] = chunk
+        # forget old uploads (they live in memory)
+        for k in [k for k, v in self.firmware.items() if time.time() - v["at"] > 3600 and k != uid]:
+            del self.firmware[k]
+        if len(fw["parts"]) < count:
+            return {"ok": True, "upload": uid, "have": len(fw["parts"])}
+        data = b"".join(fw["parts"][i] for i in range(count))
+        fw.pop("parts")
+        if len(data) < 64 * 1024 or len(data) > 3 * 1024 * 1024 or data[0] != 0xE9:
+            del self.firmware[uid]
+            return {"error": "that doesn't look like an ESP32 firmware image. Use "
+                             ".pio/build/reedus_lite_s3/firmware.bin"}
+        fw.update(data=data, size=len(data), md5=hashlib.md5(data).hexdigest(), done=True,
+                  version=_fw_version(data))
+        return {"ok": True, "upload": uid, "fw": uid, "size": len(data), "version": fw["version"]}
+
+    def _fw_latest(self) -> dict:
+        """The newest CI build (.github/workflows/lite-firmware.yml publishes it as a GitHub
+        release), fetched into the same place an upload goes."""
+        import hashlib
+        import requests
+        url = config.env("RELAY_FW_URL", "https://github.com/Danial-Sy/ReedusAIAssistant/releases/"
+                                         "download/lite-fw-latest/firmware.bin")
+        try:
+            r = requests.get(url, timeout=30)
+        except Exception as e:                                   # noqa: BLE001
+            return {"error": f"couldn't reach the latest build ({type(e).__name__})"}
+        if r.status_code != 200:
+            return {"error": f"no published build yet (HTTP {r.status_code}). It appears after the "
+                             f"GitHub action 'Lite firmware' runs, or upload a firmware.bin"}
+        data = r.content
+        if len(data) < 64 * 1024 or data[0] != 0xE9:
+            return {"error": "the published file isn't an ESP32 firmware image"}
+        uid = "latest-" + hashlib.md5(data).hexdigest()[:10]
+        self.firmware[uid] = {"id": uid, "data": data, "size": len(data), "done": True,
+                              "md5": hashlib.md5(data).hexdigest(), "version": _fw_version(data),
+                              "at": time.time()}
+        return {"ok": True, "fw": uid, "size": len(data), "version": self.firmware[uid]["version"]}
 
     def _status(self, acc: dict) -> dict:
         from reedus_companion.cloud import providers
@@ -448,7 +639,12 @@ class Hub:
                          "state": live.state if live else None, "settings": d["settings"],
                          "last_seen": d["last_seen"],
                          "battery": (live.info.get("battery") if live else None),
-                         "status": (live.info.get("status") if live else None)})
+                         "status": (live.info.get("status") if live else None),
+                         "fw": (live.hello.get("fw") if live else None),
+                         "caps": (live.hello.get("caps") if live else None),
+                         "ota": (live.info.get("ota") if live else None),
+                         "doa": (live.info.get("doa") if live else None),
+                         "glance": (live.info.get("glance") if live else None)})
         _, rev = memory.bulletin(aid)
         bal = accounts.balance(aid)
         from reedus_relay import funding, vault
@@ -459,7 +655,9 @@ class Hub:
                 "providers": [p for p in providers.public() if usable(p["id"])],
                 "payments": funding.enabled(), "stripe_mode": vault.stripe_mode(),
                 "amounts": funding.AMOUNTS, "pairing": len(self.pairing),
-                "bulletin_rev": rev, "stt": speech.stt_provider()}
+                "bulletin_rev": rev, "stt": speech.stt_provider(),
+                "voice": (acc.get("settings") or {}).get("voice") or {},
+                "glance": (acc.get("settings") or {}).get("glance") or {}}
 
     def _chat(self, acc: dict, text: str) -> dict:
         """Type to Reedus from the website: same brain and memory, no voice."""
@@ -582,6 +780,54 @@ class Hub:
         return {"error": f"unknown admin action {a!r}"}
 
 
+def _voice_prefs(req: dict) -> dict:
+    """{"id", "speed"?, "style"?} from an app request, cleaned up."""
+    out = {"id": str(req.get("voice") or req.get("id") or "").strip()[:60]}
+    try:
+        sp = float(req.get("speed") or 0)
+        if 0.5 <= sp <= 1.5 and abs(sp - 1.0) > 0.01:
+            out["speed"] = round(sp, 2)
+    except (TypeError, ValueError):
+        pass
+    style = str(req.get("style") or "").strip()[:300]
+    if style:
+        out["style"] = style
+    return out
+
+
+def _default_voice() -> str:
+    try:
+        from reedus_companion.voice import voice_prefs
+        return voice_prefs.inworld_voice()
+    except Exception:                                            # noqa: BLE001
+        return "Theodore"
+
+
+def _public_base(session=None) -> str:
+    """https://<this relay>, for links a Lite downloads from."""
+    from reedus_relay import funding
+    base = (funding.public_base() or "").rstrip("/")
+    if base:
+        return base
+    dom = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
+    return f"https://{dom}" if dom else f"http://127.0.0.1:{config.PORT}"
+
+
+def _fw_version(data: bytes) -> str:
+    """Our FW_VERSION string (config.h, e.g. 0.3.0-s3) as it sits in the image, else the
+    version in the ESP-IDF app header."""
+    import re
+    m = re.search(rb"\b(\d+\.\d+\.\d+-s3[\w.-]*)\x00", data)
+    if m:
+        return m.group(1).decode("ascii", "replace")
+    try:
+        if data[0x20:0x24] == bytes.fromhex("3254cdab"):
+            return data[0x30:0x50].split(b"\x00")[0].decode("ascii", "replace")
+    except Exception:                                            # noqa: BLE001
+        pass
+    return ""
+
+
 def _secrets_h(token: str, host: str) -> str:
     """firmware/src/secrets.h for a new Lite, ready to paste (Wi-Fi left for you)."""
     from reedus_relay import funding
@@ -651,6 +897,13 @@ async def serve(hub: Hub, host: str = config.HOST, port: int = config.PORT):
             return None
         if path.rstrip("/") == "/health":
             return connection.respond(HTTPStatus.OK, "reedus relay ok\n")
+        if path.startswith("/fw/") and path.endswith(".bin"):
+            tok = path[4:-4]
+            link = hub.fw_links.get(tok)
+            fw = hub.firmware.get(link["fw"]) if link else None
+            if not link or time.time() > link["until"] or not fw or not fw.get("data"):
+                return connection.respond(HTTPStatus.NOT_FOUND, "no such firmware\n")
+            return _response(fw["data"], "application/octet-stream")
         if path == "/relay.json":
             # the website asks: is this relay set up yet, and does setup need a code?
             return _response(json.dumps({"relay": True, "name": config.RELAY_NAME, "app": "/app",

@@ -183,6 +183,30 @@
         <p class="note" id="brain-none" hidden>No AI key yet. The owner adds one under Service keys.</p>
       </div>
 
+      <div class="card" id="voice-card">
+        <h3>Voice</h3>
+        <p class="note" id="voice-now"></p>
+        <label class="field"><span>Voice</span><select id="voice-pick"></select></label>
+        <p class="note" id="voice-desc"></p>
+        <label class="slider"><span>Speed</span><input type="range" min="0.7" max="1.3" step="0.05" id="voice-speed"><b id="voice-speed-v"></b></label>
+        <div class="inline"><button class="ghost-btn" id="voice-play" type="button">&#9654; Hear it</button>
+          <button class="cta" id="voice-save" type="button">Use this voice</button></div>
+        <p class="note" id="voice-out"></p>
+      </div>
+
+      <div class="card" id="glance-card">
+        <div class="card-head"><h3>Idle screen</h3></div>
+        <label class="switch"><input type="checkbox" id="wx-on"><span class="track"></span>
+          <span>Show the weather on his face while nobody's talking</span></label>
+        <div id="wx-opts">
+          <label class="field"><span>Where</span><input id="wx-place" maxlength="80" placeholder="Town, state (e.g. Blacksburg, VA)" autocomplete="address-level2"></label>
+          <div class="inline"><div class="seg two" id="wx-unit"><button type="button" data-val="F">&deg;F</button><button type="button" data-val="C">&deg;C</button></div>
+            <select id="wx-every" aria-label="How often"><option value="60">every minute</option><option value="90">every 90 s</option><option value="180">every 3 min</option><option value="300">every 5 min</option></select></div>
+          <button class="cta" id="wx-save" type="button">Save</button>
+        </div>
+        <p class="note" id="wx-out"></p>
+      </div>
+
       <div class="card" id="keys-card" hidden>
         <h3>Service keys <small>owner</small></h3>
         <p class="note">Lite needs three things: an <b>AI key</b> to think, a <b>Gemini or OpenAI key</b> to understand speech (one Gemini key covers both), and an <b>Inworld key</b> for his voice. Every provider bills per use, so add a card on their site first.</p>
@@ -235,6 +259,90 @@
       <button class="cta wide" type="submit">Pair</button>
       <p class="note" id="pair-out"></p>
     </form>
+  </div>
+
+  <!-- a Lite's controls: face, head, drawing, firmware -->
+  <div class="sheet-bg" id="ctl" hidden>
+    <div class="sheet ctl-sheet">
+      <div class="card-head"><h3 id="ctl-title">Lite</h3><button class="icon-btn" type="button" data-close aria-label="Close"><svg><use href="#i-x"/></svg></button></div>
+      <div class="seg four" id="ctl-tabs">
+        <button type="button" data-tab="face">Face</button><button type="button" data-tab="head">Head</button><button type="button" data-tab="draw">Draw</button><button type="button" data-tab="fw">Update</button>
+      </div>
+      <p class="note bad" id="ctl-offline" hidden>This Lite is offline.</p>
+
+      <div class="ctl-pane" id="ctl-face">
+        <div class="expr-grid" id="expr-grid"></div>
+        <p class="note">Preview a state</p>
+        <div class="inline" id="state-row">
+          <button class="ghost-btn small" data-state="listening" type="button">Listening</button>
+          <button class="ghost-btn small" data-state="thinking" type="button">Thinking</button>
+          <button class="ghost-btn small" data-state="sleep" type="button">Asleep</button>
+          <button class="ghost-btn small" data-state="idle" type="button">Normal</button>
+        </div>
+      </div>
+
+      <div class="ctl-pane" id="ctl-head" hidden>
+        <svg id="look-dial" viewBox="0 0 260 150" aria-label="Tap where Lite should look">
+          <path class="dial-track" d="M20 130 A110 110 0 0 1 240 130"/>
+          <g id="dial-ticks"></g>
+          <circle class="dial-doa" id="dial-doa" cx="130" cy="20" r="7" opacity="0"/>
+          <g id="dial-needle"><path class="dial-needle" d="M130 130 L130 34"/><circle cx="130" cy="34" r="6" class="dial-tip"/></g>
+          <g class="dial-lite"><path d="M114 120l-3-12 9 5M146 120l3-12-9 5"/><rect x="110" y="114" width="40" height="28" rx="9"/></g>
+          <text x="22" y="148" class="dial-lab">left</text><text x="238" y="148" class="dial-lab end">right</text><text x="130" y="12" class="dial-lab mid">front</text>
+        </svg>
+        <p class="note center" id="head-read">Drag or tap where he should look</p>
+        <div class="inline center">
+          <button class="ghost-btn" id="look-center" type="button">Center</button>
+          <button class="ghost-btn" id="look-voice" type="button">Face the last voice</button>
+        </div>
+      </div>
+
+      <div class="ctl-pane" id="ctl-draw" hidden>
+        <div class="draw-top">
+          <canvas id="pix" width="320" height="320" aria-label="16 by 16 drawing"></canvas>
+          <div class="palette" id="palette"></div>
+        </div>
+        <div class="inline tools" id="tools">
+          <button class="ghost-btn small on" data-tool="pen" type="button">Pen</button>
+          <button class="ghost-btn small" data-tool="erase" type="button">Eraser</button>
+          <button class="ghost-btn small" data-tool="fill" type="button">Fill</button>
+          <button class="ghost-btn small" id="pix-clear" type="button">Clear</button>
+          <input type="color" id="pix-color" value="#8ff5e2" aria-label="Custom color">
+        </div>
+        <div class="frames" id="frames"></div>
+        <div class="inline">
+          <button class="ghost-btn small" id="fr-add" type="button">+ Frame</button>
+          <button class="ghost-btn small" id="fr-dup" type="button">Duplicate</button>
+          <button class="ghost-btn small danger" id="fr-del" type="button">Delete frame</button>
+          <button class="ghost-btn small" id="fr-play" type="button">&#9654; Preview</button>
+        </div>
+        <label class="slider"><span>Speed</span><input type="range" min="1" max="20" id="fr-fps" value="6"><b id="fr-fps-v">6 fps</b></label>
+        <div class="inline">
+          <select id="art-hold" aria-label="How long"><option value="10">for 10 s</option><option value="30" selected>for 30 s</option><option value="120">for 2 min</option><option value="0">until I clear it</option></select>
+          <select id="art-preset" aria-label="Animations"><option value="">Animations…</option></select>
+        </div>
+        <div class="inline">
+          <button class="cta" id="art-send" type="button">Show on Lite</button>
+          <button class="ghost-btn" id="art-clear" type="button">Back to his face</button>
+        </div>
+        <div class="inline">
+          <select id="art-saved" aria-label="Saved drawings"><option value="">My drawings…</option></select>
+          <button class="ghost-btn small" id="art-save" type="button">Save</button>
+          <button class="ghost-btn small danger" id="art-del" type="button">Delete</button>
+        </div>
+      </div>
+
+      <div class="ctl-pane" id="ctl-fw" hidden>
+        <p class="note" id="fw-now"></p>
+        <div class="inline"><button class="cta" id="fw-latest" type="button">Get the latest build</button>
+          <label class="ghost-btn file-btn">Upload firmware.bin<input type="file" id="fw-file" accept=".bin"></label></div>
+        <p class="note" id="fw-ready"></p>
+        <button class="cta gold wide" id="fw-install" type="button" hidden>Install on this Lite</button>
+        <div class="bar" id="fw-bar" hidden><i></i></div>
+        <p class="note" id="fw-out"></p>
+        <p class="note">He shows a progress bar on his face, then restarts on the new firmware (about a minute). If anything goes wrong he keeps the firmware he has.</p>
+      </div>
+    </div>
   </div>
 
   <div id="toasts" aria-live="polite"></div>

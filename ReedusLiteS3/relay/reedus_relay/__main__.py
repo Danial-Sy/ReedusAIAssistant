@@ -70,7 +70,8 @@ async def _run() -> None:
     from reedus_relay.server import Hub, serve
     d = db()
     print(f"[relay] database: {'postgres' if d.pg else 'sqlite'}", flush=True)
-    print(f"[relay] speech-to-text: {speech.stt_provider()}  wake: {speech.wake_detector().describe()}",
+    print(f"[relay] speech-to-text: {speech.stt_provider()}  end of sentence: {speech.vad_status()}  "
+          f"wake: {speech.wake_detector().describe()}",
           flush=True)
     server = await serve(Hub())
     print(f"[relay] listening on {config.HOST}:{config.PORT} (/ website, /lite devices, /app, /health)",

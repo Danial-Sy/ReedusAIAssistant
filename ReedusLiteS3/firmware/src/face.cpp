@@ -70,6 +70,13 @@ static uint8_t fidget = 0;
 static float fidgetGx = 0;
 static int battPct = -1;
 static int bright = 100;
+// a drawing / animation from the app
+static const int ART_MAX = 32;
+static uint8_t* art = nullptr;  // ART_MAX * 768, PSRAM
+static int artCount = 0, artFps = 8, artPending = 0;
+static bool artLoop = true, artOn = false, artEnded = false;
+static uint32_t artStart = 0, artUntil = 0;
+static int updatingPct = -1;
 static char desc[64];
 
 static float now_s() { return millis() / 1000.0f; }
@@ -503,8 +510,48 @@ static void compose(uint32_t now, Spec& s) {
   }
 }
 
+static void drawArt(uint32_t now) {
+  uint32_t el = now - artStart;
+  int i = (int)((uint64_t)el * artFps / 1000);
+  if (!artLoop && i >= artCount) i = artCount - 1;  // a one-shot holds its last frame
+  i %= artCount;
+  const uint8_t* f = art + i * 768;
+  for (int y = 0; y < MATRIX_H; y++)
+    for (int x = 0; x < MATRIX_W; x++) {
+      const uint8_t* p = f + (y * MATRIX_W + x) * 3;
+      if (p[0] | p[1] | p[2]) px(x, y, CRGB(p[0], p[1], p[2]));
+    }
+  snprintf(desc, sizeof(desc), "drawing %d/%d", i + 1, artCount);
+}
+
+static void drawUpdating(uint32_t now) {
+  // a little download arrow and a bar filling left to right
+  int bob = (now / 300) % 2;
+  for (int y = 2; y <= 7; y++) px(7, y + bob, SKY), px(8, y + bob, SKY);
+  for (int d = 0; d < 3; d++) px(5 + d, 6 + d + bob, SKY), px(10 - d, 6 + d + bob, SKY);
+  int fill = updatingPct * 14 / 100;
+  for (int x = 1; x <= 14; x++) {
+    px(x, 12, x <= fill ? MINT : DIMWHITE, x <= fill ? 255 : 60);
+    px(x, 13, x <= fill ? MINT : DIMWHITE, x <= fill ? 255 : 60);
+  }
+  snprintf(desc, sizeof(desc), "updating %d%%", updatingPct);
+}
+
 static void render(uint32_t now) {
   memset(frame, 0, sizeof(frame));
+  if (updatingPct >= 0) {
+    drawUpdating(now);
+    return;
+  }
+  if (artOn && !test) {
+    if (artUntil && (int32_t)(now - artUntil) >= 0) {
+      artOn = false;
+      artEnded = true;
+    } else {
+      drawArt(now);
+      return;
+    }
+  }
   if (test) {
     // corners: red top-left, green top-right, blue bottom-left, white bottom-right, as seen
     // from the front. fix it live with `cal rotate` / `cal flipx` / `cal flipy`
@@ -599,7 +646,7 @@ void update() {
   for (int y = 0; y < MATRIX_H; y++) {
     for (int x = 0; x < MATRIX_W; x++) {
       CRGB& a = shown[y][x];
-      a = blend(a, frame[y][x], test ? 255 : 150);
+      a = blend(a, frame[y][x], (test || artOn) ? 255 : 150);  // drawings stay crisp
       leds[xyToIndex(x, y)] = a;
     }
   }
@@ -611,6 +658,7 @@ void setState(const char* name) {
   for (int i = 0; i < 5; i++) {
     if (strcmp(name, ST_NAMES[i]) == 0) {
       St next = (St)i;
+      if (next == S_LISTENING || next == S_THINKING || next == S_SPEAKING) artOn = false;  // he's busy: face back
       if (next != S_IDLE) lastActive = millis();
       if (st != S_IDLE && next == S_IDLE) lastActive = millis();  // drowsiness counts from here
       st = next;
@@ -626,6 +674,7 @@ void setOnline(bool wifi, bool server) {
 }
 
 void wake() {
+  artOn = false;
   wakeAt = lastActive = millis();
   emoUntil = 0;  // a fresh conversation starts with a fresh face
   exUntil = 0;
@@ -674,5 +723,36 @@ void orientation(int& rotate, bool& fx, bool& fy) {
   fy = flipY;
 }
 const char* describe() { return desc; }
+
+void artFrame(int idx, int count, int fps, int holdS, bool loop, const uint8_t* rgb) {
+  if (count < 1 || count > ART_MAX || idx < 0 || idx >= count) return;
+  if (!art) {
+    art = (uint8_t*)ps_malloc(ART_MAX * 768);
+    if (!art) art = (uint8_t*)malloc(ART_MAX * 768);
+    if (!art) return;
+  }
+  if (idx == 0) artPending = 0;
+  memcpy(art + idx * 768, rgb, 768);
+  artPending++;
+  if (idx == count - 1) {  // the whole set is here: play it
+    artCount = count;
+    artFps = constrain(fps, 1, 30);
+    artLoop = loop;
+    artStart = millis();
+    artUntil = holdS > 0 ? artStart + (uint32_t)holdS * 1000 : 0;
+    artOn = true;
+    artEnded = false;
+    lastActive = artStart;
+  }
+}
+
+void artClear() { artOn = false; }
+bool artActive() { return artOn; }
+bool artTakeEnded() {
+  bool e = artEnded;
+  artEnded = false;
+  return e;
+}
+void setUpdating(int pct) { updatingPct = pct > 100 ? 100 : pct; }
 
 }  // namespace face

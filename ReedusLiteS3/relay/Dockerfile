@@ -22,7 +22,7 @@ COPY reedus_llm/reedus_companion/cloud /app/reedus_llm/reedus_companion/cloud
 COPY reedus_llm/reedus_companion/assist /app/reedus_llm/reedus_companion/assist
 COPY reedus_llm/reedus_companion/lite /app/reedus_llm/reedus_companion/lite
 COPY reedus_llm/reedus_companion/serve/__init__.py reedus_llm/reedus_companion/serve/persona.py \
-     /app/reedus_llm/reedus_companion/serve/
+     reedus_llm/reedus_companion/serve/weather.py /app/reedus_llm/reedus_companion/serve/
 COPY reedus_llm/reedus_companion/voice/__init__.py reedus_llm/reedus_companion/voice/tts_inworld.py \
      reedus_llm/reedus_companion/voice/voice_prefs.py reedus_llm/reedus_companion/voice/speech_text.py \
      reedus_llm/reedus_companion/voice/wakeword.py /app/reedus_llm/reedus_companion/voice/

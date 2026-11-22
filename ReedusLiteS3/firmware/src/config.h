@@ -5,7 +5,11 @@
 #pragma once
 #include <Arduino.h>
 
-#define FW_VERSION "0.2.0-s3"
+#ifdef FW_BUILD                    // CI builds add the commit: 0.3.0-s3.<sha>
+#define FW_VERSION "0.3.0-s3." FW_BUILD
+#else
+#define FW_VERSION "0.3.0-s3"
+#endif
 #define DEVICE_NAME "reedus-lite-s3"
 
 // ---------- the speech gate (relay.cpp) ----------
@@ -121,10 +125,17 @@
 // drifting after your voice: slowly, and only once you've clearly moved. it stops when the
 // conversation ends (quiet for long enough, or goodbye) and stays where it is
 #define HEAD_TRACK_IN_CONVO 1
-#define HEAD_TRACK_DPS 30.0f       // top speed while following (deg/s), a quarter of a wake turn
-#define HEAD_TRACK_ACCEL_DPS2 80.0f  // and a gentle start and stop
-#define HEAD_TRACK_EVERY_MS 1200   // at most one adjustment this often
-#define HEAD_TRACK_DEADBAND_DEG 15.0f  // smaller moves are left to the eyes
+#define HEAD_TRACK_DPS 45.0f       // top speed for a small drift after you (deg/s)
+#define HEAD_TRACK_ACCEL_DPS2 120.0f  // and a gentle start and stop
+#define HEAD_TRACK_EVERY_MS 500    // at most one adjustment this often
+#define HEAD_TRACK_WINDOW_MS 900   // who's talking = readings from this long ago to now
+#define HEAD_TRACK_MIN_N 4         // ...at least this many that agree (DoA is polled every 100 ms)
+#define HEAD_TRACK_DEADBAND_DEG 18.0f  // smaller moves are left to the eyes
+#define HEAD_NEW_SPEAKER_DEG 45.0f // further than this: someone else is talking, turn at full speed
+#define HEAD_CLUSTER_DEG 20.0f     // readings within this of each other are the same voice
+#define HEAD_CLUSTER_SHARE 0.6f    // the voice must be this share of recent readings to count
+#define HEAD_ECHO_GUARD_MS 350     // while he talks and this long after, his own echo is around...
+#define HEAD_SPEAKER_CONE_DEG 35.0f  // ...so voices within this of the base's front are ignored
 #define HEAD_DETACH_MS 500         // stop pulsing once there, an idle SG90 buzzes
 
 // ---------- face timing ----------

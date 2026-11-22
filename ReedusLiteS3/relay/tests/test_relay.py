@@ -45,6 +45,7 @@ config.START_TIMEOUT_S = 1.0
 config.FOLLOW_UP_S = 0.6
 config.LEAD_S = 0.10
 config.PREBUFFER_S = 0.02
+config.VAD = "energy"          # the fake audio is sine waves; Silero is checked on real speech below
 
 _fails = []
 
@@ -294,6 +295,31 @@ check(len(ep.audio()) >= 10 * 640, "endpointer keeps the speech")
 ep2 = speech.Endpointer(start_timeout=0.2)
 check([ep2.feed(SILENT) for _ in range(12)][-3:].count("timeout") >= 1, "endpointer times out on silence")
 check(speech.tone()[:2] != b"", "tone renders")
+from reedus_relay.brain import needs_search
+check(needs_search("who won the game last night") and needs_search("what's the latest news")
+      and not needs_search("tell me a joke") and not needs_search("how are you doing"),
+      "the web search tool only comes out when the sentence needs the live web")
+got.clear()
+sp3 = SentenceSplitter(got.append, first_clause=20)
+for tok in "Oh man, that is a really good question, honestly. Let me think.".split(" "):
+    sp3.feed(tok + " ")
+sp3.flush()
+check(got[0] == "Oh man, that is a really good question," and got[-1].endswith("Let me think."),
+      f"the first words can go out at a comma so his voice starts sooner ({got})")
+b = Brain({"id": "x", "settings": {}}, {"id": "y"}, backend=BACKEND)
+b.history = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": ""}]
+b._remember("cut off", "")
+check(len(b.history) == 2, "a reply cut off before it said anything isn't kept")
+check(speech.clean_transcript("Thank you.", b"\0" * 16000) == "" and
+      speech.clean_transcript("Thank you so much for the help", b"\0" * 16000) != "" and
+      speech.clean_transcript("[background noise]", b"\0" * 64000) == "",
+      "what speech-to-text makes up from noise is dropped")
+ep3 = speech.Endpointer(start_timeout=2.0, end_silence=0.5, spec_after=0.2)
+evs = [ep3.feed(VOICED) for _ in range(10)] + [ep3.feed(SILENT) for _ in range(12)] + \
+      [ep3.feed(VOICED) for _ in range(5)] + [ep3.feed(SILENT) for _ in range(30)]
+check(evs.count("pause") == 2 and evs.index("pause") < evs.index("resume") < evs.index("end")
+      and evs.index("end") > 27,
+      "a pause starts an early transcript, talking again throws it away, the real end ends it")
 check(strip_wake("Reedus, what's the weather") == "what's the weather", "just the name is stripped too")
 from reedus_relay import wake as wake_mod
 check(wake_mod.make("device", ["gate", "wake"]).on_device, "RELAY_WAKE=device trusts a Lite that hears the name")
@@ -983,6 +1009,122 @@ async def main():
     from reedus_companion.cloud import persona_shots
     persona_shots._CACHE = None
     check("my name is" not in persona_shots.block().lower(), "no name-teaching example in his prompt")
+
+    print("[20] the face, the head, drawings, voices, weather, firmware from the app")
+    st = await ask2(sock, {"action": "status"})
+    own_aid = st["account"]["id"]
+    art_tok = accounts.create_device(own_aid, "Art Lite")["token"]
+    ws3 = await websockets.connect(url + "/lite")
+    await ws3.send(json.dumps({"type": "hello", "proto": 3, "device": "art", "fw": "0.3.0-s3",
+                               "token": art_tok, "rate": 16000, "frame_ms": 20, "bulletin_rev": 0,
+                               "caps": ["gate", "bulletin", "wake", "draw", "ota"]}))
+    art_frames = []
+
+    class ArtDevice(Device):
+        async def _recv(self):
+            try:
+                async for m in self.ws:
+                    if isinstance(m, bytes):
+                        if m[:1] == b"\x03":
+                            art_frames.append(m)
+                    else:
+                        self.events.append(json.loads(m))
+            except Exception:
+                pass
+    d3 = ArtDevice(ws3)
+    await d3.wait_for(lambda: d3.last("welcome") is not None)
+    st = await ask2(sock, {"action": "status"})
+    art = next(x for x in st["devices"] if x["name"] == "Art Lite")
+    check(art["fw"] == "0.3.0-s3" and "draw" in art["caps"], "status shows each Lite's firmware and what it can do")
+    r = await ask2(sock, {"action": "device.expr", "device": art["id"], "name": "love", "hold": 2})
+    ok = await d3.wait_for(lambda: (d3.last("expr") or {}).get("name") == "love", 2)
+    check(r.get("ok") and ok, "an expression from the app reaches the face")
+    r = await ask2(sock, {"action": "device.look", "device": art["id"], "angle": 140})
+    ok = await d3.wait_for(lambda: (d3.last("look") or {}).get("angle") == 90, 2)
+    check(r.get("ok") and ok, "turning the head from the app (clamped to its 90 degrees)")
+    import base64 as b64
+    red = b64.b64encode(bytes([255, 0, 0]) * 256).decode()
+    blue = b64.b64encode(bytes([0, 0, 255]) * 256).decode()
+    r = await ask2(sock, {"action": "device.draw", "device": art["id"], "frames": [red, blue], "fps": 6})
+    ok = await d3.wait_for(lambda: len(art_frames) == 2, 2)
+    check(r.get("ok") and ok and art_frames[0][:6] == bytes([3, 0, 2, 6, 15, 1])
+          and art_frames[1][6:9] == bytes([0, 0, 255]) and len(art_frames[1]) == 6 + 768,
+          "a two-frame animation goes down as kind-3 frames (index, count, fps, hold, loop, RGB)")
+    r = await ask2(sock, {"action": "device.draw", "device": art["id"], "frames": ["AAAA"]})
+    check("16x16" in r.get("error", ""), "a frame that isn't 16x16 RGB is refused")
+    r = await ask2(sock, {"action": "device.draw", "device": did, "frames": [red]})
+    check("error" in r, "only the Lite's own account can draw on it")
+    r = await ask2(sock, {"action": "device.draw.clear", "device": art["id"]})
+    ok = await d3.wait_for(lambda: (d3.last("draw") or {}).get("op") == "clear", 2)
+    check(r.get("ok") and ok, "back to his face")
+    # voices
+    os.environ["INWORLD_API_KEY"] = ""
+    r = await ask2(sock, {"action": "voices"})
+    check(len(r.get("voices", [])) > 5 and r["source"] == "builtin", "a voice list even when Inworld can't be asked")
+    r = await ask2(sock, {"action": "voice.set", "voice": "Dennis", "speed": 1.1})
+    check(r.get("ok") and accounts.account(own_aid)["settings"]["voice"] == {"id": "Dennis", "speed": 1.1},
+          "picking a voice saves it on the account")
+    check(hub.sessions[accounts.device_for_token(art_tok)["id"]].voice_prefs()["id"] == "Dennis",
+          "the live Lite speaks with it from its next sentence")
+    # weather card (Open-Meteo faked)
+    from reedus_relay import weather as wmod
+    calls = []
+
+    def fake_json(u):
+        calls.append(u)
+        if "geocoding" in u:
+            return {"results": [{"name": "Blacksburg", "admin1": "South Carolina", "latitude": 35.1, "longitude": -81.5},
+                                {"name": "Blacksburg", "admin1": "Virginia", "latitude": 37.23, "longitude": -80.41}]}
+        return {"current": {"temperature_2m": 51.6, "weather_code": 3, "is_day": 1},
+                "daily": {"temperature_2m_max": [58], "temperature_2m_min": [39]}}
+    wmod._json = fake_json
+    check(wmod.geocode("Blacksburg, VA")[2] == "Blacksburg, Virginia", "'Blacksburg, VA' finds the Virginia one")
+    r = await ask2(sock, {"action": "glance.set", "weather": True, "place": "Blacksburg, VA", "unit": "F"})
+    check(r.get("ok") and r["now"]["temp"] == 52 and r["now"]["icon"] == "cloud", "turning on the weather card checks the place")
+    sess3 = hub.sessions[accounts.device_for_token(art_tok)["id"]]
+    sess3.art_until = 0.0
+    ok = await d3.wait_for(lambda: (d3.last("glance") or {}).get("card") == "weather", 4)
+    check(ok and d3.last("glance")["temp"] == 52, "the weather card shows on the idle face")
+    check("52 degrees" in sess3.brain.weather_fact("what's the weather like"),
+          "asking about the weather uses it (no web search)")
+    wmod._json = lambda u: None
+    wmod._geo.clear()
+    r = await ask2(sock, {"action": "glance.set", "place": "Nowhereville Zzz"})
+    check("couldn't find" in r.get("error", ""), "a place it can't find is refused")
+    # firmware
+    fake_fw = bytes([0xE9]) + os.urandom(100 * 1024) + b"0.3.1-s3\x00" + os.urandom(1000)
+    half = len(fake_fw) // 2
+    r1 = await ask2(sock, {"action": "fw.upload", "index": 0, "count": 2,
+                           "data": b64.b64encode(fake_fw[:half]).decode()})
+    r2 = await ask2(sock, {"action": "fw.upload", "upload": r1["upload"], "index": 1, "count": 2,
+                           "data": b64.b64encode(fake_fw[half:]).decode()})
+    check(r2.get("fw") and r2["size"] == len(fake_fw) and r2["version"] == "0.3.1-s3",
+          "firmware uploads in pieces and its version is read from the image")
+    r = await ask2(sock, {"action": "fw.upload", "index": 0, "count": 1, "data": b64.b64encode(b"hello").decode()})
+    check("ESP32" in r.get("error", ""), "something that isn't firmware is refused")
+    r = await ask2(sock, {"action": "device.ota", "device": art["id"], "fw": r2["fw"]})
+    ok = await d3.wait_for(lambda: d3.last("ota") is not None, 2)
+    check(r.get("ok") and ok, "the Lite is told to update")
+    ota = d3.last("ota")
+    import hashlib
+    import urllib.request
+    path = "/fw/" + ota["url"].split("/fw/")[1]
+    body = await asyncio.to_thread(lambda: urllib.request.urlopen(f"http://127.0.0.1:{port}{path}").read())
+    check(body == fake_fw and ota["md5"] == hashlib.md5(fake_fw).hexdigest() and ota["size"] == len(fake_fw),
+          "it downloads exactly that image from the relay, and the md5 matches")
+    try:
+        await asyncio.to_thread(lambda: urllib.request.urlopen(f"http://127.0.0.1:{port}/fw/nope.bin").read())
+        check(False, "a made-up firmware link is refused")
+    except Exception:
+        check(True, "a made-up firmware link is refused")
+    await ws3.send(json.dumps({"type": "ota", "state": "downloading", "pct": 40}))
+    await asyncio.sleep(0.2)
+    st = await ask2(sock, {"action": "status"})
+    art = next(x for x in st["devices"] if x["name"] == "Art Lite")
+    check(art["ota"]["pct"] == 40, "the update's progress shows in the app")
+    r = await ask2(sock, {"action": "device.ota", "device": did, "fw": r2["fw"]})
+    check("error" in r, "another account's Lite can't be updated")
+    await ws3.close()
     await sock.close()
 
     await ws.close()

@@ -63,10 +63,23 @@ PREBUFFER_S = 0.12
 
 # listening
 START_TIMEOUT_S = env_float("RELAY_START_TIMEOUT_S", 6.0)    # wake, then nothing said
-END_SILENCE_S = env_float("RELAY_END_SILENCE_S", 0.8)        # pause that ends a sentence
+END_SILENCE_S = env_float("RELAY_END_SILENCE_S", 0.6)        # pause that ends a sentence
 MAX_UTTERANCE_S = env_float("RELAY_MAX_UTTERANCE_S", 15.0)
 FOLLOW_UP_S = env_float("RELAY_FOLLOW_UP_S", 6.0)            # answer without the wake word
 HISTORY_TURNS = int(env_float("RELAY_HISTORY_TURNS", 12))    # kept in the prompt per session
+# the speech detector (speech.py): silero (default) or energy (loudness only)
+VAD = env("RELAY_VAD", "silero").lower()
+VAD_ON = env_float("RELAY_VAD_ON", 0.5)              # speech probability that starts speech
+VAD_KEEP = env_float("RELAY_VAD_KEEP", 0.35)         # ...and that keeps it going
+VAD_START_S = env_float("RELAY_VAD_START_S", 0.2)    # this much speech before it counts
+VAD_MIN_SPEECH_S = env_float("RELAY_VAD_MIN_SPEECH_S", 0.25)  # less than this isn't a sentence
+LOCK_DB = env_float("RELAY_LOCK_DB", 15.0)           # quieter than the speaker by this: background
+SPEC_S = env_float("RELAY_SPEC_S", 0.3)              # quiet this long: start transcribing early
+
+# the brain on Lite: think as little as the model allows (it's a chat, not a puzzle), and only
+# let it search the web when the sentence sounds like it needs to (brain.needs_search)
+os.environ.setdefault("REEDUS_GEMINI_THINK", "minimal")
+LITE_SEARCH = env("RELAY_SEARCH", "auto").lower()    # auto | always | off
 
 # money
 LOW_BALANCE_USD = env_float("RELAY_LOW_BALANCE_USD", 1.0)

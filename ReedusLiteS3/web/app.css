@@ -268,3 +268,52 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
 /* iPhone: Safari zooms the page into any field under 16px when you tap it */
 input, select, textarea { font-size: 16px; }
 .code-input { font-size: 30px; }
+
+/* ---------- a Lite's controls ---------- */
+.lite-menu { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.ctl-sheet { max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; }
+.seg.four { grid-template-columns: repeat(4, 1fr); }
+.seg.two { grid-template-columns: repeat(2, 1fr); min-width: 120px; }
+.seg button[hidden] { display: none !important; }
+.ctl-pane { display: grid; gap: 12px; }
+.center { text-align: center; justify-content: center; }
+.expr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
+.expr { display: grid; justify-items: center; gap: 2px; padding: 10px 4px; border-radius: 14px; border: 1px solid var(--line-hi);
+  background: var(--bg2); transition: transform .12s var(--ease), background .15s; }
+.expr:hover { background: var(--bg3); }
+.expr:active { transform: scale(.94); }
+.expr .e { font-size: 24px; line-height: 1.1; }
+.expr small { font-size: 12px; color: var(--ink-dim); }
+
+#look-dial { width: 100%; max-width: 360px; justify-self: center; touch-action: none; cursor: pointer; user-select: none; }
+.dial-track { fill: none; stroke: var(--bg3); stroke-width: 14; stroke-linecap: round; }
+.dial-tick { stroke: var(--ink-faint); stroke-width: 1.5; }
+.dial-tick.major { stroke: var(--ink-dim); stroke-width: 2.2; }
+#dial-needle { transform-origin: 130px 130px; transition: transform .35s var(--ease); }
+.dial-needle { stroke: var(--accent-hi); stroke-width: 3.5; stroke-linecap: round; }
+.dial-tip { fill: var(--accent-hi); }
+.dial-doa { fill: var(--gold); transition: cx .3s, cy .3s, opacity .3s; }
+.dial-lite path { fill: none; stroke: var(--red); stroke-width: 2.4; stroke-linejoin: round; }
+.dial-lite rect { fill: var(--bg2); stroke: var(--ink-dim); stroke-width: 2; }
+.dial-lab { fill: var(--ink-faint); font: 11px var(--sans); }
+.dial-lab.end { text-anchor: end; } .dial-lab.mid { text-anchor: middle; }
+
+.draw-top { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; }
+#pix { width: 100%; max-width: 340px; aspect-ratio: 1; border-radius: 14px; touch-action: none; image-rendering: pixelated;
+  background: #050806; border: 1px solid var(--line-hi); cursor: crosshair; }
+.palette { display: grid; grid-template-columns: repeat(2, 30px); gap: 6px; }
+.sw { width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+.sw.on { border-color: var(--ink); transform: scale(1.08); }
+.tools .on { background: var(--bg3); border-color: var(--accent-hi); color: var(--accent-hi); }
+#pix-color { width: 42px; height: 32px; padding: 2px; border-radius: 10px; cursor: pointer; }
+.frames { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.frame { flex: none; padding: 3px; border-radius: 8px; border: 2px solid var(--line-hi); background: #050806; }
+.frame.on { border-color: var(--gold); }
+.frame canvas { display: block; width: 40px; height: 40px; image-rendering: pixelated; }
+
+.file-btn { position: relative; overflow: hidden; display: inline-block; cursor: pointer; }
+.file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.file-btn:has(input:disabled) { opacity: .45; cursor: default; }
+.bar { height: 10px; border-radius: 999px; background: var(--bg3); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--accent-hi); transition: width .5s var(--ease); }
+#wx-opts { display: grid; gap: 12px; }
