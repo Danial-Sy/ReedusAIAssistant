@@ -114,9 +114,12 @@ class Endpointer:
     def __init__(self, start_timeout: float = config.START_TIMEOUT_S,
                  end_silence: float = config.END_SILENCE_S,
                  max_len: float = config.MAX_UTTERANCE_S, noise_db: float = -60.0,
-                 vad: Optional[str] = None, spec_after: float = config.SPEC_S):
+                 vad: Optional[str] = None, spec_after: float = config.SPEC_S,
+                 floor_db: float = -120.0):
         self.start_timeout, self.end_silence, self.max_len = start_timeout, end_silence, max_len
         self.spec_after = spec_after
+        self.floor_db = floor_db     # quieter than this never counts (a TV while he's thinking)
+        self.carry = b""             # audio from before (a sentence that's being continued)
         mode = (vad or config.VAD or "silero").lower()
         sess = _silero() if mode == "silero" else None
         self.vad = SileroVad(sess) if sess is not None else None
@@ -157,7 +160,7 @@ class Endpointer:
         self.in_speech = p >= (config.VAD_KEEP if self.in_speech else config.VAD_ON)
         if not self.in_speech:
             return False
-        if db < -58.0:                                   # whisper-quiet: not someone at Lite
+        if db < -58.0 or db < self.floor_db:             # whisper-quiet: not someone at Lite
             return False
         if self.started and db < self.peak - config.LOCK_DB:
             return False                                 # a quieter voice in the background
@@ -219,7 +222,7 @@ class Endpointer:
         self.frames = []
 
     def audio(self) -> bytes:
-        return b"".join(self.frames)
+        return self.carry + b"".join(self.frames)
 
 
 def wav_bytes(pcm: bytes, rate: int = config.RATE) -> bytes:

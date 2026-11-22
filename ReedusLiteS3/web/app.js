@@ -257,7 +257,7 @@ async function refresh() {
   renderTop();
   renderHome();
   renderCredit();
-  if (S.view === "settings") renderBrain();
+  if (S.view === "settings") { renderBrain(); renderListen(); }
 }
 
 /* ---------- top bar ---------- */
@@ -714,6 +714,73 @@ function wireBrain() {
   });
 }
 
+/* ---------- settings: listening ---------- */
+function renderListen() {
+  const L = (S.status && S.status.listen) || null;
+  if (!L) return;
+  const paint = (sel, choices, cur, noteSel) => {
+    choices.forEach((c) => {
+      const b = $(`${sel} button[data-val="${c.id}"]`);
+      if (b) b.textContent = c.label;
+    });
+    $$(`${sel} button`).forEach((b) => b.classList.toggle("on", b.dataset.val === cur));
+    $(noteSel).textContent = (choices.find((c) => c.id === cur) || {}).note || "";
+  };
+  paint("#patience-pick", L.patience_choices || [], L.patience, "#patience-note");
+  const cut = $("#wake-cut");
+  if (document.activeElement !== cut) cut.value = Math.round((L.wake || 0.9) * 100);
+  paintWake();
+  // the S3 reports when it almost heard its name: how close the last one came tells you
+  // which setting would have caught it
+  const near = (S.status.devices || []).map((d) => d.wake_near && { ...d.wake_near, name: d.name })
+    .filter(Boolean).sort((a, b) => b.at - a.at)[0];
+  const needs = L.wake || 0.9;
+  let txt = "";
+  if (near && Date.now() / 1000 - near.at < 6 * 3600) {
+    const when = new Date(near.at * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const pct = Math.floor(near.p * 100);
+    const min = Math.round((L.wake_min || 0.6) * 100);
+    txt = `At ${when} ${near.name} almost heard his name: ${pct}% sure, and it needs ${Math.round(needs * 100)}%.` +
+      (pct >= min ? ` Set it to ${pct}% or lower to catch that.`
+        : ` That's under ${min}%, so it's too far or too noisy for the wake word, whatever the setting.`);
+  } else {
+    txt = "Tip: have someone call him from where they'd normally be. If he misses it, this shows how close it came.";
+  }
+  $("#wake-near").textContent = txt;
+}
+
+function paintWake() {
+  const cut = $("#wake-cut");
+  const v = +cut.value;
+  $("#wake-cut-v").textContent = `${v}%`;
+  cut.style.setProperty("--fill", `${(v - cut.min) / (cut.max - cut.min) * 100}%`);
+  const def = Math.round(((S.status && S.status.listen && S.status.listen.wake_default) || 0.9) * 100);
+  $("#wake-note").textContent =
+    v >= 93 ? "Only when it's very sure. Fewest mistakes, but you'll need to be close." :
+    v >= 86 ? `About the default (${def}%). Fine within a few metres.` :
+    v >= 76 ? "Hears you from further away. Wakes by mistake now and then." :
+    v >= 66 ? "Across the room. Expect the odd false wake from TV or similar words." :
+    "Hears almost anything that sounds like his name. Expect false wakes.";
+}
+
+function wireListen() {
+  $("#wake-cut").addEventListener("input", paintWake);
+  $("#wake-cut").addEventListener("change", async (e) => {
+    const r = await Relay.call("listen.set", { wake: +e.target.value / 100 });
+    if (r.error) { toast(r.error); return; }
+    if (S.status) S.status.listen = r.listen;
+    toast(`He wakes at ${e.target.value}% sure`);
+    renderListen();
+  });
+  const hook = (sel, key) => $$(`${sel} button`).forEach((b) => b.addEventListener("click", async () => {
+    const r = await Relay.call("listen.set", { [key]: b.dataset.val });
+    if (r.error) { toast(r.error); return; }
+    if (S.status) S.status.listen = r.listen;
+    renderListen();
+  }));
+  hook("#patience-pick", "patience");
+}
+
 /* ---------- settings: service keys (owner) ---------- */
 const KEY_ROLE = {
   GEMINI_API_KEY: "thinking + hearing · recommended",
@@ -853,6 +920,7 @@ function renderPeople() {
 
 async function loadSettings() {
   renderBrain();
+  renderListen();
   renderKeys();
   loadVoice();
   renderGlance();
@@ -1438,6 +1506,7 @@ async function boot() {
   wireChat();
   wireCredit();
   wireBrain();
+  wireListen();
   wireSettings();
   wireVoice();
   wireGlance();

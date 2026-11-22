@@ -12,7 +12,9 @@ bool ready();   // the model is loaded and running
 
 bool take(float* score);  // true once per detection; score = the window's average probability
 
+bool takeNearMiss(float* peak);  // true once per near miss (almost heard it); peak = its best average
 float cutoff();
+float defaultCutoff();  // this build's own: config.h WAKE_CUTOFF, else the model's manifest
 void setCutoff(float c);  // 0..1, live (not saved: put it in config.h WAKE_CUTOFF)
 
 void setDebug(bool on);   // `wake`: live probabilities, once a second and on every near miss

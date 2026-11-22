@@ -175,6 +175,17 @@ static void onLocalWake(float score) {
   Serial.printf("[wake] heard Reedus (%.2f), no relay linked so nobody answers\n", score);
 }
 
+// the app's wake sensitivity: a cutoff from the relay (welcome / wake_cfg), 0 = this build's
+// default (config.h WAKE_CUTOFF, else the model's manifest)
+static void applyWakeCutoff(float c) {
+  if (!wake::ready()) return;
+  float want = (c >= 0.3f && c < 1.0f) ? c : wake::defaultCutoff();
+  if (fabsf(want - wake::cutoff()) > 0.004f) {
+    wake::setCutoff(want);
+    Serial.printf("[wake] cutoff %.2f (from the app)\n", wake::cutoff());
+  }
+}
+
 // ---------- events from the relay ----------
 static void handleText(const char* txt, size_t len) {
   JsonDocument doc;
@@ -227,6 +238,8 @@ static void handleText(const char* txt, size_t len) {
       sounds::wake();
     }
     audio::setDuck(true);
+  } else if (!strcmp(t, "wake_cfg")) {
+    applyWakeCutoff(doc["cutoff"] | 0.0f);
   } else if (!strcmp(t, "emotion")) {
     face::setEmotion(doc["emotion"] | "neutral", doc["strength"] | 1.0f, doc["hold"] | 3.0f);
   } else if (!strcmp(t, "expr")) {
@@ -272,6 +285,7 @@ static void handleText(const char* txt, size_t len) {
     face::setBrightness(doc["brightness"] | 100);
     // an older relay says nothing about it, and runs the wake word itself
     deviceWake = wake::ready() && !strcmp(doc["wake"] | "relay", "device");
+    applyWakeCutoff(doc["wake_cutoff"] | 0.0f);
     Serial.printf("[relay] linked to the relay (%s) as %s, wake word %s\n", desc,
                   (const char*)(doc["device"] | "?"),
                   deviceWake ? "on the S3" : "on the relay (speech gate)");
@@ -442,6 +456,12 @@ void update() {
     return;
   }
   if (heard && deviceWake) onDeviceWake(score);
+  float nearP;
+  if (wake::takeNearMiss(&nearP) && connected && deviceWake) {
+    char b[64];
+    snprintf(b, sizeof(b), "{\"type\":\"wake_near\",\"p\":%.2f}", nearP);
+    ws.sendTXT(b);
+  }
   micUp();
 
   if (otaPending && !listening) {

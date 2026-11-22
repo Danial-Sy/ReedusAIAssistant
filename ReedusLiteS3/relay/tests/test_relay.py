@@ -303,6 +303,17 @@ check(_g._think_main == "high" and (_c._effort, _c._think_mode) == ("medium", "a
       "a thinking level reaches Gemini, Claude and OpenAI their own way")
 apply_think(_g, "fast"); apply_think(_c, "fast")
 check(_g._think_main == "minimal" and _c._think_mode is None, "Fastest is the least each one allows")
+from reedus_relay.session import looks_unfinished
+check(all(looks_unfinished(x) for x in ("so I was thinking about, um", "I need to buy milk and",
+                                        "And then I.", "is it better than", "Hey, so..."))
+      and not any(looks_unfinished(x) for x in ("What is the capital of France?", "I think so.",
+                                                "what do you mean", "tell me a joke", "where should I eat")),
+      "a sentence that trails off is told apart from a finished one")
+from reedus_relay import listening
+check(listening.end_silence({}) == 1.2 and listening.end_silence({"settings": {"listen": {"patience": "very"}}}) == 2.6
+      and listening.wake_cutoff({"settings": {"listen": {"wake": 0.6}}}) == 0.60 and listening.wake_cutoff({}) == 0.0
+      and listening.valid_cutoff(0.55) is None and listening.valid_cutoff(0.96) is None,
+      "patience and wake sensitivity map to seconds and a cutoff")
 from reedus_relay.brain import stable_system
 check(stable_system().endswith(stable_system()[-40:]) and "Today's date" not in stable_system(),
       "the cached part of the prompt has no clock in it")
@@ -427,7 +438,7 @@ class Device:
             await asyncio.sleep(0.02)
         return False
 
-    async def say(self, voiced=15, silence=50, wake=True):
+    async def say(self, voiced=15, silence=90, wake=True):
         await self.ws.send(json.dumps({"type": "gate", "open": True}))
         if wake:
             await self.ws.send(WAKE)
@@ -611,6 +622,56 @@ async def main():
     del BACKEND._search
     if hasattr(BACKEND, "_search_default"):
         del BACKEND._search_default
+    for _ in range(40):
+        await ws.send(SILENT)
+    await d.wait_for(lambda: d.states()[-1] == "idle", 4)
+
+    print("[7c] letting them finish")
+    sess = next(x for x in hub.sessions.values() if x.device.get("name") == "Desk Lite")
+    # they pause, he starts thinking, they carry on before he's said anything
+    BACKEND.slow = 0.3
+    n_llm, n_states = n_persona(), len(d.states())
+    SCRIPT[:] = ["so the thing I wanted to ask you", "so the thing I wanted to ask you is why the sky is blue"]
+    await d.say()
+    ok = await d.wait_for(lambda: d.states()[-1] == "thinking", 4)
+    for _ in range(12):
+        await ws.send(VOICED)
+    ok2 = await d.wait_for(lambda: d.states()[-1] == "listening" and sess.mode == "listen", 3)
+    for _ in range(90):
+        await ws.send(SILENT)
+    BACKEND.slow = 0.0
+    ok3 = await d.wait_for(lambda: n_persona() > n_llm and d.states()[-1] == "listening"
+                           and "speaking" in d.states()[n_states:], 10)
+    users = [h["content"] for h in sess.brain.history if h["role"] == "user"]
+    check(ok and ok2 and ok3 and BACKEND.calls[-1]["messages"][-1]["content"].endswith("why the sky is blue")
+          and "so the thing I wanted to ask you" not in users,
+          "talking again while he thinks: he drops that reply, keeps listening, answers the whole thing")
+    for _ in range(40):
+        await ws.send(SILENT)
+    await d.wait_for(lambda: d.states()[-1] == "idle", 4)
+    # it trails off ("…and"), then they go on
+    n_llm = n_persona()
+    SCRIPT[:] = ["I need to buy milk and", "I need to buy milk and eggs, what should I make"]
+    await d.say()
+    ok = await d.wait_for(lambda: sess.carry_text == "I need to buy milk and" and sess.mode == "listen", 4)
+    check(ok and n_persona() == n_llm, "a sentence that trails off: he waits for the rest, no reply yet")
+    await d.say(wake=False)
+    ok = await d.wait_for(lambda: n_persona() > n_llm and d.states()[-1] == "listening", 8)
+    check(ok and BACKEND.calls[-1]["messages"][-1]["content"] == "I need to buy milk and eggs, what should I make",
+          "...and answers it as one sentence once they finish")
+    # it trails off and they don't go on: after a couple of seconds he answers what's there
+    n_llm = n_persona()
+    SCRIPT[:] = ["tell me something about, um"]
+    await d.say(wake=False)
+    ok = await d.wait_for(lambda: sess.carry_text is not None, 4)
+    for _ in range(130):
+        await ws.send(SILENT)
+    ok2 = await d.wait_for(lambda: n_persona() > n_llm, 6)
+    check(ok and ok2 and BACKEND.calls[-1]["messages"][-1]["content"] == "tell me something about, um",
+          "...and if nothing more comes, he answers what they said")
+    check("Your last reply ended with a question" in BACKEND.calls[-1]["messages"][0]["content"]
+          and "just not on every reply" in BACKEND.calls[-1]["messages"][0]["content"],
+          "he asked last time, so this reply is told not to")
     for _ in range(40):
         await ws.send(SILENT)
     await d.wait_for(lambda: d.states()[-1] == "idle", 4)
@@ -1164,6 +1225,20 @@ async def main():
           "picking a voice saves it on the account")
     check(hub.sessions[accounts.device_for_token(art_tok)["id"]].voice_prefs()["id"] == "Dennis",
           "the live Lite speaks with it from its next sentence")
+    art_sess = hub.sessions[accounts.device_for_token(art_tok)["id"]]
+    r = await ask2(sock, {"action": "listen.set", "patience": "patient", "wake": 0.8})
+    ok = await d3.wait_for(lambda: (d3.last("wake_cfg") or {}).get("cutoff") == 0.80, 2)
+    check(r.get("ok") and r["listen"]["patience"] == "patient" and ok and art_sess.end_silence() == 1.8,
+          "Listening settings save, the Lite gets the new wake cutoff live, and waits longer")
+    await ws3.send(json.dumps({"type": "wake_near", "p": 0.74}))
+    await asyncio.sleep(0.2)
+    st = await ask2(sock, {"action": "status"})
+    art = next(x for x in st["devices"] if x["name"] == "Art Lite")
+    check(abs(art["wake_near"]["p"] - 0.74) < 1e-6 and st["listen"]["wake"] == 0.80,
+          "a near miss on the wake word shows in the app")
+    r = await ask2(sock, {"action": "listen.set", "wake": 0.4})
+    check("error" in r, "a threshold under 60% is refused")
+    await ask2(sock, {"action": "listen.set", "patience": "normal", "wake": 0.9})
     r = await ask2(sock, {"action": "think.set", "think": "medium"})
     st = await ask2(sock, {"action": "status"})
     check(r.get("ok") and st.get("think") == "medium" and len(st.get("think_choices", [])) == 4,

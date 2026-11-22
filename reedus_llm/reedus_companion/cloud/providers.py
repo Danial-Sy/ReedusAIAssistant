@@ -258,6 +258,10 @@ PRICES: Dict[str, Dict[str, float]] = {
 
 # family fallbacks, first match wins
 _FAMILY = [
+    # Gemini 4 (Nov 2026 list prices from third-party trackers; Argon/Carbon at the 1 Dec price)
+    (r"gemini-4.*hydrogen", {"input": 1.50, "output": 7.50}),
+    (r"gemini-4.*neon", {"input": 3.00, "output": 15.00}),
+    (r"gemini-4.*(?:argon|carbon)", {"input": 4.00, "output": 20.00}),
     (r"gemini.*flash-lite", {"input": 0.30, "output": 2.50}),
     (r"gemini.*flash", {"input": 0.75, "output": 3.75}),
     (r"gemini.*pro", {"input": 2.50, "output": 15.00}),

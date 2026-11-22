@@ -25,7 +25,7 @@ import time
 import uuid
 from typing import Optional
 
-from reedus_relay import accounts, config, memory, meter, speech
+from reedus_relay import accounts, config, listening, memory, meter, speech
 from reedus_relay.brain import DEEP, Brain, directives, is_goodbye
 
 IDLE, LISTEN, BUSY = "idle", "listen", "busy"
@@ -56,6 +56,22 @@ _STOP = re.compile(
 
 def strip_wake(said: str) -> str:
     return _WAKE_PREFIX.sub("", said or "").strip()
+
+
+# what a sentence that isn't finished ends on: "and", "but", "because", "um", "the", "my"… or a
+# trailing comma / dash / ellipsis. kept to words that almost never end a real question
+_UNFINISHED = re.compile(
+    r"(?:[,\-—…]|\.\.\.)\s*$|\b(?:and|but|or|because|cause|cuz|um+|uh+|er+m?|hmm+|the|a|an|my|your|our|"
+    r"their|his|her|i|to|if|plus|also|whether|than)\W*$", re.I)
+
+
+def looks_unfinished(said: str) -> bool:
+    """'so I was thinking about, um' -> True. Wait for the rest before answering."""
+    t = (said or "").strip()
+    if t.endswith(("...", "…", ",", "-", "—")):
+        return True
+    t = re.sub(r"[.!?]+$", "", t)          # the transcriber likes to end everything with a full stop
+    return bool(t) and len(t.split()) <= 60 and bool(_UNFINISHED.search(t))
 
 
 def is_stop(said: str) -> bool:
@@ -101,6 +117,10 @@ class Session:
         self.art_until = 0.0             # something drawn from the app is on the face
         self.funded_hint = True          # last known: does the pool have money (no early STT if not)
         self.think_next = False          # "think about this before you answer": the next question
+        self.watch: Optional[speech.Endpointer] = None   # still listening while he thinks
+        self.carry_text: Optional[str] = None             # "so I was, um…": what they said so far
+        self.continues = 0               # how many times this turn waited for the rest
+        self.last_peak = -120.0          # how loud they were, so a TV can't pass for them
         self.search_next = False         # "search the internet": the next question
 
         if assistant is None:
@@ -164,6 +184,7 @@ class Session:
         self.send({"type": "welcome", "proto": 3, "volume": int(s.get("volume", 70)),
                    "brightness": int(s.get("brightness", 100)),
                    "wake": "device" if self.device_wake else "relay",
+                   "wake_cutoff": listening.wake_cutoff(self.account),
                    "account": self.account.get("name", ""), "device": self.device.get("name", "")})
         self.set_state("idle")
         self.listen(False)
@@ -281,10 +302,23 @@ class Session:
                 self.spec = None                 # they went on: that early transcript is short
             elif ev in ("end", "max"):
                 self.t_end = time.monotonic()
+                self.last_peak = max(self.ep.peak, -120.0)
+                self.carry_text = None           # the whole thing gets transcribed again
                 self.begin_turn(self.ep.audio())
             elif ev == "timeout":
-                self.end_conversation()
+                if self.carry_text:              # they trailed off and never went on: answer it
+                    text, self.carry_text = self.carry_text, None
+                    self.t_end = time.monotonic()
+                    self.begin_turn(self.ep.carry, text=text)
+                else:
+                    self.end_conversation()
             return
+        # thinking, nothing said back yet: if they start talking again they weren't finished.
+        # drop the reply and keep listening, with what they'd said so far kept in front
+        if self.mode == BUSY and self.watch is not None and not self.t_first_audio:
+            if self.watch.feed(pcm) == "start":
+                self._keep_listening()
+                return
         # idle, or busy thinking/speaking: only the wake word matters (barge-in)
         if self.wake.feed(pcm):
             self.on_wake()
@@ -311,6 +345,8 @@ class Session:
         elif t == "draw":                    # the drawing finished playing on its own
             if msg.get("op") == "done":
                 self.art_until = 0.0
+        elif t == "wake_near":               # it almost heard the name (the app shows it)
+            self.info["wake_near"] = {"p": float(msg.get("p") or 0), "at": time.time()}
         elif t == "bulletin_ack":
             self.info["bulletin_rev"] = msg.get("rev")
 
@@ -324,11 +360,21 @@ class Session:
         self.warm()
 
     # ---------- conversation ----------
+    def end_silence(self) -> float:
+        return listening.end_silence(self.account)
+
+    def _endpointer(self, start_timeout: float, floor_db: float = -120.0) -> speech.Endpointer:
+        end_s = self.end_silence()
+        return speech.Endpointer(start_timeout=start_timeout, end_silence=end_s,
+                                 spec_after=listening.spec_after(end_s), floor_db=floor_db)
+
     def start_listening(self, follow_up: bool) -> None:
         self.mode = LISTEN
         self.spec = None
-        self.ep = speech.Endpointer(start_timeout=config.FOLLOW_UP_S if follow_up
-                                    else config.START_TIMEOUT_S)
+        self.watch = None
+        self.carry_text = None
+        self.continues = 0
+        self.ep = self._endpointer(config.FOLLOW_UP_S if follow_up else config.START_TIMEOUT_S)
         self.last_frame = time.monotonic()
         self.listen(True)
         self.set_state("listening")
@@ -336,6 +382,8 @@ class Session:
     def end_conversation(self) -> None:
         self.mode = IDLE
         self.ep = None
+        self.watch = None
+        self.carry_text = None
         self.listen(False)
         self.set_state("idle")
         self.wake.reset()
@@ -353,12 +401,44 @@ class Session:
         self.play_end = 0.0
         self.mode = IDLE
 
-    def begin_turn(self, audio: bytes) -> None:
+    def begin_turn(self, audio: bytes, text: Optional[str] = None) -> None:
         self.mode = BUSY
         self.ep = None
         self.cancel = threading.Event()
+        self.t_first_audio = 0.0
+        # keep an ear on them while he thinks: louder than LOCK_DB under how they just spoke,
+        # so a TV in the background can't pass for them going on
+        self.watch = self._endpointer(1e9, floor_db=self.last_peak - config.LOCK_DB - 3.0)
+        self.watch.carry = audio
         self.set_state("thinking")
-        self.task = asyncio.ensure_future(self.turn(audio, self.cancel))
+        self.task = asyncio.ensure_future(self.turn(audio, self.cancel, text))
+
+    def _keep_listening(self) -> None:
+        """They went on talking before his reply started: they weren't done. Forget the reply,
+        keep listening; the watch already has their new words, with the old ones in front."""
+        self.cancel.set()
+        self.send({"type": "flush"})
+        self.play_end = 0.0
+        self.mode = LISTEN
+        self.ep, self.watch = self.watch, None
+        self.ep.start_timeout = 1e9                  # it has already started
+        self.spec = None
+        self.carry_text = None
+        self.set_state("listening")
+
+    def _wait_for_more(self, audio: bytes, said: str) -> None:
+        """What they said trails off ("and then I…", "um,"): wait CONTINUE_S for the rest
+        before answering. if they go on, it's one sentence; if not, answer what's there."""
+        self.continues += 1
+        self.mode = LISTEN
+        ep = self.watch or self._endpointer(0.0)
+        self.watch = None
+        ep.carry = audio
+        ep.start_timeout = ep.t + config.CONTINUE_S
+        self.ep = ep
+        self.spec = None
+        self.carry_text = said
+        self.set_state("listening")
 
     def _stale(self, cancel: threading.Event) -> bool:
         return cancel.is_set() or cancel is not self.cancel or self.closed
@@ -430,7 +510,7 @@ class Session:
     def voice_prefs(self) -> dict:
         return ((self.account or {}).get("settings") or {}).get("voice") or {}
 
-    async def turn(self, audio: bytes, cancel: threading.Event) -> None:
+    async def turn(self, audio: bytes, cancel: threading.Event, text: Optional[str] = None) -> None:
         m = meter.Meter()
         said, reply = "", ""
         t_end = getattr(self, "t_end", 0.0) or time.monotonic()
@@ -444,7 +524,14 @@ class Session:
                     self.end_conversation()
                 return
 
-            raw, how = await self._hear(audio, m)
+            if text is not None:                 # already transcribed (they trailed off, then nothing)
+                raw, how = text, "kept"
+                spent, self.spec_meters, self.spec = self.spec_meters, [], None
+                for sm in spent:
+                    for what, usd in sm.parts:
+                        m.add(usd, what)
+            else:
+                raw, how = await self._hear(audio, m)
             said = strip_wake(raw)
             t_heard = time.monotonic()
             if self._stale(cancel):
@@ -458,6 +545,9 @@ class Session:
                     self.start_listening(follow_up=True)
                 return
             self.empty_turns = 0
+            if text is None and self.continues < 2 and looks_unfinished(said):
+                self._wait_for_more(audio, said)
+                return
             if is_stop(said) and not self._assist_waiting():
                 # "stop" / "never mind": no reply, no LLM, straight back to idle. (with an alarm
                 # ringing or a question of his pending, the fast path handles it instead)
@@ -564,7 +654,7 @@ class Session:
                 await asyncio.to_thread(accounts.charge, self.aid, usd,
                                         f"{self.device.get('name', 'Lite')}: {m.summary()}")
                 self.funded_hint = await asyncio.to_thread(accounts.funded, self.aid)
-            if said and reply:
+            if said and reply and not cancel.is_set():     # a reply nobody heard isn't a turn
                 await asyncio.to_thread(memory.record_turn, self.aid, self.did, self.conversation,
                                         said, reply, usd)
 

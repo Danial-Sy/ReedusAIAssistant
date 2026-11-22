@@ -186,6 +186,17 @@
         <p class="note" id="brain-none" hidden>No AI key yet. The owner adds one under Service keys.</p>
       </div>
 
+      <div class="card" id="listen-card">
+        <h3>Listening</h3>
+        <div class="field"><span>Wait after you stop talking</span>
+          <div class="seg four" id="patience-pick"><button type="button" data-val="quick">Quick</button><button type="button" data-val="normal">Normal</button><button type="button" data-val="patient">Patient</button><button type="button" data-val="very">Longest</button></div></div>
+        <p class="note" id="patience-note"></p>
+        <div class="field"><span>Hearing his name: how sure he has to be</span>
+          <label class="slider"><span>Needs</span><input type="range" min="60" max="95" step="1" id="wake-cut"><b id="wake-cut-v"></b></label></div>
+        <p class="note" id="wake-note"></p>
+        <p class="note" id="wake-near"></p>
+      </div>
+
       <div class="card" id="say-card">
         <h3>Things you can say</h3>
         <p class="note">Say his name first. A phrase only counts on its own: at the start of what you say, or after a comma or "and" at the end. So "I think so" or "my search history" won't set anything off.</p>

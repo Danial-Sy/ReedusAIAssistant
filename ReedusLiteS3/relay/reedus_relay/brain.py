@@ -23,10 +23,13 @@ LITE_VOICE = (
     "no stage directions. Timers, alarms, reminders and lists are handled for you before a "
     "message reaches you. Never say your own name out loud: you wake up when you hear it, so "
     "saying it makes you interrupt yourself.\n\n"
+    "Questions: ask them when you're curious, just not on every reply. Plenty of replies "
+    "should simply react or give your take and stop there; they'll keep talking if they want "
+    "to, so you don't have to keep the conversation going. Never two in a row.\n\n"
     "Your face shows how you feel, so react to what they said. Start every reply with one face "
     "tag in square brackets: [happy], [laugh], [love], [sad], [surprised], [angry], [confused], "
     "[sleepy], [excited], [smug], [shy], [curious], [wink] or [neutral]. For example: "
-    "\"[excited] Wait, you got the internship?\" or \"[sad] Oh no, I'm sorry.\" Put a new tag "
+    "\"[excited] No way, you got the internship! That's huge.\" or \"[sad] Oh no, I'm sorry.\" Put a new tag "
     "in front of a later sentence only when your feeling changes. Tags are never spoken."
 )
 
@@ -401,6 +404,10 @@ class Brain:
         # refuse the whole request ("Missing text in content"), so those never go in
         msgs += [h for h in self.history[-2 * config.HISTORY_TURNS:] if (h.get("content") or "").strip()]
         msgs.append({"role": "user", "content": said})
+        if self.asked_last_time():
+            # the prompt asks for fewer questions; this makes "never two in a row" a sure thing
+            msgs[0]["content"] += ("\n\nYour last reply ended with a question. Don't ask one this "
+                                   "time: answer or react, and end on a statement.")
         timing = self.timing
 
         def _sentence(s: str) -> None:
@@ -435,9 +442,17 @@ class Brain:
             split.buf = ""
         else:
             split.flush()
-        # history keeps the tags, so he keeps seeing (and copying) them; what's said and saved doesn't
-        self._remember(said, re.sub(r"\s+", " ", _MD.sub("", text or "")).strip())
+        # history keeps the tags, so he keeps seeing (and copying) them; what's said and saved doesn't.
+        # a reply that was dropped (they kept talking, or interrupted) isn't remembered
+        if cancel is None or not cancel.is_set():
+            self._remember(said, re.sub(r"\s+", " ", _MD.sub("", text or "")).strip())
         return speakable(face_tag(text)[1])
+
+    def asked_last_time(self) -> bool:
+        """Did his previous reply (this conversation) end on a question?"""
+        with self.lock:
+            last = next((h["content"] for h in reversed(self.history) if h["role"] == "assistant"), "")
+        return speakable(face_tag(last)[1]).rstrip(" \"')").endswith("?")
 
     def _remember(self, said: str, reply: str) -> None:
         if not (said or "").strip() or not (reply or "").strip():

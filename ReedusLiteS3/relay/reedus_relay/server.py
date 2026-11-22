@@ -22,7 +22,7 @@ import time
 from http import HTTPStatus
 from typing import Callable, Dict, Optional
 
-from reedus_relay import accounts, config, memory, meter, speech
+from reedus_relay import accounts, config, listening, memory, meter, speech
 from reedus_relay.session import Session
 
 INVITE_TTL_S = 7 * 86400
@@ -407,6 +407,24 @@ class Hub:
             self.refresh_account(aid)
             return {"ok": True, "provider": pid, "model": model,
                     "label": providers.label(pid, model)}
+        if a == "listen.set":
+            cur = dict((acc.get("settings") or {}).get("listen") or {})
+            if "patience" in req:
+                if req["patience"] not in {p["id"] for p in listening.PATIENCE}:
+                    return {"error": f"unknown patience {req['patience']!r}"}
+                cur["patience"] = req["patience"]
+            if "wake" in req:                  # how sure, 0.60-0.95
+                c = listening.valid_cutoff(req["wake"])
+                if c is None:
+                    return {"error": f"the wake threshold goes from {int(listening.WAKE_MIN * 100)}% "
+                                     f"to {int(listening.WAKE_MAX * 100)}%"}
+                cur["wake"] = c
+            await asyncio.to_thread(accounts.set_account_settings, aid, {"listen": cur})
+            self.refresh_account(aid)
+            acc2 = await asyncio.to_thread(accounts.account, aid)
+            for s in self.account_sessions(aid):     # the S3s take the new cutoff straight away
+                s.send({"type": "wake_cfg", "cutoff": listening.wake_cutoff(acc2)})
+            return {"ok": True, "listen": listening.public(acc2)}
         if a == "think.set":
             from reedus_relay.brain import THINK_CHOICES, THINK_IDS
             level = str(req.get("think") or "")
@@ -656,7 +674,8 @@ class Hub:
                          "caps": (live.hello.get("caps") if live else None),
                          "ota": (live.info.get("ota") if live else None),
                          "doa": (live.info.get("doa") if live else None),
-                         "glance": (live.info.get("glance") if live else None)})
+                         "glance": (live.info.get("glance") if live else None),
+                         "wake_near": (live.info.get("wake_near") if live else None)})
         _, rev = memory.bulletin(aid)
         bal = accounts.balance(aid)
         from reedus_relay import funding, vault
@@ -665,6 +684,7 @@ class Hub:
                 "llm": {"provider": pid, "model": model, "label": providers.label(pid, model),
                         "ready": usable(pid)},
                 "think": think_level(acc), "think_choices": THINK_CHOICES,
+                "listen": listening.public(acc),
                 "providers": [p for p in providers.public() if usable(p["id"])],
                 "payments": funding.enabled(), "stripe_mode": vault.stripe_mode(),
                 "amounts": funding.AMOUNTS, "pairing": len(self.pairing),

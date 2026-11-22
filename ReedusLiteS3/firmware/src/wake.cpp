@@ -38,6 +38,14 @@ static TaskHandle_t taskHandle = nullptr;
 
 static volatile bool ok = false, fired = false, dbg = false;
 static volatile uint8_t firedAvg = 0, cutoffU8 = 0;
+// near misses: the window's average climbed past NEAR_FLOOR but stayed under the cutoff (a
+// "Reedus" from across the room usually looks like this). the peak of each one is reported
+// once it's over, so the app can show how close a call came and the sensitivity can be set
+// from that instead of guessed
+static const uint8_t NEAR_FLOOR = 89;  // 0.35
+static volatile uint8_t nearPeak = 0;
+static volatile bool nearReady = false;
+static uint8_t nearCur = 0;
 static uint8_t win[MAX_WINDOW];
 static int winN = WAKE_MODEL_WINDOW, winIdx = 0;
 static uint32_t slices = 0, lastWake = 0;
@@ -187,7 +195,17 @@ static void onSlice(const int8_t* s) {
   debugSlice(p, (uint8_t)(sum / winN), us);
 
   if (slices < WAKE_WARMUP_SLICES || slices - lastWake < REFRACTORY_SLICES) return;
-  if (sum > (uint32_t)cutoffU8 * winN) {  // ESPHome's test, in integers
+  uint8_t avg = (uint8_t)(sum / winN);
+  bool hit = sum > (uint32_t)cutoffU8 * winN;
+  if (!hit && avg >= NEAR_FLOOR) {
+    if (avg > nearCur) nearCur = avg;
+  } else if (nearCur && !hit) {  // it fell away without firing: one near miss
+    nearPeak = nearCur;
+    nearReady = true;
+    nearCur = 0;
+  }
+  if (hit) {  // ESPHome's test, in integers
+    nearCur = 0;
     lastWake = slices;
     detections++;
     firedAvg = (uint8_t)(sum / winN);
@@ -261,7 +279,15 @@ bool take(float* score) {
   return true;
 }
 
+bool takeNearMiss(float* peak) {
+  if (!nearReady) return false;
+  nearReady = false;
+  if (peak) *peak = nearPeak / 255.0f;
+  return true;
+}
+
 float cutoff() { return cutoffU8 / 255.0f; }
+float defaultCutoff() { return WAKE_CUTOFF > 0.0f ? WAKE_CUTOFF : WAKE_MODEL_CUTOFF; }
 
 void setCutoff(float c) {
   c = constrain(c, 0.0f, 1.0f);

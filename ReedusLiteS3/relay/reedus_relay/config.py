@@ -63,7 +63,9 @@ PREBUFFER_S = 0.12
 
 # listening
 START_TIMEOUT_S = env_float("RELAY_START_TIMEOUT_S", 6.0)    # wake, then nothing said
-END_SILENCE_S = env_float("RELAY_END_SILENCE_S", 0.6)        # pause that ends a sentence
+END_SILENCE_S = env_float("RELAY_END_SILENCE_S", 1.2)        # pause that ends a sentence (the
+                                                             # app's "wait after you stop" overrides)
+CONTINUE_S = env_float("RELAY_CONTINUE_S", 2.0)  # "so I was thinking, um…": how long to wait for the rest
 MAX_UTTERANCE_S = env_float("RELAY_MAX_UTTERANCE_S", 15.0)
 FOLLOW_UP_S = env_float("RELAY_FOLLOW_UP_S", 6.0)            # answer without the wake word
 HISTORY_TURNS = int(env_float("RELAY_HISTORY_TURNS", 12))    # kept in the prompt per session
