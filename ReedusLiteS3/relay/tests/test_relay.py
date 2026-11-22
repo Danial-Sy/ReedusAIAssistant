@@ -269,6 +269,43 @@ check(all(is_goodbye(x) for x in ("goodbye", "okay thanks, goodbye", "alright co
       "goodbyes recognised")
 check(not any(is_goodbye(x) for x in ("what does goodbye mean in french", "later today I have class",
                                        "say bye to my friend")), "not every 'bye' is a goodbye")
+from reedus_relay.session import is_stop
+check(all(is_stop(x) for x in ("stop", "Stop.", "okay stop", "stop listening", "never mind",
+                                "Nevermind, thanks", "shut up", "I wasn't talking to you")),
+      "'stop' and friends end the conversation")
+check(not any(is_stop(x) for x in ("stop the timer", "stop being weird", "how do I stop procrastinating",
+                                    "nothing much, you?")), "...but not sentences that just contain them")
+from reedus_relay.brain import apply_think, think_request
+check(think_request("think about this before you answer") == (True, "")
+      and think_request("Think hard about this: why is the sky blue?") == (True, "why is the sky blue?")
+      and think_request("okay take your time with this one, should I take the job") == (True, "should I take the job"),
+      "'think about this before you answer' and friends are heard")
+check(not any(think_request(x)[0] for x in ("I think it's cool", "what do you think", "think of a number",
+                                             "think about it", "do you think before you answer?")),
+      "...but not every sentence with 'think' in it")
+from reedus_relay.brain import directives, needs_search
+check(directives("think about this before you answer and search the internet") == (True, True, "")
+      and directives("search the internet for who won the oscars") == (False, True, "who won the oscars")
+      and directives("who won the game last night, look it up") == (False, True, "who won the game last night")
+      and directives("Think hard and look it up: is coffee bad for you?") == (True, True, "is coffee bad for you?")
+      and directives("can you google how tall everest is")[1],
+      "'search the internet' / 'look it up' are heard, alone or with thinking")
+check(not any(directives(x)[1] or needs_search(x) for x in (
+    "my search history is embarrassing", "how do I look it up", "I google everything",
+    "tell me about google", "search engines are weird")),
+      "...but 'search' or 'google' inside a sentence doesn't make him search")
+import types as _types
+_g = _types.SimpleNamespace(_think_main="minimal")
+_c = _types.SimpleNamespace(_effort="low", _effort_router="low", _think_mode=None)
+_o = _types.SimpleNamespace(_effort="low", wire="responses")
+apply_think(_g, "high"); apply_think(_c, "medium"); apply_think(_o, "fast")
+check(_g._think_main == "high" and (_c._effort, _c._think_mode) == ("medium", "adaptive") and _o._effort == "low",
+      "a thinking level reaches Gemini, Claude and OpenAI their own way")
+apply_think(_g, "fast"); apply_think(_c, "fast")
+check(_g._think_main == "minimal" and _c._think_mode is None, "Fastest is the least each one allows")
+from reedus_relay.brain import stable_system
+check(stable_system().endswith(stable_system()[-40:]) and "Today's date" not in stable_system(),
+      "the cached part of the prompt has no clock in it")
 got = []
 from reedus_relay.brain import face_tag
 check(face_tag("[Excited] Whoa! [weird] ok") == ("excited", " Whoa! [weird] ok"),
@@ -513,6 +550,67 @@ async def main():
     check(abs(t["left"] - 300) < 5, f"5 minutes on the device's countdown ({t['left']})")
     await d.wait_for(lambda: d.states()[-1] == "listening", 4)
     check(len([c for c in BACKEND.calls if c["name"] == "persona"]) == n_llm, "no LLM call for a timer")
+    for _ in range(40):
+        await ws.send(SILENT)
+    await d.wait_for(lambda: d.states()[-1] == "idle", 4)
+
+    print("[7b] 'stop', and 'think about this before you answer'")
+
+    def n_persona():
+        return len([c for c in BACKEND.calls if c["name"] == "persona"])
+    sess = next(x for x in hub.sessions.values() if x.device.get("name") == "Desk Lite")
+    n_llm, n_states = n_persona(), len(d.states())
+    SCRIPT[:] = ["stop"]
+    await d.say()
+    ok = await d.wait_for(lambda: "listening" in d.states()[n_states:] and d.states()[-1] == "idle", 6)
+    check(ok and n_persona() == n_llm, "'stop' goes straight back to idle, no reply, no LLM")
+    SCRIPT[:] = ["think about this before you answer", "why is the sky blue"]
+    await d.say()
+    ok = await d.wait_for(lambda: sess.think_next and d.states()[-1] == "listening", 6)
+    check(ok and n_persona() == n_llm, "the bare ask arms it: a quick 'go ahead', no LLM yet")
+    await d.say(wake=False)
+    ok = await d.wait_for(lambda: n_persona() > n_llm and d.states()[-1] == "listening", 8)
+    check(ok and BACKEND.calls[-1]["messages"][-1]["content"] == "why is the sky blue"
+          and sess.brain.timing.get("think") == "high" and not sess.think_next,
+          "...and the next question is answered with deep thinking, just that one")
+    n_llm = n_persona()
+    SCRIPT[:] = ["think hard about this, what is 17 times 23"]
+    await d.say(wake=False)
+    ok = await d.wait_for(lambda: n_persona() > n_llm and d.states()[-1] == "listening", 8)
+    check(ok and BACKEND.calls[-1]["messages"][-1]["content"] == "what is 17 times 23"
+          and sess.brain.timing.get("think") == "high", "asked in the same breath: that question, thought through")
+    n_llm = n_persona()
+    SCRIPT[:] = ["what do you think about pizza"]
+    await d.say(wake=False)
+    ok = await d.wait_for(lambda: n_persona() > n_llm and d.states()[-1] == "listening", 8)
+    check(ok and BACKEND.calls[-1]["messages"][-1]["content"] == "what do you think about pizza"
+          and sess.brain.timing.get("think") == "fast", "plain 'think' in a sentence changes nothing")
+    BACKEND._search = True                # pretend this brain can search the web
+    n_llm = n_persona()
+    SCRIPT[:] = ["think about this before you answer and search the internet", "who won the game last night"]
+    await d.say(wake=False)
+    ok = await d.wait_for(lambda: sess.think_next and sess.search_next and d.states()[-1] == "listening", 6)
+    check(ok and n_persona() == n_llm, "think + search, said alone: both armed, no LLM yet")
+    await d.say(wake=False)
+    ok = await d.wait_for(lambda: n_persona() > n_llm and d.states()[-1] == "listening", 8)
+    check(ok and BACKEND.calls[-1]["messages"][-1]["content"] == "who won the game last night"
+          and sess.brain.timing.get("think") == "high" and sess.brain.timing.get("search") is True,
+          "...the next question is thought through AND searched")
+    n_llm = n_persona()
+    SCRIPT[:] = ["what's your favourite colour, look it up"]
+    await d.say(wake=False)
+    ok = await d.wait_for(lambda: n_persona() > n_llm and d.states()[-1] == "listening", 8)
+    check(ok and BACKEND.calls[-1]["messages"][-1]["content"] == "what's your favourite colour"
+          and sess.brain.timing.get("search") is True and sess.brain.timing.get("think") == "fast",
+          "'look it up' at the end forces a search even when the question wouldn't")
+    n_llm = n_persona()
+    SCRIPT[:] = ["my search history is so embarrassing"]
+    await d.say(wake=False)
+    ok = await d.wait_for(lambda: n_persona() > n_llm and d.states()[-1] == "listening", 8)
+    check(ok and sess.brain.timing.get("search") is False, "...and 'search' in a sentence doesn't")
+    del BACKEND._search
+    if hasattr(BACKEND, "_search_default"):
+        del BACKEND._search_default
     for _ in range(40):
         await ws.send(SILENT)
     await d.wait_for(lambda: d.states()[-1] == "idle", 4)
@@ -1066,6 +1164,34 @@ async def main():
           "picking a voice saves it on the account")
     check(hub.sessions[accounts.device_for_token(art_tok)["id"]].voice_prefs()["id"] == "Dennis",
           "the live Lite speaks with it from its next sentence")
+    r = await ask2(sock, {"action": "think.set", "think": "medium"})
+    st = await ask2(sock, {"action": "status"})
+    check(r.get("ok") and st.get("think") == "medium" and len(st.get("think_choices", [])) == 4,
+          "the thinking level is saved and shown in the app")
+    check(hub.sessions[accounts.device_for_token(art_tok)["id"]].brain.account["settings"].get("think") == "medium",
+          "...and the live Lite picks it up")
+    r = await ask2(sock, {"action": "think.set", "think": "galaxy-brain"})
+    check("error" in r, "a made-up thinking level is refused")
+    await ask2(sock, {"action": "think.set", "think": "fast"})
+    r = await ask2(sock, {"action": "voices"})
+    check([m["id"] for m in r.get("models", [])] == ["inworld-tts-2", "inworld-tts-2-flash"]
+          and r.get("model_default") == "inworld-tts-2", "the app gets the Quality / Fast voice engines")
+    r = await ask2(sock, {"action": "voice.set", "voice": "Dennis", "model": "inworld-tts-2-flash"})
+    check(accounts.account(own_aid)["settings"]["voice"].get("model") == "inworld-tts-2-flash",
+          "picking the Fast engine saves it")
+    r = await ask2(sock, {"action": "voice.set", "voice": "Dennis", "model": "some-other-model"})
+    check("model" not in r["voice"], "a made-up engine isn't saved")
+    await ask2(sock, {"action": "voice.set", "voice": "Dennis", "model": "inworld-tts-2-flash"})
+    seen = []
+    real_factory = hub._voice_factory
+    hub._voice_factory = lambda prefs=None: (seen.append(prefs), FakeVoice())[1]
+    hub.sessions[accounts.device_for_token(art_tok)["id"]]._voice()
+    hub._voice_factory = real_factory
+    check(seen and (seen[0] or {}).get("model") == "inworld-tts-2-flash" and seen[0].get("id") == "Dennis",
+          "the Lite's voice is actually built with the account's choice (it used to fall back to the default)")
+    check(speech.voice_model({"model": "inworld-tts-2-flash"}) == "inworld-tts-2-flash"
+          and speech.voice_model({}) == "inworld-tts-2" and speech.voice_model({"model": "x"}) == "inworld-tts-2",
+          "unknown or missing engine means Quality")
     # weather card (Open-Meteo faked)
     from reedus_relay import weather as wmod
     calls = []
@@ -1085,6 +1211,21 @@ async def main():
     sess3.art_until = 0.0
     ok = await d3.wait_for(lambda: (d3.last("glance") or {}).get("card") == "weather", 4)
     check(ok and d3.last("glance")["temp"] == 52, "the weather card shows on the idle face")
+    check(d3.last("glance")["hold"] >= 600, "...and it stays up (a standing card), not 8 seconds")
+    sess3.account = {**sess3.account, "settings": {**(sess3.account.get("settings") or {}),
+                     "glance": {**sess3.glance_settings(), "weather": False}}}
+    await sess3.glance_round(time.monotonic())
+    ok = await d3.wait_for(lambda: (d3.last("glance") or {}).get("hold") == 0, 2)
+    check(ok and not sess3.wx_up, "switching it off takes it down")
+    sess3.account = {**sess3.account, "settings": {**(sess3.account.get("settings") or {}),
+                     "glance": {**sess3.glance_settings(), "weather": True, "every": 90}}}
+    sess3.wx_next, sess3.idle_since = 0.0, time.monotonic() - 60
+    await sess3.glance_round(time.monotonic())
+    ok = await d3.wait_for(lambda: (d3.last("glance") or {}).get("once") is True, 2)
+    check(ok and d3.last("glance")["hold"] < 30 and not sess3.wx_up and sess3.wx_next > time.monotonic() + 60,
+          "'every 90 s' still works: a few seconds of weather, then the face again")
+    r = await ask2(sock, {"action": "glance.set", "every": 0})
+    check(r.get("ok") and r["glance"]["every"] == 0, "'always' saves as 0")
     check("52 degrees" in sess3.brain.weather_fact("what's the weather like"),
           "asking about the weather uses it (no web search)")
     wmod._json = lambda u: None
@@ -1092,7 +1233,8 @@ async def main():
     r = await ask2(sock, {"action": "glance.set", "place": "Nowhereville Zzz"})
     check("couldn't find" in r.get("error", ""), "a place it can't find is refused")
     # firmware
-    fake_fw = bytes([0xE9]) + os.urandom(100 * 1024) + b"0.3.1-s3\x00" + os.urandom(1000)
+    # NUL before the version, as in a real image: a random digit there read as "70.3.1-s3"
+    fake_fw = bytes([0xE9]) + os.urandom(100 * 1024) + b"\x000.3.1-s3\x00" + os.urandom(1000)
     half = len(fake_fw) // 2
     r1 = await ask2(sock, {"action": "fw.upload", "index": 0, "count": 2,
                            "data": b64.b64encode(fake_fw[:half]).decode()})

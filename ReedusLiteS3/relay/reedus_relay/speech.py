@@ -392,16 +392,41 @@ def _openai_stt(pcm: bytes) -> str:
 
 
 # ---------- voice ----------
+# the Inworld models an account can pick in the app (Settings → Voice): quality or speed
+VOICE_MODELS = [
+    {"id": "inworld-tts-2", "label": "Quality",
+     "note": "Most natural, follows his speaking style. About a second slower to start each sentence."},
+    {"id": "inworld-tts-2-flash", "label": "Fast",
+     "note": "Starts talking about a second sooner and costs half as much. A little flatter: "
+             "it ignores the speaking style."},
+]
+_VOICE_MODEL_IDS = {m["id"] for m in VOICE_MODELS}
+
+
+def default_voice_model() -> str:
+    m = (os.environ.get("REEDUS_INWORLD_MODEL") or "").strip()
+    return m if m in _VOICE_MODEL_IDS else "inworld-tts-2"
+
+
+def voice_model(prefs: Optional[dict]) -> str:
+    m = ((prefs or {}).get("model") or "").strip()
+    return m if m in _VOICE_MODEL_IDS else default_voice_model()
+
+
 class Voice:
     """Inworld (reedus_companion.voice.tts_inworld), resampled to the device's frames."""
 
     def __init__(self, tts=None, voice: Optional[str] = None, style: Optional[str] = None,
-                 speed: Optional[float] = None):
+                 speed: Optional[float] = None, model: Optional[str] = None):
         if tts is None:
             from reedus_companion.voice.tts_inworld import InworldTTS
             tts = InworldTTS(voice=voice or None, style=style)
             if speed:
                 tts._rate = max(0.5, min(1.5, float(speed)))
+            if model and model != tts.model:
+                tts.model = model
+                # Flash has no natural-language steering (tts_inworld decides the same way)
+                tts._steer = bool(tts.style) and model.startswith("inworld-tts-2")                     and not model.endswith("flash")
         self.tts = tts
         self.rate = int(getattr(tts, "sample_rate", 24000))
 
@@ -440,11 +465,12 @@ _voices_lock = threading.Lock()
 def voice_for(prefs: Optional[dict] = None) -> Voice:
     from reedus_relay import vault
     p = prefs or {}
-    key = (p.get("id") or "", p.get("style"), float(p.get("speed") or 0) or None, vault.VERSION)
+    key = (p.get("id") or "", p.get("style"), float(p.get("speed") or 0) or None,
+           voice_model(p), vault.VERSION)
     with _voices_lock:
         v = _voices.get(key)
         if v is None:
-            v = _voices[key] = Voice(voice=key[0] or None, style=key[1], speed=key[2])
+            v = _voices[key] = Voice(voice=key[0] or None, style=key[1], speed=key[2], model=key[3])
         return v
 
 
@@ -491,7 +517,7 @@ def list_voices() -> dict:
 def preview_wav(prefs: dict, text: str) -> bytes:
     """A short sample in that voice, as a 24 kHz WAV for the browser."""
     v = Voice(voice=prefs.get("id") or None, style=prefs.get("style"),
-              speed=float(prefs.get("speed") or 0) or None)
+              speed=float(prefs.get("speed") or 0) or None, model=voice_model(prefs))
     audio = v.tts.synth(text)
     pcm = (np.clip(audio, -1.0, 1.0) * 32767).astype("<i2").tobytes()
     return wav_bytes(pcm, rate=v.rate)

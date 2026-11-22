@@ -26,18 +26,41 @@ import uuid
 from typing import Optional
 
 from reedus_relay import accounts, config, memory, meter, speech
-from reedus_relay.brain import Brain, is_goodbye
+from reedus_relay.brain import DEEP, Brain, directives, is_goodbye
 
 IDLE, LISTEN, BUSY = "idle", "listen", "busy"
 FRAME_S = config.FRAME_SAMPLES / config.RATE
 OUT_OF_CREDIT = ("I'm out of credit, so I can't think right now. "
-                 "Add some in the Reedus Lite app and I'm all yours.")
+                 "Add some in the app and I'm all yours.")
 TROUBLE = "Sorry, my brain hiccuped there. Try me again in a second."
+THINK_ARMED = ("Okay, I'll really think about it. Go ahead.",
+               "Sure, I'll take my time on this one. What's the question?",
+               "Alright, thinking cap on. Go for it.")
+THINK_FILLER = ("Hmm, let me think about that.", "Okay, give me a second to think.",
+                "Hmm, good question. Let me think.")
+SEARCH_ARMED = ("Sure, I'll look it up. What's the question?", "Okay, I'll search for it. Go ahead.")
+ARMED_BOTH = ("Okay, I'll look it up and really think it through. Go ahead.",
+              "Sure, I'll search and take my time on it. What's the question?")
+SEARCH_FILLER = ("Let me look that up.", "One sec, I'll look it up.")
+BOTH_FILLER = ("Okay, let me look into that and think it over.", "Let me dig into that for a second.")
 _WAKE_PREFIX = re.compile(r"^\W*(?:hey|hi|okay|ok|yo)?[\s,]*(?:reedus|reed us|reedis|redis)\b[\s,.!?]*", re.I)
+
+
+_STOP = re.compile(
+    r"^\W*(?:(?:okay|ok|oh|no|hey|alright|uh|um)[\s,]+)*"
+    r"(?:stop(?: (?:it|that|listening|talking|now))?|never ?mind|forget (?:it|about it)|cancel(?: that)?|"
+    r"shut up|be quiet|quiet|shush|hush|nothing|no thanks|nah|i'?m good|all good|leave it|"
+    r"that'?s it|that'?ll be all|not you|wasn'?t talking to you|i wasn'?t talking to you)"
+    r"(?:[\s,]+(?:please|thanks|thank you|reedus|now|for now))*\W*$", re.I)
 
 
 def strip_wake(said: str) -> str:
     return _WAKE_PREFIX.sub("", said or "").strip()
+
+
+def is_stop(said: str) -> bool:
+    """"Stop", "never mind", "shut up"…: he stops listening, says nothing, back to idle."""
+    return bool(_STOP.match(said or ""))
 
 
 class Session:
@@ -72,9 +95,13 @@ class Session:
         self.spec_at = 0.0
         self.t_end = self.t_first_audio = 0.0
         self.idle_since = time.monotonic()
-        self.next_glance = time.monotonic() + 25.0
+        self.next_glance = time.monotonic() + 3.0
+        self.wx_up = False               # the standing weather card is on the device
+        self.wx_next = 0.0               # when to send it a fresh reading
         self.art_until = 0.0             # something drawn from the app is on the face
         self.funded_hint = True          # last known: does the pool have money (no early STT if not)
+        self.think_next = False          # "think about this before you answer": the next question
+        self.search_next = False         # "search the internet": the next question
 
         if assistant is None:
             from reedus_relay.assist_store import DbAssistant
@@ -160,41 +187,75 @@ class Session:
             # listening but the device went quiet (it should be streaming): don't hang there
             if self.mode == LISTEN and now - self.last_frame > 4.0:
                 self.end_conversation()
-            if self.mode == IDLE and now >= self.next_glance:
+            if now >= self.next_glance:
                 await self.glance_round(now)
 
     def glance_settings(self) -> dict:
         return ((self.account or {}).get("settings") or {}).get("glance") or {}
 
+    WX_HOLD_S = 900.0        # the device keeps the card this long without hearing from us
+    WX_REFRESH_S = 300.0     # ...and we send a fresh reading this often
+
+    WX_FLASH_S = 8.0         # how long it shows each time in the every-N-seconds mode
+
     async def glance_round(self, now: float) -> None:
-        """The idle weather card (turned on in the app): every `every` seconds while nobody's
-        talking, not at night, not over a timer or a ring or a drawing from the app."""
+        """The idle weather card (turned on in the app), two ways (the app's "how often"):
+
+            every 0 / unset  always: a standing card the device shows whenever he's idle, the
+                             whole time, until his name wakes him (and again once the
+                             conversation's over). timers, rings and drawings go in front of it
+            every N seconds  it pops up for a few seconds every N while nobody's talking
+
+        Either way, not at night, and taken down when it's switched off."""
+        self.next_glance = now + 5.0
         g = self.glance_settings()
-        self.next_glance = now + max(30.0, float(g.get("every") or 90))
-        if not g.get("weather") or not (g.get("place") or "").strip():
-            return
-        if self.state != "idle" or now - self.idle_since < 15.0 or now < self.art_until:
-            return
-        try:
-            if self.assist.ringing() or any(i.get("kind") == "timer" for i in self.assist.active()):
-                return
-        except Exception:                                        # noqa: BLE001
-            pass
+        want = bool(g.get("weather")) and bool((g.get("place") or "").strip())
         quiet = g.get("night") if isinstance(g.get("night"), list) else [23, 7]
         h = time.localtime().tm_hour
-        if len(quiet) == 2 and (h >= quiet[0] or h < quiet[1] if quiet[0] > quiet[1]
-                                else quiet[0] <= h < quiet[1]):
+        if want and len(quiet) == 2 and (h >= quiet[0] or h < quiet[1] if quiet[0] > quiet[1]
+                                         else quiet[0] <= h < quiet[1]):
+            want = False
+        try:
+            every = float(g.get("every") or 0)
+        except (TypeError, ValueError):
+            every = 0.0
+        always = every <= 0
+        if self.wx_up and (not want or not always):     # the standing card has to go
+            self.send({"type": "glance", "card": "weather", "temp": 0, "hold": 0})
+            self.wx_up = False
+            self.info.pop("glance", None)
+        if not want or now < self.wx_next:
             return
+        if not always:
+            # a passing card: only on an idle face that's been idle a moment, never over a
+            # timer, a ring or a drawing from the app
+            if self.mode != IDLE or self.state != "idle" or now - self.idle_since < 15.0 \
+                    or now < self.art_until:
+                return
+            try:
+                if self.assist.ringing() or any(i.get("kind") == "timer" for i in self.assist.active()):
+                    return
+            except Exception:                                    # noqa: BLE001
+                pass
         from reedus_relay import weather
         try:
             w = await asyncio.to_thread(weather.current, g["place"], g.get("unit") or "F")
         except Exception as e:                                   # noqa: BLE001
             print(f"[relay] weather card failed: {type(e).__name__}: {e}", flush=True)
+            w = None
+        if not w:
+            self.wx_next = now + 60.0
             return
-        if w and self.mode == IDLE and self.state == "idle":
-            self.send({"type": "glance", "card": "weather", "temp": w["temp"], "unit": w["unit"],
-                       "icon": w["icon"], "hold": 8})
-            self.info["glance"] = {"card": "weather", **w, "at": time.time()}
+        card = {"type": "glance", "card": "weather", "temp": w["temp"], "unit": w["unit"],
+                "icon": w["icon"]}
+        if always:
+            self.send({**card, "hold": self.WX_HOLD_S})
+            self.wx_up = True
+            self.wx_next = now + self.WX_REFRESH_S
+        else:
+            self.send({**card, "hold": self.WX_FLASH_S, "once": True})
+            self.wx_next = now + max(30.0, every)
+        self.info["glance"] = {"card": "weather", **w, "at": time.time()}
 
     def close(self) -> None:
         self.closed = True
@@ -215,6 +276,7 @@ class Session:
             ev = self.ep.feed(pcm)
             if ev == "pause":
                 self._speculate(self.ep.audio())
+                self.warm()                      # the brain is needed in about a second
             elif ev == "resume":
                 self.spec = None                 # they went on: that early transcript is short
             elif ev in ("end", "max"):
@@ -283,6 +345,7 @@ class Session:
         self.conversation = uuid.uuid4().hex
         self.turns_in_conv = 0
         self.empty_turns = 0
+        self.think_next = self.search_next = False
 
     def barge(self) -> None:
         self.cancel.set()
@@ -337,9 +400,15 @@ class Session:
         return await asyncio.to_thread(_go), "after"
 
     def warm(self) -> None:
-        """Someone said "Reedus": open the voice's connection while they talk, so the first
-        sentence doesn't pay for a TLS handshake."""
-        def _go():
+        """Someone said the name, or paused mid-turn: open the voice's and the brain's
+        connections and read the bulletin while they talk, so the reply doesn't pay for TLS
+        handshakes and a database round trip. At most once every 2 s."""
+        now = time.monotonic()
+        if now - getattr(self, "_warmed", 0.0) < 2.0:
+            return
+        self._warmed = now
+
+        def _voice():
             try:
                 v = self.voice_factory(self.voice_prefs())
             except TypeError:
@@ -348,7 +417,15 @@ class Session:
                 return
             if hasattr(v, "warm"):
                 v.warm()
-        threading.Thread(target=_go, name="voice-warm", daemon=True).start()
+
+        def _brain():
+            if hasattr(self.brain, "warm"):
+                try:
+                    self.brain.warm()
+                except Exception:                                # noqa: BLE001
+                    pass
+        threading.Thread(target=_voice, name="voice-warm", daemon=True).start()
+        threading.Thread(target=_brain, name="brain-warm", daemon=True).start()
 
     def voice_prefs(self) -> dict:
         return ((self.account or {}).get("settings") or {}).get("voice") or {}
@@ -381,6 +458,33 @@ class Session:
                     self.start_listening(follow_up=True)
                 return
             self.empty_turns = 0
+            if is_stop(said) and not self._assist_waiting():
+                # "stop" / "never mind": no reply, no LLM, straight back to idle. (with an alarm
+                # ringing or a question of his pending, the fast path handles it instead)
+                self.send({"type": "expr", "name": "blink", "hold": 0.6})
+                self.end_conversation()
+                return
+            # "think about this before you answer" / "search the internet": deep thinking and/or
+            # a web search for this one question, either the rest of what they said or (when
+            # that's all they said) whatever they ask next
+            deep = DEEP if self.think_next else None
+            force_search = self.search_next
+            self.think_next = self.search_next = False
+            want_think, want_search, rest = directives(said)
+            if want_think or want_search:
+                if len(rest.split()) < 2:
+                    self.think_next, self.search_next = want_think, want_search
+                    import random
+                    lines = (ARMED_BOTH if want_think and want_search
+                             else THINK_ARMED if want_think else SEARCH_ARMED)
+                    await self.speak_lines([random.choice(lines)], m, cancel)
+                    await self._finish_playback(cancel)
+                    if not self._stale(cancel):
+                        self.start_listening(follow_up=True)
+                    return
+                said = rest
+                deep = DEEP if want_think else deep
+                force_search = force_search or want_search
             from reedus_companion.lite import emotion
             react = emotion.react(said)
             if react:
@@ -394,23 +498,41 @@ class Session:
             def _on_face(tag: str) -> None:
                 self.loop.call_soon_threadsafe(sentences.put_nowait, {"face": tag})
 
+            extra = {**({"think": deep} if deep else {}), **({"search": True} if force_search else {})}
+
             def _think() -> str:
                 with meter.metering(m):
                     try:
                         return self.brain.reply(said, self.conversation, _on_sentence, cancel,
-                                                on_face=_on_face)
+                                                on_face=_on_face, **extra)
                     finally:
                         self.loop.call_soon_threadsafe(sentences.put_nowait, None)
 
+            if deep or force_search:             # a few seconds of silence otherwise
+                import random
+                sentences.put_nowait({"face": "curious"})
+                sentences.put_nowait(random.choice(BOTH_FILLER if deep and force_search
+                                                   else THINK_FILLER if deep else SEARCH_FILLER))
             think = asyncio.ensure_future(asyncio.to_thread(_think))
             await self.speak_stream(sentences, m, cancel)
             reply = await think
             if self.t_first_audio:
                 st = speech.last_stt
+                bt = dict(getattr(self.brain, "timing", None) or {})
+
+                def _ms(k):
+                    return f"{int(bt[k] * 1000)}" if isinstance(bt.get(k), float) else "-"
+                phases = ("fast path" if bt.get("fast") else
+                          f"prep {_ms('prep')}, first token {_ms('token')}, first sentence "
+                          f"{_ms('sentence')}{', searched' if bt.get('search') else ''}"
+                          f"{', thinking ' + bt['think'] if bt.get('think') not in (None, 'fast') else ''}")
+                voice_ms = (int((self.t_first_audio - t_heard - bt['sentence']) * 1000)
+                            if isinstance(bt.get("sentence"), float) else None)
                 print(f"[relay] {self.device.get('name')}: heard in {int((t_heard - t_end) * 1000)} ms "
                       f"({st.get('model', 'stt')}, {how}), voice started "
                       f"{int((self.t_first_audio - t_end) * 1000)} ms after you stopped "
-                      f"(thinking + first sentence {int((self.t_first_audio - t_heard) * 1000)} ms)",
+                      f"(thinking + first sentence {int((self.t_first_audio - t_heard) * 1000)} ms: "
+                      f"{phases}{f', voice {voice_ms}' if voice_ms is not None else ''})",
                       flush=True)
             if self._stale(cancel):
                 return
@@ -445,6 +567,13 @@ class Session:
             if said and reply:
                 await asyncio.to_thread(memory.record_turn, self.aid, self.did, self.conversation,
                                         said, reply, usd)
+
+    def _assist_waiting(self) -> bool:
+        """Something ringing, or a timer/reminder question waiting on an answer."""
+        try:
+            return bool(self.assist.ringing()) or bool(getattr(self.assist, "pending", None))
+        except Exception:                                        # noqa: BLE001
+            return False
 
     # ---------- speaking ----------
     async def speak_lines(self, lines, m, cancel) -> None:

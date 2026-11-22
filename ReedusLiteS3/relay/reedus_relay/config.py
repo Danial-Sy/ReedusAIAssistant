@@ -79,6 +79,7 @@ SPEC_S = env_float("RELAY_SPEC_S", 0.3)              # quiet this long: start tr
 # the brain on Lite: think as little as the model allows (it's a chat, not a puzzle), and only
 # let it search the web when the sentence sounds like it needs to (brain.needs_search)
 os.environ.setdefault("REEDUS_GEMINI_THINK", "minimal")
+os.environ.setdefault("REEDUS_GEMINI_API", "content")      # generateContent streaming: quickest first token
 LITE_SEARCH = env("RELAY_SEARCH", "auto").lower()    # auto | always | off
 
 # money

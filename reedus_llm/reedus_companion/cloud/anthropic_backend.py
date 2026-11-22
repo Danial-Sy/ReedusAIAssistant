@@ -86,6 +86,9 @@ class AnthropicBackend(CloudBackend):
         self._search = llm.inline_search("anthropic")
         self._effort = os.environ.get("REEDUS_CLAUDE_EFFORT", "low")
         self._effort_router = os.environ.get("REEDUS_CLAUDE_EFFORT_ROUTER", "low")
+        # "adaptive": let him think before replies (a caller asks for it per turn, e.g. the
+        # Lite relay's thinking setting); None: the quick spoken-reply defaults above
+        self._think_mode: Optional[str] = None
         print(f"[reedus] claude backend: {self.model} (effort={self._effort}/{self._effort_router}, "
               f"thinking={(thinking_for(self.model) or {}).get('type', 'default')}, "
               f"web_search={'on' if self._search else 'off'})", flush=True)
@@ -93,12 +96,14 @@ class AnthropicBackend(CloudBackend):
     def _request(self, system: str, turns: List[Dict[str, str]], max_tokens: int,
                  is_router: bool) -> Tuple[dict, bool]:
         ceiling = max(1, int(max_tokens))
-        if thinks(self.model) or "thinking" in self._dropped:
-            ceiling += _HEADROOM
+        adaptive = (self._think_mode == "adaptive" and not is_router
+                    and not self.model.startswith(_NO_THINK_PREFIXES))
+        if thinks(self.model) or adaptive or "thinking" in self._dropped:
+            ceiling += _HEADROOM * (4 if adaptive and self._effort in ("medium", "high") else 1)
         kw: dict = {"model": self.model, "max_tokens": ceiling, "messages": alternate(turns)}
         if system:
             kw["system"] = system
-        think = thinking_for(self.model)
+        think = {"type": "adaptive"} if adaptive else thinking_for(self.model)
         if think:
             kw["thinking"] = think
         if not self.model.startswith(_NO_THINK_PREFIXES):

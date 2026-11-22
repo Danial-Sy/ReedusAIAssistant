@@ -37,7 +37,6 @@ class Hub:
     def __init__(self, voice_factory: Optional[Callable] = None, session_kwargs: Optional[dict] = None):
         self.sessions: Dict[str, Session] = {}
         self.pairing: Dict[str, dict] = {}       # 6-digit code -> a Lite waiting to be paired
-        self._vt = threading.local()
         self._voice_factory = voice_factory
         self.session_kwargs = session_kwargs or {}
         self.started = time.time()
@@ -45,15 +44,16 @@ class Hub:
         self.firmware: Dict[str, dict] = {}      # uploaded firmware images (in memory, an hour)
         self.fw_links: Dict[str, dict] = {}      # one-time-ish download links handed to Lites
 
-    def voice(self):
+    def voice(self, prefs: Optional[dict] = None):
+        """The voice an account picked in the app (voice, speed, Quality/Fast model). This
+        used to take no prefs, so the session's call with them failed over to the default
+        voice and the app's choice never reached the Lite."""
         if self._voice_factory is not None:
-            return self._voice_factory()
-        from reedus_relay import vault
-        v = getattr(self._vt, "v", None)
-        if v is None or getattr(self._vt, "ver", None) != vault.VERSION:
-            v = self._vt.v = speech.Voice()        # one Inworld session per worker thread
-            self._vt.ver = vault.VERSION
-        return v
+            try:
+                return self._voice_factory(prefs)
+            except TypeError:                     # a factory that takes no prefs (tests)
+                return self._voice_factory()
+        return speech.voice_for(prefs)            # one client per (voice, speed, model)
 
     def account_sessions(self, aid: str):
         return [s for s in list(self.sessions.values()) if s.aid == aid]
@@ -407,6 +407,15 @@ class Hub:
             self.refresh_account(aid)
             return {"ok": True, "provider": pid, "model": model,
                     "label": providers.label(pid, model)}
+        if a == "think.set":
+            from reedus_relay.brain import THINK_CHOICES, THINK_IDS
+            level = str(req.get("think") or "")
+            if level not in THINK_IDS:
+                return {"error": f"unknown thinking level {level!r}"}
+            await asyncio.to_thread(accounts.set_account_settings, aid, {"think": level})
+            self.refresh_account(aid)
+            return {"ok": True, "think": level,
+                    "label": next(c["label"] for c in THINK_CHOICES if c["id"] == level)}
         if a == "memory.get":
             text, rev = await asyncio.to_thread(memory.bulletin, aid)
             turns = await asyncio.to_thread(memory.recent, aid, int(req.get("limit") or 30))
@@ -436,11 +445,12 @@ class Hub:
         if a == "voices":
             out = await asyncio.to_thread(speech.list_voices)
             return {**out, "voice": (acc.get("settings") or {}).get("voice") or {},
-                    "default": _default_voice()}
+                    "default": _default_voice(), "models": speech.VOICE_MODELS,
+                    "model_default": speech.default_voice_model()}
         if a == "voice.preview":
             prefs = _voice_prefs(req)
             text = str(req.get("text") or "").strip()[:200] or \
-                "Hello! I'm Reedus. Is this what I should sound like?"
+                "Hey! Is this what I should sound like?"
             m = meter.Meter()
             with meter.metering(m):
                 wav = await asyncio.to_thread(speech.preview_wav, prefs, text)
@@ -461,8 +471,9 @@ class Hub:
                 cur["place"] = str(req.get("place") or "").strip()[:80]
             if req.get("unit") in ("F", "C"):
                 cur["unit"] = req["unit"]
-            if "every" in req:
-                cur["every"] = max(30, min(900, int(req.get("every") or 90)))
+            if "every" in req:                 # 0 = always (until his name); else every N s
+                n = int(req.get("every") or 0)
+                cur["every"] = 0 if n <= 0 else max(30, min(900, n))
             found = None
             if cur.get("place"):
                 from reedus_relay import weather
@@ -474,6 +485,7 @@ class Hub:
             self.refresh_account(aid)
             for s in self.account_sessions(aid):
                 s.next_glance = time.monotonic() + 1.0          # show it soon, so you can see it
+                s.wx_next = 0.0
                 s.idle_since = min(s.idle_since, time.monotonic() - 15.0)
             return {"ok": True, "glance": cur, "now": found}
         if a == "fw.upload":
@@ -629,7 +641,7 @@ class Hub:
 
     def _status(self, acc: dict) -> dict:
         from reedus_companion.cloud import providers
-        from reedus_relay.brain import llm_choice, usable
+        from reedus_relay.brain import THINK_CHOICES, llm_choice, think_level, usable
         aid = acc["id"]
         pid, model = llm_choice(acc)
         devs = []
@@ -652,6 +664,7 @@ class Hub:
                 "low": bal < config.LOW_BALANCE_USD, "devices": devs,
                 "llm": {"provider": pid, "model": model, "label": providers.label(pid, model),
                         "ready": usable(pid)},
+                "think": think_level(acc), "think_choices": THINK_CHOICES,
                 "providers": [p for p in providers.public() if usable(p["id"])],
                 "payments": funding.enabled(), "stripe_mode": vault.stripe_mode(),
                 "amounts": funding.AMOUNTS, "pairing": len(self.pairing),
@@ -792,6 +805,9 @@ def _voice_prefs(req: dict) -> dict:
     style = str(req.get("style") or "").strip()[:300]
     if style:
         out["style"] = style
+    model = str(req.get("model") or "").strip()
+    if model and model in {m["id"] for m in speech.VOICE_MODELS}:
+        out["model"] = model
     return out
 
 

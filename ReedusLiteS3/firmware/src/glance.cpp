@@ -40,6 +40,11 @@ static uint32_t cardStart = 0, cardUntil = 0;
 static bool cardDim = false;
 static int wTemp = 0;
 static char wUnit[2] = "F", wIcon[8] = "sun";
+// the weather is a standing card, not a passing one: while it's on (the app's idle weather
+// switch) it holds the panel whenever he's idle, dozing included, until the name wakes him.
+// passing cards (music, events, text) and timers still go in front of it. the relay refreshes
+// it every few minutes; hold 0 takes it down (switched off, or the night hours)
+static uint32_t wxUntil = 0;
 static char cTitle[44] = "", cAt[8] = "", cArtist[28] = "";
 static int cMins = 0;
 static char desc[64] = "-";
@@ -319,6 +324,22 @@ static void drawRing(uint32_t now) {
   }
 }
 
+static void drawWeather(uint32_t now) {
+  weatherIcon(wIcon, 3, 0, now);
+  char buf[8];
+  int n = abs(wTemp);
+  snprintf(buf, sizeof(buf), "%s%d", wTemp < 0 ? "-" : "", n);
+  int len = strlen(buf);
+  bool deg = len <= 2;
+  int w = len * 5 - 1 + (deg ? 3 : 0);
+  int x = (MATRIX_W - w + 1) / 2;
+  for (int i = 0; i < len; i++) drawBig(buf[i], x + i * 5, 9, MINT);
+  if (deg) {
+    int dx = x + len * 5;
+    px(dx, 9, MINT); px(dx + 1, 9, MINT); px(dx, 10, MINT); px(dx + 1, 10, MINT);
+  }
+}
+
 static void drawCard(uint32_t now) {
   if (!strcmp(card, "clock")) {
     if (!haveClock) return;
@@ -329,19 +350,7 @@ static void drawCard(uint32_t now) {
     drawPair(m, 8, MINT, 170, true);
     px(s / 4, 15, GOLD, 90);  // the seconds creep along the bottom
   } else if (!strcmp(card, "weather")) {
-    weatherIcon(wIcon, 3, 0, now);
-    char buf[8];
-    int n = abs(wTemp);
-    snprintf(buf, sizeof(buf), "%s%d", wTemp < 0 ? "-" : "", n);
-    int len = strlen(buf);
-    bool deg = len <= 2;
-    int w = len * 5 - 1 + (deg ? 3 : 0);
-    int x = (MATRIX_W - w + 1) / 2;
-    for (int i = 0; i < len; i++) drawBig(buf[i], x + i * 5, 9, MINT);
-    if (deg) {
-      int dx = x + len * 5;
-      px(dx, 9, MINT); px(dx + 1, 9, MINT); px(dx, 10, MINT); px(dx + 1, 10, MINT);
-    }
+    drawWeather(now);
   } else if (!strcmp(card, "event")) {
     char top[10];
     if (cMins <= 0) snprintf(top, sizeof(top), "NOW");
@@ -414,6 +423,12 @@ bool draw(uint32_t now, bool idle, bool asleep, PxFn fn, float* dim) {
     drawTimer(*t, now);
     if (asleep) *dim = min(*dim, 0.55f);
     snprintf(desc, sizeof(desc), "timer %s", t->label[0] ? t->label : t->id);
+    return true;
+  }
+  if (wxUntil && (int32_t)(now - wxUntil) < 0) {
+    drawWeather(now);
+    if (asleep) *dim = min(*dim, 0.45f);
+    snprintf(desc, sizeof(desc), "weather %d%s", wTemp, wUnit);
     return true;
   }
   // an alarm is armed for the next day: one dim gold pixel in the corner, like a bedside clock
@@ -499,6 +514,15 @@ void onMessage(const char* type, JsonDocument& doc) {
       card[0] = 0;
       return;
     }
+    if (!strcmp(c, "weather") && !(doc["once"] | false)) {  // the standing card (see wxUntil)
+      wTemp = doc["temp"] | 0;
+      copy(wUnit, sizeof(wUnit), doc["unit"] | "F");
+      copy(wIcon, sizeof(wIcon), doc["icon"] | "sun");
+      float hold = doc["hold"] | 0.0f;
+      wxUntil = hold > 0 ? now + (uint32_t)(hold * 1000) : 0;
+      if (!strcmp(card, "weather")) card[0] = 0;
+      return;
+    }
     copy(card, sizeof(card), c);
     cardStart = now;
     cardDim = doc["dim"] | false;
@@ -547,6 +571,7 @@ void demo(const char* what) {
     deserializeJson(d, "{\"items\":[],\"ring\":[],\"alarm\":-1}");
     onMessage("timers", d);
     card[0] = 0;
+    wxUntil = 0;
   } else {
     char buf[200];
     if (!strcmp(what, "weather")) snprintf(buf, sizeof(buf), "{\"card\":\"weather\",\"temp\":72,\"unit\":\"F\",\"icon\":\"partly\",\"hold\":8}");

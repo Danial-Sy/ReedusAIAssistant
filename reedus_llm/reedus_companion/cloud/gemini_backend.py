@@ -16,16 +16,23 @@ from reedus_companion.cloud import persona_shots
 _DEF_MODEL = "gemini-3.7-flash"
 
 _THINK_LEVELS = {
-    "gemini-3.7-flash": ("low", "medium", "high"),
+    # Flash takes "minimal" (it used to be clamped to "low" here, so every reply quietly paid
+    # for a round of thinking); Pro starts at "low"
     "gemini-3.1-pro-preview": ("low", "medium", "high"),
 }
 _THINK_ORDER = ("minimal", "low", "medium", "high")
 _THINK_UNSUPPORTED_RE = re.compile(
     r"'([^']+)' is not a supported thinking level", re.I)
+#: model -> the lowest level it accepted, learned when the server turns one down
+_THINK_LEARNED: Dict[str, str] = {}
 
 
 def _clamp_think(model: str, level: str) -> str:
     """Nearest thinking level this model supports, walking up."""
+    floor = _THINK_LEARNED.get(model)
+    if floor and level in _THINK_ORDER and floor in _THINK_ORDER \
+            and _THINK_ORDER.index(level) < _THINK_ORDER.index(floor):
+        level = floor
     allowed = _THINK_LEVELS.get(model)
     if not allowed or level in allowed:
         return level
@@ -39,6 +46,8 @@ def _clamp_think(model: str, level: str) -> str:
     return allowed[0]
 
 _THINK_HEADROOM = int(os.environ.get("REEDUS_GEMINI_THINK_HEADROOM", "512"))
+#: headroom multiplier per thinking level
+_HEADROOM_X = {"minimal": 1, "low": 2, "medium": 4, "high": 8}
 #: absolute floor for max_output_tokens when thinking is on
 _MIN_OUTPUT = int(os.environ.get("REEDUS_GEMINI_MIN_OUTPUT", "256"))
 
@@ -102,8 +111,14 @@ class GeminiBackend:
         self._think_router = os.environ.get("REEDUS_GEMINI_THINK_ROUTER", "minimal")
         self._send_temp = os.environ.get("REEDUS_GEMINI_SEND_TEMP", "0") == "1"
         self._input_style = os.environ.get("REEDUS_GEMINI_INPUT_STYLE", "auto")
+        # "content": generateContent streaming, the plain and quickest way to get tokens out.
+        # "interactions": the Interactions API (stateful, stores each exchange server-side).
+        # a "content" call that fails for a non-transient reason drops to "interactions" for
+        # the rest of the process, so a mismatch here never takes Reedus down
+        self._api = os.environ.get("REEDUS_GEMINI_API", "interactions").lower()
         print(f"[reedus] gemini backend: {self.model} "
-              f"(think={self._think_main}/{self._think_router}, "
+              f"(think={_clamp_think(self.model, self._think_main)}/"
+              f"{_clamp_think(self.model, self._think_router)}, api={self._api}, "
               f"inline_search={'on' if self._search else 'off'})")
         try:
             from reedus_companion import mode as _mode
@@ -131,6 +146,15 @@ class GeminiBackend:
         try:
             self._client = None
         except Exception:
+            pass
+
+    def ping(self) -> None:
+        """Open (or refresh) the HTTPS connection without generating anything: a model lookup
+        is free. Call it a second before a reply is needed."""
+        try:
+            if self._client is not None:
+                self._client.models.get(model=self.model)
+        except Exception:                                        # noqa: BLE001
             pass
 
     def warm(self) -> float:
@@ -185,11 +209,14 @@ class GeminiBackend:
             if shots:
                 system = f"{system}\n\n{shots}" if system else shots
         want_think = self._think_router if is_router else self._think_main
+        level = _clamp_think(self.model, want_think)
         ceiling = int(max_tokens)
         if want_think != "off":
-            ceiling = max(ceiling + _THINK_HEADROOM, _MIN_OUTPUT)
+            # more thinking needs more room, or the thoughts use up the budget and the reply
+            # comes back cut off (or empty)
+            ceiling = max(ceiling + _THINK_HEADROOM * _HEADROOM_X.get(level, 1), _MIN_OUTPUT)
         gen_cfg = {
-            "thinking_level": _clamp_think(self.model, want_think),
+            "thinking_level": level,
             "max_output_tokens": ceiling,
         }
         # persona stays at 1.0 (google warns low temp loops on gemini 3); classifiers need 0.0,
@@ -209,6 +236,25 @@ class GeminiBackend:
         grounded = bool(self._search and not is_router)
         if grounded:
             kwargs["tools"] = [{"type": "google_search"}]
+
+        if self._api == "content":
+            emitted = []
+
+            def _tok(t: str) -> None:
+                emitted.append(t)
+                if on_token is not None:
+                    on_token(t)
+            try:
+                return self._once_content(system, turns, gen_cfg, grounded, _tok, cancel,
+                                          is_router=is_router, name=name)
+            except CloudUnavailable:
+                raise
+            except Exception as e:                               # noqa: BLE001
+                if _is_transient(e) or emitted:
+                    raise
+                self._api = "interactions"
+                print(f"[reedus] gemini: generateContent failed ({type(e).__name__}: "
+                      f"{str(e)[:160]}); using the Interactions API from now on", flush=True)
 
         do_stream = on_token is not None or cancel is not None
         t0 = time.perf_counter()
@@ -258,6 +304,81 @@ class GeminiBackend:
                 "tier": "router" if is_router else "main",
                 "name": name,
                 "ttft_s": ttft,
+                "gen_tok_s": (n_out / (wall - ttft)) if wall > ttft and ttft else 0.0,
+                "cancelled": cancelled,
+            })
+        return reply
+
+    def _once_content(self, system, turns, gen_cfg, grounded, on_token, cancel, *,
+                      is_router, name) -> str:
+        """One reply through models.generate_content_stream."""
+        from google.genai import types
+        level = gen_cfg.get("thinking_level")
+        contents = [types.Content(role="model" if _role(t) == "assistant" else "user",
+                                  parts=[types.Part(text=t.get("content") or "")])
+                    for t in turns]
+        t0 = time.perf_counter()
+        ttft = 0.0
+        pieces: List[str] = []
+        usage: Dict[str, int] = {}
+        cited = False
+        cancelled = False
+        for _ in range(len(_THINK_ORDER)):
+            cfg = {"max_output_tokens": gen_cfg.get("max_output_tokens")}
+            if system:
+                cfg["system_instruction"] = system
+            if level and level != "off":
+                cfg["thinking_config"] = types.ThinkingConfig(thinking_level=level)
+            if "temperature" in gen_cfg:
+                cfg["temperature"] = gen_cfg["temperature"]
+            if grounded:
+                cfg["tools"] = [types.Tool(google_search=types.GoogleSearch())]
+            try:
+                stream = self._client.models.generate_content_stream(
+                    model=self.model, contents=contents,
+                    config=types.GenerateContentConfig(**cfg))
+                for chunk in stream:
+                    if cancel is not None and getattr(cancel, "is_set", lambda: False)():
+                        cancelled = True
+                        break
+                    usage = _usage_from(chunk) or usage
+                    for cand in getattr(chunk, "candidates", None) or []:
+                        if getattr(cand, "grounding_metadata", None) is not None and \
+                                getattr(cand.grounding_metadata, "grounding_chunks", None):
+                            cited = True
+                        content = getattr(cand, "content", None)
+                        for part in getattr(content, "parts", None) or []:
+                            text = getattr(part, "text", None)
+                            if not text or getattr(part, "thought", False):
+                                continue
+                            if not ttft:
+                                ttft = time.perf_counter() - t0
+                            pieces.append(text)
+                            on_token(text)
+                        break                    # one candidate
+                break
+            except Exception as e:                               # noqa: BLE001
+                msg = str(e).lower()
+                if pieces or "thinking" not in msg or level not in _THINK_ORDER \
+                        or level == _THINK_ORDER[-1]:
+                    raise
+                nxt = _THINK_ORDER[_THINK_ORDER.index(level) + 1]
+                print(f"[reedus] gemini: {self.model} rejects thinking_level={level!r}, "
+                      f"using {nxt!r}", flush=True)
+                _THINK_LEARNED[self.model] = level = nxt
+        reply = "".join(pieces).strip()
+        wall = time.perf_counter() - t0
+        n_in = int(usage.get("prompt_tokens") or _estimate_tokens(system, turns))
+        n_out = int(usage.get("completion_tokens") or _estimate_tokens("", [{"content": reply}]))
+        try:
+            budget.record_tokens(self.model, n_in, n_out, grounded=grounded and cited)
+        except Exception:                                        # noqa: BLE001
+            pass
+        if os.environ.get("REEDUS_PROFILE"):
+            self.PROFILE.append({
+                "wall_s": wall, "prompt_tokens": n_in, "completion_tokens": n_out,
+                "system_head": (system or "")[:48], "tier": "router" if is_router else "main",
+                "name": name, "ttft_s": ttft,
                 "gen_tok_s": (n_out / (wall - ttft)) if wall > ttft and ttft else 0.0,
                 "cancelled": cancelled,
             })
@@ -445,6 +566,8 @@ def create_interaction(client, *, stream: bool = False, **kwargs):
                     print(f"[reedus] gemini: {kwargs.get('model')} rejects "
                           f"thinking_level={worse!r}, using {nxt!r}", flush=True)
                     gc["thinking_level"] = nxt
+                    if kwargs.get("model"):
+                        _THINK_LEARNED[kwargs["model"]] = nxt
                     continue
             name = _unknown_param(e)
             known = name in kwargs or name in (kwargs.get("generation_config") or {})

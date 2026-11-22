@@ -621,6 +621,13 @@ function renderBrain() {
   $("#brain-pick").hidden = !provs.length;
   $("#brain-none").hidden = !!provs.length;
   $("#brain-now").textContent = provs.length ? `Reedus is thinking with ${st.llm.label}.` : "";
+  $("#think-row").hidden = !provs.length;
+  const cur = provs.find((p) => p.id === st.llm.provider);
+  $("#say-search-note").textContent = cur && cur.search !== "native"
+    ? `${cur.short || cur.name} can't search the web by itself, so the search phrases do nothing for now. Gemini, Claude and OpenAI can.`
+    : "";
+  paintThink(st.think || "fast");
+  if (!provs.length) $("#think-note").textContent = "";
   if (!provs.length) return;
   const ps = $("#provider");
   if (document.activeElement === ps || document.activeElement === $("#model")) return;
@@ -628,6 +635,18 @@ function renderBrain() {
   provs.forEach((p) => { const o = el("option", "", p.name); o.value = p.id; ps.append(o); });
   ps.value = provs.some((p) => p.id === st.llm.provider) ? st.llm.provider : provs[0].id;
   renderModels(ps.value === st.llm.provider ? st.llm.model : null);
+}
+
+function paintThink(level) {
+  const choices = (S.status && S.status.think_choices) || [];
+  choices.forEach((c) => {
+    const b = $(`#think-pick button[data-val="${c.id}"]`);
+    if (b) b.textContent = c.label;
+  });
+  $$("#think-pick button").forEach((b) => b.classList.toggle("on", b.dataset.val === level));
+  const c = choices.find((x) => x.id === level);
+  $("#think-note").textContent = (c ? c.note + " " : "") +
+    "For one hard question, say \u201cthink about this before you answer\u201d first.";
 }
 
 function renderModels(selected) {
@@ -674,6 +693,14 @@ function wireBrain() {
     renderModels(cur === OTHER ? null : cur);
     say("#brain-out", r.error_note ? `Couldn't list them: ${r.error_note}` : `${S.models[pid].length} models available.`, !!r.error_note);
   });
+  $$("#think-pick button").forEach((b) => b.addEventListener("click", async () => {
+    const level = b.dataset.val;
+    paintThink(level);
+    const r = await Relay.call("think.set", { think: level });
+    if (r.error) { say("#brain-out", r.error, true); paintThink((S.status && S.status.think) || "fast"); return; }
+    if (S.status) S.status.think = level;
+    toast(`Thinking: ${r.label}`);
+  }));
   $("#brain-save").addEventListener("click", async (e) => {
     const provider = $("#provider").value;
     const model = $("#model").value === OTHER ? $("#model-own").value.trim() : $("#model").value;
@@ -883,7 +910,7 @@ function wireSettings() {
 }
 
 /* ---------- voice ---------- */
-const V = { list: [], loaded: false };
+const V = { list: [], loaded: false, models: [], model: "inworld-tts-2" };
 
 async function loadVoice() {
   const r = await Relay.call("voices");
@@ -901,8 +928,16 @@ async function loadVoice() {
   });
   pick.value = now;
   $("#voice-speed").value = cur.speed || 1.0;
+  V.models = r.models || [];
+  V.model = cur.model || r.model_default || "inworld-tts-2";
+  V.models.forEach((m) => {
+    const b = $(`#voice-model button[data-val="${m.id}"]`);
+    if (b) b.textContent = m.label;
+  });
   paintVoice();
-  $("#voice-now").textContent = `He's speaking as ${now}${cur.speed ? ` at ${cur.speed}x` : ""}.` +
+  const engine = (V.models.find((m) => m.id === V.model) || {}).label;
+  $("#voice-now").textContent = `He's speaking as ${now}${cur.speed ? ` at ${cur.speed}x` : ""}` +
+    `${engine ? ` (${engine.toLowerCase()} engine)` : ""}.` +
     (r.source === "builtin" ? " (Inworld's full list couldn't be loaded, these are the built-in voices.)" : "");
 }
 
@@ -913,16 +948,26 @@ function paintVoice() {
   $("#voice-speed-v").textContent = `${sp.toFixed(2)}x`;
   const r = $("#voice-speed");
   r.style.setProperty("--fill", `${(sp - r.min) / (r.max - r.min) * 100}%`);
+  $$("#voice-model button").forEach((b) => b.classList.toggle("on", b.dataset.val === V.model));
+  $("#voice-model-note").textContent = (V.models.find((m) => m.id === V.model) || {}).note || "";
+}
+
+function voiceReq() {
+  return { voice: $("#voice-pick").value, speed: +$("#voice-speed").value, model: V.model };
 }
 
 function wireVoice() {
   $("#voice-pick").addEventListener("change", paintVoice);
   $("#voice-speed").addEventListener("input", paintVoice);
+  $$("#voice-model button").forEach((b) => b.addEventListener("click", () => {
+    V.model = b.dataset.val;
+    paintVoice();
+  }));
   let audio = null;
   $("#voice-play").addEventListener("click", async (e) => {
     busy(e.target, true);
     say("#voice-out", "");
-    const r = await Relay.call("voice.preview", { voice: $("#voice-pick").value, speed: +$("#voice-speed").value });
+    const r = await Relay.call("voice.preview", voiceReq());
     busy(e.target, false);
     if (r.error) { say("#voice-out", r.error, true); return; }
     if (audio) audio.pause();
@@ -931,7 +976,7 @@ function wireVoice() {
   });
   $("#voice-save").addEventListener("click", async (e) => {
     busy(e.target, true);
-    const r = await Relay.call("voice.set", { voice: $("#voice-pick").value, speed: +$("#voice-speed").value });
+    const r = await Relay.call("voice.set", voiceReq());
     busy(e.target, false);
     if (r.error) { say("#voice-out", r.error, true); return; }
     say("#voice-out", "Done. He uses it from his next sentence.");
@@ -945,7 +990,8 @@ function renderGlance() {
   $("#wx-on").checked = !!g.weather;
   if (document.activeElement !== $("#wx-place")) $("#wx-place").value = g.place || "";
   $$("#wx-unit button").forEach((b) => b.classList.toggle("on", b.dataset.val === (g.unit || "F")));
-  $("#wx-every").value = String(g.every || 90);
+  $("#wx-every").value = String(g.every || 0);
+  if (!$("#wx-every").value) $("#wx-every").value = "0";
   $("#wx-opts").hidden = !g.weather && !$("#wx-on").checked;
 }
 

@@ -134,6 +134,13 @@ svg use { pointer-events: none; }
 .field { display: grid; gap: 6px; }
 .field > span { font-size: 13px; color: var(--ink-dim); font-weight: 500; }
 .inline { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+/* a block of fields inside a card: same spacing as the card itself, so the button row
+   doesn't sit jammed against the select above it */
+#brain-pick { display: grid; gap: 12px; }
+.says { margin: 0; display: grid; gap: 4px; }
+.says dt { font-size: 14px; font-weight: 600; margin-top: 6px; }
+.says dt:first-child { margin-top: 0; }
+.says dd { margin: 0; font-size: 14px; color: var(--ink-dim); line-height: 1.45; }
 .inline input[type=number] { width: 90px; }
 .inline select { flex: 1; min-width: 120px; }
 

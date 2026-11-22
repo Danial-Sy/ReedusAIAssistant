@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import threading
+import time
 from datetime import datetime
 from typing import Callable, List, Optional
 
@@ -20,7 +21,8 @@ LITE_VOICE = (
     "lights, cat ears, a speaker. Everything you write is spoken, so talk, don't type: usually one "
     "to three sentences, longer only when they ask for detail. No lists, no markdown, no emoji, "
     "no stage directions. Timers, alarms, reminders and lists are handled for you before a "
-    "message reaches you.\n\n"
+    "message reaches you. Never say your own name out loud: you wake up when you hear it, so "
+    "saying it makes you interrupt yourself.\n\n"
     "Your face shows how you feel, so react to what they said. Start every reply with one face "
     "tag in square brackets: [happy], [laugh], [love], [sad], [surprised], [angry], [confused], "
     "[sleepy], [excited], [smug], [shy], [curious], [wink] or [neutral]. For example: "
@@ -68,7 +70,10 @@ _NEEDS_SEARCH = re.compile(
     r"month|year)|right now|score|scores|who won|won the|game (?:last night|today|tonight)|"
     r"standings|playoffs?|election|stock|stocks|price of|how much (?:is|does|are)|cost of|"
     r"release(?:d| date)?|come out|came out|coming out|open (?:right )?now|hours|near me|"
-    r"look (?:it |that )?up|search|google|what happened|who is the (?:current|new)|"
+    # (not bare "search", "google" or "look it up": "my search history", "tell me about
+    # Google" and "how do I look it up" aren't asking for one. asking him to search goes
+    # through directives(), which force it)
+    r"what happened|who is the (?:current|new)|"
     r"is .{1,40} (?:still|dead|alive)|traffic|flight|forecast)\b", re.I)
 
 
@@ -130,6 +135,114 @@ class SentenceSplitter:
         self.buf = ""
 
 
+# how much he thinks before he talks (the app's AI model card). "fast" is the lowest the model
+# allows; the others trade seconds of silence for better answers to hard questions
+THINK_CHOICES = [
+    {"id": "fast", "label": "Fastest", "note": "Answers straight away. Best for chatting."},
+    {"id": "low", "label": "Low", "note": "Thinks briefly first. Usually under a second more."},
+    {"id": "medium", "label": "Medium", "note": "Thinks it over. A second or few before he talks."},
+    {"id": "high", "label": "High", "note": "Thinks hard. Several seconds of silence, for tricky questions."},
+]
+THINK_IDS = {c["id"] for c in THINK_CHOICES}
+DEEP = "high"        # what "think about this before you answer" turns on, for that one question
+
+
+def think_level(account: Optional[dict]) -> str:
+    t = (((account or {}).get("settings") or {}).get("think") or "fast")
+    return t if t in THINK_IDS else "fast"
+
+
+def apply_think(backend, level: str) -> None:
+    """Point whichever backend this is at a thinking level (set before every reply, so the
+    app's setting and a one-off "think about this" both take effect straight away)."""
+    level = level if level in THINK_IDS else "fast"
+    if hasattr(backend, "_think_main"):                         # Gemini
+        backend._think_main = "minimal" if level == "fast" else level
+    elif hasattr(backend, "_effort_router"):                    # Claude
+        backend._effort = "low" if level in ("fast", "low") else level
+        backend._think_mode = None if level == "fast" else "adaptive"
+    elif getattr(backend, "wire", "") == "responses":           # OpenAI
+        backend._effort = "low" if level == "fast" else level
+
+
+# spoken directives: asking him to think first, or to search the web, for one question. they
+# count only as a clause of their own, at the start of what's said or after a comma / "and" at
+# the end, so "think" or "search" inside a sentence ("I think so", "what do you think", "my
+# search history", "how do I look it up") never trips them. the app's "Things you can say" card
+# (web/index.html) lists the same phrases; keep the two in step
+_ANSWER = r"(?:answer|answering|respond|responding|reply|replying|talk|talking|speak|speaking)"
+_THINK = (
+    r"(?:(?:really |actually |properly )?think (?:(?:about|on|over) (?:this|it|that)(?: one)? )?"
+    r"(?:hard|carefully|properly|deeply|it through|this through|that through|first|"
+    rf"before (?:you )?{_ANSWER})"
+    r"|take (?:your|some) time (?:on|with) (?:this|it|that)(?: one)?"
+    r"|(?:turn on|use) (?:your )?(?:thinking|reasoning)(?: mode)?)"
+    r"(?:(?: about| on| with| over) (?:this|it|that)(?: one)?)?"
+    rf"(?: before (?:you )?{_ANSWER})?")
+_SEARCH = (
+    r"(?:(?:search|check) (?:the )?(?:internet|web|online)|search online"
+    r"|(?:do|run) a (?:quick )?(?:web |google |internet )?search"
+    r"|(?:look|check) (?:it|this|that) up(?: online)?|(?:look|check) online"
+    r"|google (?:it|this|that)|(?:use|go on|get on) (?:the )?(?:internet|web|google))"
+    r"(?: (?:for (?:me|it|this|that)|about (?:this|it|that)|on (?:this|it|that)))?"
+    r"(?: (?:first|too|as well|also))?(?: for)?")
+_POLITE = r"(?:(?:can|could|would) you |i want you to |i need you to |please |go |also |and )?"
+_LEAD_DIR = re.compile(
+    r"^\W*(?:(?:okay|ok|alright|so|hey|um|uh|right|and|also|then|plus)[\s,]+)*" + _POLITE
+    + rf"(?:(?P<t>{_THINK})|(?P<s>{_SEARCH}))(?:[\s,]+please)?[\s,.:;!?-]*", re.I)
+_TAIL_DIR = re.compile(
+    r"(?:[,.;:!?-]+\s*|\s+(?:and|also|then|but|plus|so)\s+)" + _POLITE
+    + rf"(?:(?P<t>{_THINK})|(?P<s>{_SEARCH}))(?:[\s,]+please)?\W*$", re.I)
+# "search for…", "look up…", "can you google…": a search request; the words stay in the question
+_SEARCH_CMD = re.compile(
+    r"^\W*(?:(?:okay|ok|alright|so|hey)[\s,]+)*(?:(?:can|could|would) you |please |go )?"
+    r"(?:search (?:for|up)|look up)\s+\S"
+    r"|^\W*(?:(?:can|could|would) you |please |go )google\s+\S", re.I)
+
+
+def directives(said: str) -> tuple:
+    """(think, search, the rest). "think about this before you answer and search the
+    internet, who won last night" -> (True, True, "who won last night"). Just the directive
+    and nothing else -> rest "" (the question comes next turn)."""
+    rest = said or ""
+    think = search = False
+    for rx in (_LEAD_DIR, _TAIL_DIR):
+        for _ in range(4):
+            m = rx.search(rest) if rx is _TAIL_DIR else rx.match(rest)
+            if not m:
+                break
+            think, search = think or bool(m.group("t")), search or bool(m.group("s"))
+            rest = (rest[:m.start()] + rest[m.end():]).strip()
+    if _SEARCH_CMD.match(rest):
+        search = True
+    return think, search, rest.strip(" ,")
+
+
+def think_request(said: str) -> tuple:
+    """(asked to think, the rest): directives() without the search part."""
+    think, _, rest = directives(said)
+    return think, rest
+
+
+_stable: dict = {}
+
+
+def stable_system() -> str:
+    """The part of his system prompt that never changes: persona, how Lite talks, example
+    replies. Built once per process."""
+    if "text" not in _stable:
+        parts = [persona.build_stable_system(), LITE_VOICE]
+        try:
+            from reedus_companion.cloud import persona_shots
+            shots = persona_shots.block()
+            if shots:
+                parts.append(shots)
+        except Exception:                                        # noqa: BLE001
+            pass
+        _stable["text"] = "\n\n".join(parts)
+    return _stable["text"]
+
+
 def usable(pid: str) -> bool:
     """Can the relay think with this provider right now? (a key, and a base URL for custom)"""
     from reedus_companion.cloud import llm_settings, providers
@@ -171,6 +284,8 @@ class Brain:
         self._backend_key = None
         self.history: List[dict] = []
         self.lock = threading.Lock()
+        self._bull: Optional[tuple] = None      # (bulletin text, when it was read)
+        self.timing: dict = {}                  # the last reply's phases, seconds from its start
 
     # ---------- the LLM ----------
     def llm_choice(self) -> tuple:
@@ -206,16 +321,49 @@ class Brain:
             print(f"[relay] assist fast path failed: {e!r}", flush=True)
             return None
 
-    def system(self, said: str, conversation: str) -> str:
-        bulletin, _ = memory.bulletin(self.account["id"])
+    def system(self, said: str, conversation: str, fact: Optional[str] = None) -> str:
+        """Everything that's the same every turn first (persona, Lite's voice rules, the example
+        replies), then what changes (the time, the bulletin, recalled history, live weather).
+        Same-prefix prompts hit the provider's prompt cache, which is cheaper and starts the
+        reply sooner; the clock used to sit near the top and broke the cache every minute."""
+        bulletin = self._bulletin()
         recalled = memory.recall(self.account["id"], said, conversation)
         today = datetime.now().strftime("%A, %B %d, %Y, %I:%M %p").replace(" 0", " ")
-        out = persona.build_runtime_system(today=today, bulletin=bulletin, recalled=recalled) \
-            + "\n\n" + LITE_VOICE
-        fact = self.weather_fact(said)
+        out = stable_system() + "\n\n" + (
+            f"Today's date is {today}. Your training knowledge has a cutoff, so for anything that "
+            f"could have changed since then (news, scores, prices, who currently holds a role, "
+            f"recent releases) search instead of guessing.") \
+            + "\n\n" + persona.build_volatile_block(bulletin=bulletin, recalled=recalled)
+        fact = self.weather_fact(said) if fact is None else fact
         if fact:
             out += "\n\n" + fact + " (Live data. Use it if they asked about the weather.)"
         return out
+
+    def _bulletin(self) -> str:
+        """The bulletin, read at most every 30 s (warm() fetches it while they're talking)."""
+        got = self._bull
+        if got and time.monotonic() - got[1] < 30.0:
+            return got[0]
+        text, _ = memory.bulletin(self.account["id"])
+        self._bull = (text, time.monotonic())
+        return text
+
+    def warm(self) -> None:
+        """They're talking to him: get the slow parts out of the way before the turn needs
+        them. The bulletin from the database, the LLM client built, and its connection open
+        (an idle HTTPS connection closes within seconds, and a fresh handshake to the
+        provider is a few hundred ms on the first token)."""
+        try:
+            self._bull = None
+            self._bulletin()
+        except Exception:                                        # noqa: BLE001
+            pass
+        try:
+            b = self.backend()
+            if hasattr(b, "ping"):
+                b.ping()
+        except Exception:                                        # noqa: BLE001
+            pass
 
     def weather_fact(self, said: str) -> str:
         """Open-Meteo for the place set in the app, when they ask about the weather at home:
@@ -235,28 +383,54 @@ class Brain:
 
     def reply(self, said: str, conversation: str, on_sentence: Callable[[str], None],
               cancel: Optional[threading.Event] = None,
-              on_face: Optional[Callable[[str], None]] = None) -> str:
+              on_face: Optional[Callable[[str], None]] = None,
+              think: Optional[str] = None, search: bool = False) -> str:
         """Speakable reply text; each sentence also goes to on_sentence as soon as it's ready,
         and each face tag ([excited], [sad]…) to on_face just before the sentence it leads."""
+        t0 = time.monotonic()
+        self.timing = {}
         fast = self.fast_path(said)
         if fast:
             on_sentence(speakable(fast))
             self._remember(said, fast)
+            self.timing = {"fast": 1}
             return fast
-        msgs = [{"role": "system", "content": self.system(said, conversation)}]
+        fact = self.weather_fact(said)
+        msgs = [{"role": "system", "content": self.system(said, conversation, fact)}]
         # an empty turn (a reply cut off by "Reedus" before it said anything) makes Gemini
         # refuse the whole request ("Missing text in content"), so those never go in
         msgs += [h for h in self.history[-2 * config.HISTORY_TURNS:] if (h.get("content") or "").strip()]
         msgs.append({"role": "user", "content": said})
-        split = SentenceSplitter(on_sentence, on_face=on_face, first_clause=36)
+        timing = self.timing
+
+        def _sentence(s: str) -> None:
+            timing.setdefault("sentence", time.monotonic() - t0)
+            on_sentence(s)
+
+        split = SentenceSplitter(_sentence, on_face=on_face, first_clause=20)
+
+        def _token(tok: str) -> None:
+            timing.setdefault("token", time.monotonic() - t0)
+            split.feed(tok)
+
         backend = self.backend()
         searchable = getattr(backend, "_search_default", None)
         if searchable is None and hasattr(backend, "_search"):
             searchable = backend._search_default = bool(backend._search)
         if searchable is not None:
-            backend._search = bool(searchable) and needs_search(said) and not self.weather_fact(said)
-        text = backend.chat(msgs, REPLY_TOKENS, use_adapter=True, on_token=split.feed,
+            # asked to search ("look it up"): always, if this provider can search at all
+            backend._search = bool(searchable) and (search or (needs_search(said) and not fact))
+        if search and not searchable:
+            timing["no_search"] = True       # a provider that can't search the web itself
+        level = think if think in THINK_IDS else think_level(self.account)
+        apply_think(backend, level)
+        timing["think"] = level
+        timing["search"] = bool(getattr(backend, "_search", False))
+        timing["prep"] = time.monotonic() - t0
+        # the example replies are already in the stable part of the system prompt
+        text = backend.chat(msgs, REPLY_TOKENS, use_adapter=False, on_token=_token,
                             name="persona", cancel=cancel)
+        timing["done"] = time.monotonic() - t0
         if cancel is not None and cancel.is_set():
             split.buf = ""
         else:
