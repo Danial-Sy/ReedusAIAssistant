@@ -36,6 +36,17 @@ class DbAssistant(Assistant):
         self._save_lock = threading.Lock()
         super().__init__(path=_DbPath(device_id))
 
+    def tick(self) -> float:
+        """The parent's tick, but it can never take the clock down: an exception in a tick (a
+        database hiccup while saving) used to end the clock thread silently, and from then
+        on no timer on that Lite would ever ring or stop at the relay."""
+        try:
+            return super().tick()
+        except Exception as e:                                   # noqa: BLE001
+            print(f"[relay] timer clock hiccup ({type(e).__name__}: {e}); retrying in 2 s", flush=True)
+            self._emit("changed", {})          # whatever did change, the Lite hears about it
+            return 2.0
+
     def save(self) -> None:
         with self.lock:
             data = {"items": [i for i in self.items if i.get("state") != "done"],

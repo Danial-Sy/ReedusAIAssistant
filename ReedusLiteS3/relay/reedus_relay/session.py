@@ -47,11 +47,13 @@ _WAKE_PREFIX = re.compile(r"^\W*(?:hey|hi|okay|ok|yo)?[\s,]*(?:reedus|reed us|re
 
 
 _STOP = re.compile(
-    r"^\W*(?:(?:okay|ok|oh|no|hey|alright|uh|um)[\s,]+)*"
-    r"(?:stop(?: (?:it|that|listening|talking|now))?|never ?mind|forget (?:it|about it)|cancel(?: that)?|"
-    r"shut up|be quiet|quiet|shush|hush|nothing|no thanks|nah|i'?m good|all good|leave it|"
-    r"that'?s it|that'?ll be all|not you|wasn'?t talking to you|i wasn'?t talking to you)"
-    r"(?:[\s,]+(?:please|thanks|thank you|reedus|now|for now))*\W*$", re.I)
+    r"^\W*(?:(?:okay|ok|oh|no|hey|alright|uh|um|dude|bro|reedus|stop)[\s,.!]+)*"
+    r"(?:(?:can|could|would|will) you (?:please )?|please |you can |just )?"
+    r"(?:stop(?: (?:it|that|listening|talking|speaking|now|please))?|never ?mind|forget (?:it|about it)|"
+    r"cancel(?: that)?|shut up|be quiet|quiet(?: down)?|shush|hush|zip it|enough|that'?s enough|"
+    r"nothing|no thanks|nah|i'?m good|all good|leave it|that'?s it|that'?ll be all|not you|"
+    r"wasn'?t talking to you|i wasn'?t talking to you)"
+    r"(?:[\s,.!]+(?:please|thanks|thank you|reedus|now|for now|stop))*\W*$", re.I)
 
 
 def strip_wake(said: str) -> str:
@@ -117,10 +119,14 @@ class Session:
         self.art_until = 0.0             # something drawn from the app is on the face
         self.funded_hint = True          # last known: does the pool have money (no early STT if not)
         self.think_next = False          # "think about this before you answer": the next question
+        self.rest_until = 0.0            # one question mode: when this conversation counts as over
         self.watch: Optional[speech.Endpointer] = None   # still listening while he thinks
         self.carry_text: Optional[str] = None             # "so I was, um…": what they said so far
         self.continues = 0               # how many times this turn waited for the rest
         self.last_peak = -120.0          # how loud they were, so a TV can't pass for them
+        self.stop_ep: Optional[speech.Endpointer] = None  # "stop" said over him while he talks
+        self.stop_checks = 0
+        self.stop_busy = False
         self.search_next = False         # "search the internet": the next question
 
         if assistant is None:
@@ -185,6 +191,7 @@ class Session:
                    "brightness": int(s.get("brightness", 100)),
                    "wake": "device" if self.device_wake else "relay",
                    "wake_cutoff": listening.wake_cutoff(self.account),
+                   "head_near_db": listening.head_near_db(self.account),
                    "account": self.account.get("name", ""), "device": self.device.get("name", "")})
         self.set_state("idle")
         self.listen(False)
@@ -207,7 +214,9 @@ class Session:
                 self.send_timers()
             # listening but the device went quiet (it should be streaming): don't hang there
             if self.mode == LISTEN and now - self.last_frame > 4.0:
-                self.end_conversation()
+                self.end_conversation(keep=self.single())
+            if self.mode == IDLE and self.rest_until and now >= self.rest_until:
+                self.end_conversation()          # one question mode: that conversation's over
             if now >= self.next_glance:
                 await self.glance_round(now)
 
@@ -311,7 +320,7 @@ class Session:
                     self.t_end = time.monotonic()
                     self.begin_turn(self.ep.carry, text=text)
                 else:
-                    self.end_conversation()
+                    self.end_conversation(keep=self.single())
             return
         # thinking, nothing said back yet: if they start talking again they weren't finished.
         # drop the reply and keep listening, with what they'd said so far kept in front
@@ -319,6 +328,13 @@ class Session:
             if self.watch.feed(pcm) == "start":
                 self._keep_listening()
                 return
+        # he's talking: a short "stop" over him (no name needed) cuts him off
+        if self.mode == BUSY and self.t_first_audio and self.stop_ep is not None:
+            ev = self.stop_ep.feed(pcm)
+            if ev in ("end", "max"):
+                audio = self.stop_ep.audio()
+                self.stop_ep = self._stop_endpointer()
+                self._check_stop(audio)
         # idle, or busy thinking/speaking: only the wake word matters (barge-in)
         if self.wake.feed(pcm):
             self.on_wake()
@@ -345,6 +361,9 @@ class Session:
         elif t == "draw":                    # the drawing finished playing on its own
             if msg.get("op") == "done":
                 self.art_until = 0.0
+        elif t == "ring":                    # the Lite's own idea of whether it's ringing
+            self.info["ring"] = {"on": bool(msg.get("on")), "id": msg.get("id") or "",
+                                 "kind": msg.get("kind") or "", "at": time.time()}
         elif t == "wake_near":               # it almost heard the name (the app shows it)
             self.info["wake_near"] = {"p": float(msg.get("p") or 0), "at": time.time()}
         elif t == "bulletin_ack":
@@ -368,32 +387,97 @@ class Session:
         return speech.Endpointer(start_timeout=start_timeout, end_silence=end_s,
                                  spec_after=listening.spec_after(end_s), floor_db=floor_db)
 
+    # ---------- "stop" while he's talking ----------
+    STOP_CHECKS = 6           # transcriptions per reply at most (each one costs a little)
+    STOP_MAX_S = 2.6          # longer than this isn't a "stop", it's talking over him
+
+    def _stop_endpointer(self) -> speech.Endpointer:
+        # louder than his own voice coming back through the mic: a little under how loud
+        # they spoke to him, no early transcripts, short pauses end it
+        return speech.Endpointer(start_timeout=1e9, end_silence=0.45, max_len=self.STOP_MAX_S,
+                                 spec_after=0.0, floor_db=self.last_peak - 9.0)
+
+    def _check_stop(self, audio: bytes) -> None:
+        secs = len(audio) / 2 / config.RATE
+        if self.stop_busy or self.stop_checks >= self.STOP_CHECKS or secs > self.STOP_MAX_S + 0.6:
+            return
+        self.stop_checks += 1
+        self.stop_busy = True
+        token = self.cancel
+
+        def _go():
+            m = meter.Meter()
+            text = ""
+            try:
+                with meter.metering(m):
+                    text = self.stt(audio) or ""
+            except Exception as e:                               # noqa: BLE001
+                print(f"[relay] stop check failed: {type(e).__name__}", flush=True)
+            if m.usd > 0:
+                try:
+                    accounts.charge(self.aid, m.usd, f"{self.device.get('name', 'Lite')}: {m.summary()}")
+                except Exception:                                # noqa: BLE001
+                    pass
+            self.loop.call_soon_threadsafe(self._stop_heard, text, token)
+        threading.Thread(target=_go, name="stop-check", daemon=True).start()
+
+    def _stop_heard(self, text: str, token: threading.Event) -> None:
+        self.stop_busy = False
+        if token is not self.cancel or self.mode != BUSY:
+            return
+        said = strip_wake(text)
+        if said and is_stop(said):
+            print(f"[relay] {self.device.get('name')}: told to stop mid-reply", flush=True)
+            self.barge()
+            self.send({"type": "expr", "name": "blink", "hold": 0.6})
+            self.send({"type": "ring_off"})
+            self.end_conversation()
+
     def start_listening(self, follow_up: bool) -> None:
         self.mode = LISTEN
         self.spec = None
         self.watch = None
+        self.stop_ep = None
         self.carry_text = None
         self.continues = 0
         self.ep = self._endpointer(config.FOLLOW_UP_S if follow_up else config.START_TIMEOUT_S)
+        if follow_up:
+            # the tail of his own voice right after he stops shouldn't open a turn: for the
+            # first moment only something nearly as loud as they speak to him counts
+            self.ep.guard_s, self.ep.guard_db = 0.4, self.last_peak - 8.0
         self.last_frame = time.monotonic()
         self.listen(True)
         self.set_state("listening")
 
-    def end_conversation(self) -> None:
+    def single(self) -> bool:
+        """One question mode (the app's Listening card): answer, then back to idle."""
+        return listening.mode_id(self.account) == "single"
+
+    REST_S = 180.0    # one question mode: questions this close together are one conversation
+
+    def end_conversation(self, keep: bool = False) -> None:
+        """Back to idle. keep=True (one question mode): the conversation isn't over, he just
+        stops listening; asked again within REST_S, he still knows what you just talked about,
+        and the memory update (an LLM call) runs once at the end instead of after every question."""
         self.mode = IDLE
         self.ep = None
         self.watch = None
+        self.stop_ep = None
         self.carry_text = None
         self.listen(False)
         self.set_state("idle")
         self.wake.reset()
+        self.empty_turns = 0
+        self.think_next = self.search_next = False
+        if keep and self.turns_in_conv:
+            self.rest_until = time.monotonic() + self.REST_S
+            return
+        self.rest_until = 0.0
         if self.turns_in_conv:
             self._fold_in_background(self.conversation)
         self.brain.new_conversation()
         self.conversation = uuid.uuid4().hex
         self.turns_in_conv = 0
-        self.empty_turns = 0
-        self.think_next = self.search_next = False
 
     def barge(self) -> None:
         self.cancel.set()
@@ -406,6 +490,8 @@ class Session:
         self.ep = None
         self.cancel = threading.Event()
         self.t_first_audio = 0.0
+        self.stop_ep = None
+        self.stop_checks = 0
         # keep an ear on them while he thinks: louder than LOCK_DB under how they just spoke,
         # so a TV in the background can't pass for them going on
         self.watch = self._endpointer(1e9, floor_db=self.last_peak - config.LOCK_DB - 3.0)
@@ -552,6 +638,7 @@ class Session:
                 # "stop" / "never mind": no reply, no LLM, straight back to idle. (with an alarm
                 # ringing or a question of his pending, the fast path handles it instead)
                 self.send({"type": "expr", "name": "blink", "hold": 0.6})
+                self.send({"type": "ring_off"})  # in case the Lite is ringing on its own
                 self.end_conversation()
                 return
             # "think about this before you answer" / "search the internet": deep thinking and/or
@@ -633,6 +720,8 @@ class Session:
             if is_goodbye(said):
                 self.send({"type": "expr", "name": "bye", "hold": 2.0})
                 self.end_conversation()
+            elif self.single():
+                self.end_conversation(keep=True)  # one question mode: say his name to ask again
             else:
                 self.start_listening(follow_up=True)
         except asyncio.CancelledError:
@@ -657,6 +746,26 @@ class Session:
             if said and reply and not cancel.is_set():     # a reply nobody heard isn't a turn
                 await asyncio.to_thread(memory.record_turn, self.aid, self.did, self.conversation,
                                         said, reply, usd)
+
+    def is_ringing(self) -> bool:
+        """Ringing here (the relay's timer store) or on the Lite (it can ring on its own)."""
+        try:
+            here = bool(self.assist.ringing())
+        except Exception:                                        # noqa: BLE001
+            here = False
+        return here or bool((self.info.get("ring") or {}).get("on"))
+
+    def stop_ringing(self) -> None:
+        """End every ring: dismiss it in the timer store, and tell the Lite to go quiet even if
+        it's ringing on its own (the relay may not know about that one)."""
+        try:
+            if self.assist.ringing():
+                self.assist.dismiss()
+        except Exception as e:                                   # noqa: BLE001
+            print(f"[relay] couldn't dismiss the ring: {e!r}", flush=True)
+        self.send({"type": "ring_off"})
+        self.info["ring"] = {**(self.info.get("ring") or {}), "on": False, "at": time.time()}
+        self.send_timers()
 
     def _assist_waiting(self) -> bool:
         """Something ringing, or a timer/reminder question waiting on an answer."""
@@ -724,6 +833,7 @@ class Session:
                     if first:
                         self.set_state("speaking")
                         self.t_first_audio = time.monotonic()
+                        self.stop_ep = self._stop_endpointer()   # listen for "stop" over him
                         first = False
                     await self._send_speech(fr)
                 await task

@@ -28,6 +28,12 @@ void showPair(const char* code);    // hold a pairing code on the face; "" puts 
 // `timers` message is the truth again. call every loop.
 void localTick(uint32_t now, bool linked);
 bool localRinging();
+// stop ringing now (his name was heard, "stop", the app's Stop button) and never ring that
+// timer/alarm again from stale data. false if nothing was ringing
+bool silence();
+// the ring changed (on or off) since the last call: report it to the relay so the app can
+// show a Stop button. id/kind describe the current ring
+bool takeRingChange(bool* on, const char** id, const char** kind);
 const char* describe();
 void demo(const char* what);        // serial `glance <clock|weather|event|music|timer|ring|off>`
 

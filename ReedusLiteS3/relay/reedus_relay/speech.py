@@ -120,6 +120,8 @@ class Endpointer:
         self.spec_after = spec_after
         self.floor_db = floor_db     # quieter than this never counts (a TV while he's thinking)
         self.carry = b""             # audio from before (a sentence that's being continued)
+        self.guard_s, self.guard_db = 0.0, -120.0   # for the first guard_s, quieter than
+                                                    # guard_db never counts (his echo)
         mode = (vad or config.VAD or "silero").lower()
         sess = _silero() if mode == "silero" else None
         self.vad = SileroVad(sess) if sess is not None else None
@@ -145,6 +147,10 @@ class Endpointer:
         return max(self.noise + 12.0, -48.0)
 
     def _voiced(self, pcm: bytes, db: float) -> bool:
+        if self.t <= self.guard_s and db < self.guard_db:
+            if self.vad is not None:
+                self.vad.feed(pcm)                       # keep the detector's state moving
+            return False
         if self.vad is None:
             voiced = db > self.threshold()
             # the floor follows the room down fast and up slowly, and it learns from every

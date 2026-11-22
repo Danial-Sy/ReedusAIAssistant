@@ -9,6 +9,7 @@ void begin();
 void update();  // call every loop
 
 void setState(const char* state);  // the head holds still while listening/thinking/speaking
+void setNearDb(float db);          // only follow voices within this of the loudest since the wake
 void onWake();                     // turn toward whoever just said the name
 void look(float worldDeg);         // server-requested turn
 void center();

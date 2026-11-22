@@ -323,7 +323,12 @@ function renderLites() {
   const devs = S.status.devices || [];
   const sig = JSON.stringify(devs.map((d) => [d.id, d.name, d.online]));
   if (box.dataset.sig === sig && box.children.length) {
-    devs.forEach((d) => { const s = $(`[data-dev="${d.id}"] .lite-text small`); if (s) s.textContent = liteLine(d); });
+    devs.forEach((d) => {
+      const s = $(`[data-dev="${d.id}"] .lite-text small`);
+      if (s) s.textContent = liteLine(d);
+      const rb = $(`[data-dev="${d.id}"] .r-ring`);
+      if (rb) rb.hidden = !d.ringing;
+    });
     return;
   }
   if (box.contains(document.activeElement) && document.activeElement.type === "range") return;
@@ -347,12 +352,21 @@ function renderLites() {
         <div class="lite-menu"><button class="cta small r-ctl" type="button">Controls</button>
           <button class="ghost-btn small r-name" type="button">Rename</button></div>
       </div>
+      <button class="cta gold wide r-ring" type="button" hidden>Stop ringing</button>
       <label class="slider"><span>Volume</span><input type="range" min="0" max="100" class="r-vol"><b class="v-vol"></b></label>
       <label class="slider"><span>Brightness</span><input type="range" min="5" max="100" class="r-bri"><b class="v-bri"></b></label>
       <div class="inline r-edit" hidden><input class="r-input" maxlength="40"><button class="cta small r-save" type="button">Save</button>
         <button class="ghost-btn small danger r-remove" type="button">Remove</button></div>`;
     $("b", c).textContent = d.name;
     $("small", c).textContent = liteLine(d);
+    const ringBtn = $(".r-ring", c);
+    ringBtn.hidden = !d.ringing;
+    ringBtn.addEventListener("click", async () => {
+      const r = await Relay.call("device.ring_off", { device: d.id });
+      if (r.error) { toast(r.error); return; }
+      ringBtn.hidden = true;
+      toast("Quiet now");
+    });
     const wire = (cls, key, label, def) => {
       const r = $(cls, c), v = $(label, c);
       r.value = s[key] != null ? s[key] : def;
@@ -663,7 +677,8 @@ function renderModels(selected) {
   const want = selected || p.default;
   if (want && !seen.has(want)) list.unshift({ id: want, label: want, note: "" });
   list.forEach((m) => {
-    const o = el("option", "", m.label + (m.note ? ` · ${m.note}` : ""));
+    const think = m.thinking && m.thinking !== "unknown" ? ` · ${m.thinking_label}` : "";
+    const o = el("option", "", m.label + (m.note ? ` · ${m.note}` : "") + think);
     o.value = m.id;
     sel.append(o);
   });
@@ -673,11 +688,56 @@ function renderModels(selected) {
   sel.value = want || OTHER;
   $("#model-own-row").hidden = sel.value !== OTHER;
   $("#models-more").hidden = !!S.models[pid];
+  paintModelInfo();
+}
+
+// how quick the picked model is for talking: can it skip thinking, and its first-word time
+// (from real replies for the one in use, or from the Test speed button)
+S.probes = S.probes || {};
+function pickedModel() {
+  const pid = $("#provider").value;
+  const model = $("#model").value === OTHER ? $("#model-own").value.trim() : $("#model").value;
+  return { pid, model };
+}
+function paintModelInfo() {
+  const { pid, model } = pickedModel();
+  const out = $("#model-info");
+  if (!model) { out.textContent = ""; return; }
+  const p = (S.status.providers || []).find((x) => x.id === pid) || {};
+  const meta = [...(p.models || []), ...(S.models[pid] || [])].find((m) => m.id === model) || {};
+  const probe = S.probes[`${pid}/${model}`];
+  const cur = S.status.llm || {};
+  const live = cur.provider === pid && cur.model === model ? cur.info || {} : {};
+  const level = (probe && probe.thinking) || live.thinking || meta.thinking || "unknown";
+  const labels = { off: "No thinking before it answers: quickest.",
+    minimal: "Minimal thinking before it answers: quick.",
+    low: "Always thinks a little before it answers: adds a second or so.",
+    medium: "Always thinks before it answers: slower.",
+    always: "A reasoning model: always thinks first, slowest to start." };
+  const bits = [labels[level] || "Thinking: not tested yet."];
+  if (live.first_word_s) bits.push(`In your conversations its first word takes about ${live.first_word_s} s (last ${live.samples}).`);
+  if (probe) bits.push(`Speed test: first word in ${probe.first_word_s} s.`);
+  else if (!live.first_word_s) bits.push("Tap Test speed to find out how quick it is.");
+  out.textContent = bits.join(" ");
 }
 
 function wireBrain() {
   $("#provider").addEventListener("change", () => { say("#brain-out", ""); renderModels(null); });
+  $("#model-own").addEventListener("input", paintModelInfo);
+  $("#model-test").addEventListener("click", async (e) => {
+    const { pid, model } = pickedModel();
+    if (!model) { say("#brain-out", "Pick or type a model first.", true); return; }
+    busy(e.target, true);
+    say("#brain-out", `Testing ${model}…`);
+    const r = await Relay.call("llm.probe", { provider: pid, model });
+    busy(e.target, false);
+    if (r.error) { say("#brain-out", r.error, true); return; }
+    S.probes[`${pid}/${model}`] = r;
+    say("#brain-out", "");
+    paintModelInfo();
+  });
   $("#model").addEventListener("change", () => {
+    paintModelInfo();
     const other = $("#model").value === OTHER;
     $("#model-own-row").hidden = !other;
     if (other) setTimeout(() => $("#model-own").focus(), 50);
@@ -726,7 +786,9 @@ function renderListen() {
     $$(`${sel} button`).forEach((b) => b.classList.toggle("on", b.dataset.val === cur));
     $(noteSel).textContent = (choices.find((c) => c.id === cur) || {}).note || "";
   };
+  paint("#mode-pick", L.mode_choices || [], L.mode, "#mode-note");
   paint("#patience-pick", L.patience_choices || [], L.patience, "#patience-note");
+  paint("#head-pick", L.head_choices || [], L.head, "#head-note");
   const cut = $("#wake-cut");
   if (document.activeElement !== cut) cut.value = Math.round((L.wake || 0.9) * 100);
   paintWake();
@@ -778,7 +840,9 @@ function wireListen() {
     if (S.status) S.status.listen = r.listen;
     renderListen();
   }));
+  hook("#mode-pick", "mode");
   hook("#patience-pick", "patience");
+  hook("#head-pick", "head");
 }
 
 /* ---------- settings: service keys (owner) ---------- */
@@ -1108,6 +1172,7 @@ const Ctl = (() => {
   let dev = null, tab = "face";
   let frames = [new Uint8Array(W * H * 3)], cur = 0, color = PALETTE[0], tool = "pen";
   let painting = false, playTimer = null, fwId = "", lookTarget = null;
+  let fwCheck = null, fwCheckAt = 0;   // which commit the latest build is from (fw.check)
 
   const device = () => (S.status && S.status.devices || []).find((d) => d.id === dev);
   const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
@@ -1128,7 +1193,7 @@ const Ctl = (() => {
     $$(".ctl-pane").forEach((p) => { p.hidden = p.id !== `ctl-${t}`; });
     if (t === "draw") paint();
     if (t === "head") renderDial();
-    if (t === "fw") renderFw();
+    if (t === "fw") { renderFw(); checkFw(); }
   }
 
   async function send(action, extra, okText) {
@@ -1303,13 +1368,32 @@ const Ctl = (() => {
   }
 
   /* ----- firmware ----- */
+  // CI builds carry their commit in the version (0.3.0-s3.6c5a42c), and fw.check says which
+  // commit the latest build is from, so the two can be compared without downloading anything
+  async function checkFw(force) {
+    if (!force && Date.now() - fwCheckAt < 60000) return;
+    fwCheckAt = Date.now();
+    const r = await Relay.call("fw.check");
+    fwCheck = r && !r.error && r.sha ? r : null;
+    renderFw();
+  }
+  function upToDate(d) {
+    return !!(fwCheck && d && d.fw && d.fw.endsWith("." + fwCheck.sha));
+  }
   function renderFw() {
     const d = device();
     const fw = d && d.fw ? d.fw : "unknown (offline)";
     const can = d && (d.caps || []).includes("ota");
-    $("#fw-now").textContent = `Running ${fw}.` + (d && d.online && !can
-      ? " This firmware can't update itself yet: flash this new version over USB once, and after that every update can come from here." : "");
-    $("#fw-latest").disabled = $("#fw-file").disabled = !can;
+    const latest = upToDate(d);
+    let note = "";
+    if (d && d.online && !can) note = " This firmware can't update itself yet: flash this new version over USB once, and after that every update can come from here.";
+    else if (latest) note = " That's the latest build, so he's up to date.";
+    else if (fwCheck && d && d.fw) note = ` A newer build is out (${fwCheck.sha}).`;
+    $("#fw-now").textContent = `Running ${fw}.` + note;
+    $("#fw-latest").disabled = !can || latest;
+    $("#fw-latest").textContent = latest ? "Up to date \u2713" : "Get the latest build";
+    $("#fw-file").disabled = !can;
+    if (latest && !fwId) { $("#fw-install").hidden = true; }
     const o = d && d.ota;
     const bar = $("#fw-bar");
     if (o && o.at && Date.now() / 1000 - o.at < 300 && o.state !== "error") {
@@ -1334,6 +1418,13 @@ const Ctl = (() => {
     ready(r);
   }
   function ready(r) {
+    const d = device();
+    if (d && d.fw && r.version && d.fw === r.version) {
+      fwId = "";
+      $("#fw-install").hidden = true;
+      say("#fw-ready", `He's already running ${r.version}. Nothing to install.`);
+      return;
+    }
     fwId = r.fw;
     say("#fw-ready", `Ready: ${r.version || "firmware"} (${Math.round(r.size / 1024)} KB).`);
     $("#fw-install").hidden = false;
@@ -1438,7 +1529,12 @@ const Ctl = (() => {
     $("#fw-file").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) uploadFile(f); });
     $("#fw-install").addEventListener("click", (e) => confirmFirst(e.target, "Install now? He'll restart", async () => {
       const r = await send("device.ota", { fw: fwId });
-      if (!r.error) { $("#fw-install").hidden = true; say("#fw-out", "Sent. He's starting the download…"); }
+      if (!r.error) {
+        $("#fw-install").hidden = true;
+        fwId = "";
+        say("#fw-ready", "");
+        say("#fw-out", "Sent. He's starting the download…");
+      }
     }));
   }
 

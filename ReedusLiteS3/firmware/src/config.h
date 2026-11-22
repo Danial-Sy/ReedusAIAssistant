@@ -39,6 +39,8 @@
 
 // ---------- ringing on its own (glance.cpp localTick) ----------
 #define LOCAL_RING_MAX_MS 60000    // a timer/alarm the relay never rang: ring here for a minute
+#define RING_CAP_TIMER_MS 120000   // any ring gives up on its own after this, whoever started it:
+#define RING_CAP_ALARM_MS 300000   // a timer after 2 min, an alarm or reminder after 5
 
 // ---------- XIAO pins ----------
 // verified against Seeed's pinout photo of this board (pads XIAO_D0-D3, I2C, I2S, MCLK on the
@@ -137,6 +139,12 @@
 #define HEAD_ECHO_GUARD_MS 350     // while he talks and this long after, his own echo is around...
 #define HEAD_SPEAKER_CONE_DEG 35.0f  // ...so voices within this of the base's front are ignored
 #define HEAD_DETACH_MS 500         // stop pulsing once there, an idle SG90 buzzes
+// who the head turns to: a voice only counts if it's within HEAD_NEAR_DB of the loudest voice
+// since he woke (whoever said his name, close by) and louder than HEAD_MIN_DB. someone in the
+// next room is a lot quieter than you at the desk. the app's "Who he turns to" sets the first
+#define HEAD_NEAR_DB 10.0f
+#define HEAD_MIN_DB -50.0f         // dBFS on the mic beam: quieter than this is never a person here
+#define HEAD_HOME_MS 2500          // conversation over: back to facing front after this long
 
 // ---------- face timing ----------
 #define IDLE_DROWSY_S 300          // no conversation for 5 min: heavy eyelids

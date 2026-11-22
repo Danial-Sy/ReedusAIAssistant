@@ -270,6 +270,9 @@ check(all(is_goodbye(x) for x in ("goodbye", "okay thanks, goodbye", "alright co
 check(not any(is_goodbye(x) for x in ("what does goodbye mean in french", "later today I have class",
                                        "say bye to my friend")), "not every 'bye' is a goodbye")
 from reedus_relay.session import is_stop
+check(all(is_stop(x) for x in ("can you stop talking", "please stop", "you can stop", "that's enough",
+                               "zip it", "stop stop", "Reedus, stop.", "could you please stop")),
+      "the ways people actually tell him to stop")
 check(all(is_stop(x) for x in ("stop", "Stop.", "okay stop", "stop listening", "never mind",
                                 "Nevermind, thanks", "shut up", "I wasn't talking to you")),
       "'stop' and friends end the conversation")
@@ -314,6 +317,22 @@ check(listening.end_silence({}) == 1.2 and listening.end_silence({"settings": {"
       and listening.wake_cutoff({"settings": {"listen": {"wake": 0.6}}}) == 0.60 and listening.wake_cutoff({}) == 0.0
       and listening.valid_cutoff(0.55) is None and listening.valid_cutoff(0.96) is None,
       "patience and wake sensitivity map to seconds and a cutoff")
+from reedus_relay import models_info
+from reedus_companion.cloud import gemini_backend as _gb
+check(models_info.lowest("gemini", "gemini-3.5-flash-lite") == ("minimal", "known")
+      and models_info.lowest("gemini", "gemini-3.7-flash")[0] == "low"
+      and models_info.lowest("anthropic", "claude-haiku-5-5") == ("off", "known")
+      and models_info.lowest("openrouter", "some/model") == ("unknown", ""),
+      "each model's least thinking: known ones say so, the rest 'not tested yet'")
+_gb._THINK_LEARNED["gemini-4-hydrogen"] = "low"
+check(models_info.lowest("gemini", "gemini-4-hydrogen") == ("low", "learned"),
+      "a level the provider turned down is learned and shown")
+del _gb._THINK_LEARNED["gemini-4-hydrogen"]
+for x in (1.4, 1.6, 9.0):
+    models_info.record("gemini", "gemini-test", x)
+check(models_info.typical("gemini", "gemini-test") == (1.6, 3)
+      and models_info.annotate("gemini", [{"id": "gemini-3.5-flash-lite"}])[0]["thinking_label"] == "minimal thinking",
+      "first-word times from real replies (the median), and the model list gets labels")
 from reedus_relay.brain import stable_system
 check(stable_system().endswith(stable_system()[-40:]) and "Today's date" not in stable_system(),
       "the cached part of the prompt has no clock in it")
@@ -675,6 +694,93 @@ async def main():
     for _ in range(40):
         await ws.send(SILENT)
     await d.wait_for(lambda: d.states()[-1] == "idle", 4)
+
+    print("[7d] ringing always stops")
+    sess = next(x for x in hub.sessions.values() if x.device.get("name") == "Desk Lite")
+    a = sess.assist
+    # the timer clock survives a failed save (it used to die, and then nothing rang or stopped)
+    real_save, boom = a.save, []
+
+    def bad_save():
+        boom.append(1)
+        raise RuntimeError("database went away")
+    a.add_timer(0.0, label="pasta")
+    a.save = bad_save
+    wait = a.tick()
+    a.save = real_save
+    check(boom and wait == 2.0 and a._thread is not None and a._thread.is_alive(),
+          "a database error in the timer clock doesn't kill it")
+    a.tick()
+    ok = await d.wait_for(lambda: (d.last("timers") or {}).get("ring"), 3)
+    check(ok and sess.is_ringing(), "the timer rings")
+    n_ro = len([e for e in d.events if e["type"] == "ring_off"])
+    r = await hub._device_control("device.ring_off", {"device": sess.did}, sess.aid, True)
+    ok = await d.wait_for(lambda: len([e for e in d.events if e["type"] == "ring_off"]) > n_ro
+                          and not (d.last("timers") or {}).get("ring"), 3)
+    check(r.get("ok") and ok and not a.ringing() and not sess.is_ringing(),
+          "the app's Stop button ends it, on the relay and on the Lite")
+    # the Lite rings on its own (the relay doesn't know): it shows in the app, "stop" quiets it
+    await ws.send(json.dumps({"type": "ring", "on": True, "id": "abc12345", "kind": "timer"}))
+    await asyncio.sleep(0.2)
+    st = await asyncio.to_thread(hub._status, sess.account)
+    me = next(x for x in st["devices"] if x["id"] == sess.did)
+    check(me.get("ringing") is True, "a ring the Lite started itself shows in the app")
+    n_ro = len([e for e in d.events if e["type"] == "ring_off"])
+    SCRIPT[:] = ["stop"]
+    await d.say()
+    ok = await d.wait_for(lambda: len([e for e in d.events if e["type"] == "ring_off"]) > n_ro, 6)
+    check(ok, "...and 'stop' tells the Lite to go quiet, even though the relay wasn't ringing")
+    await ws.send(json.dumps({"type": "ring", "on": False, "id": "abc12345", "kind": "timer"}))
+    await d.wait_for(lambda: d.states()[-1] == "idle", 4)
+
+    print("[7e] 'stop' while he's talking, no name needed")
+    sess = next(x for x in hub.sessions.values() if x.device.get("name") == "Desk Lite")
+    BACKEND.slow = 0.25                     # a long reply, sentence by sentence
+    SCRIPT[:] = ["tell me a long story", "what a nice day"]
+    await d.say()
+    ok = await d.wait_for(lambda: d.states()[-1] == "speaking", 8)
+    for _ in range(12):                     # they say something over him that isn't "stop"
+        await ws.send(VOICED)
+    for _ in range(30):
+        await ws.send(SILENT)
+    await asyncio.sleep(0.4)
+    check(ok and sess.mode == "busy" and sess.stop_checks == 1, "talking over him about something else doesn't stop him")
+    SCRIPT[:] = ["stop talking"]
+    for _ in range(12):
+        await ws.send(VOICED)
+    for _ in range(30):
+        await ws.send(SILENT)
+    ok = await d.wait_for(lambda: d.states()[-1] == "idle" and sess.mode == "idle", 4)
+    BACKEND.slow = 0.0
+    check(ok and any(e["type"] == "flush" for e in d.events[-12:]),
+          "'stop talking' over him cuts him off and he goes quiet")
+    await asyncio.sleep(0.3)
+
+    print("[7f] one question mode")
+    sess = next(x for x in hub.sessions.values() if x.device.get("name") == "Desk Lite")
+    saved_acc = sess.account
+    sess.account = {**saved_acc, "settings": {**(saved_acc.get("settings") or {}),
+                                              "listen": {"mode": "single"}}}
+    n_llm, n_states = n_persona(), len(d.states())
+    SCRIPT[:] = ["what's the tallest mountain"]
+    await d.say()
+    ok = await d.wait_for(lambda: n_persona() > n_llm and "speaking" in d.states()[n_states:]
+                          and d.states()[-1] == "idle", 8)
+    check(ok and "listening" not in d.states()[n_states:][d.states()[n_states:].index("speaking"):],
+          "one question mode: he answers and goes straight back to idle, no follow-up listening")
+    conv = sess.conversation
+    check(sess.rest_until > 0 and sess.turns_in_conv == 1, "...but the conversation isn't over yet")
+    n_llm = n_persona()
+    SCRIPT[:] = ["and how tall is it"]
+    await d.say()
+    ok = await d.wait_for(lambda: n_persona() > n_llm and d.states()[-1] == "idle", 8)
+    users = [m["content"] for m in BACKEND.calls[-1]["messages"] if m["role"] == "user"]
+    check(ok and sess.conversation == conv and "what's the tallest mountain" in users,
+          "say his name again soon after: he remembers what you just asked")
+    sess.rest_until = time.monotonic() - 1
+    ok = await d.wait_for(lambda: sess.conversation != conv and sess.turns_in_conv == 0, 3)
+    check(ok and sess.rest_until == 0.0, "a few quiet minutes later that conversation is wrapped up (once)")
+    sess.account = saved_acc
 
     print("[8] barge-in")
     BACKEND.slow = 0.15
@@ -1226,8 +1332,9 @@ async def main():
     check(hub.sessions[accounts.device_for_token(art_tok)["id"]].voice_prefs()["id"] == "Dennis",
           "the live Lite speaks with it from its next sentence")
     art_sess = hub.sessions[accounts.device_for_token(art_tok)["id"]]
-    r = await ask2(sock, {"action": "listen.set", "patience": "patient", "wake": 0.8})
-    ok = await d3.wait_for(lambda: (d3.last("wake_cfg") or {}).get("cutoff") == 0.80, 2)
+    r = await ask2(sock, {"action": "listen.set", "patience": "patient", "wake": 0.8, "head": "close"})
+    ok = await d3.wait_for(lambda: (d3.last("wake_cfg") or {}).get("cutoff") == 0.80
+                           and d3.last("wake_cfg").get("head_near_db") == 6.0, 2)
     check(r.get("ok") and r["listen"]["patience"] == "patient" and ok and art_sess.end_silence() == 1.8,
           "Listening settings save, the Lite gets the new wake cutoff live, and waits longer")
     await ws3.send(json.dumps({"type": "wake_near", "p": 0.74}))
@@ -1238,7 +1345,33 @@ async def main():
           "a near miss on the wake word shows in the app")
     r = await ask2(sock, {"action": "listen.set", "wake": 0.4})
     check("error" in r, "a threshold under 60% is refused")
-    await ask2(sock, {"action": "listen.set", "patience": "normal", "wake": 0.9})
+    r = await ask2(sock, {"action": "listen.set", "head": "everyone-in-town"})
+    check("error" in r, "a made-up head choice is refused")
+    await ask2(sock, {"action": "listen.set", "patience": "normal", "wake": 0.9, "head": "normal"})
+    from reedus_companion.cloud import llm as _llm
+
+    class _QuickModel:
+        _think_main = "minimal"
+        _search = True
+
+        def chat(self, messages, max_tokens, use_adapter=True, on_token=None, name="", **kw):
+            time.sleep(0.05)
+            on_token("hello")
+            return "hello"
+
+        def close(self):
+            pass
+    _real_build = _llm.build
+    _llm.build = lambda pid, model=None, **kw: _QuickModel()
+    r = await ask2(sock, {"action": "llm.probe", "provider": "gemini", "model": "gemini-3.5-flash-lite"})
+    _llm.build = _real_build
+    check(r.get("ok") and 0.04 <= r["first_word_s"] < 2 and r["thinking"] == "minimal"
+          and r["info"]["probe"]["first_word_s"] == r["first_word_s"],
+          "Test speed: first-word time and the least thinking the model accepted")
+    st = await ask2(sock, {"action": "status"})
+    gem = next((x for x in st["providers"] if x["id"] == "gemini"), None)
+    check("info" in st["llm"] and (gem is None or all("thinking" in m for m in gem["models"])),
+          "the app sees each model's thinking label and the current model's speed")
     r = await ask2(sock, {"action": "think.set", "think": "medium"})
     st = await ask2(sock, {"action": "status"})
     check(r.get("ok") and st.get("think") == "medium" and len(st.get("think_choices", [])) == 4,
@@ -1341,6 +1474,24 @@ async def main():
     check(art["ota"]["pct"] == 40, "the update's progress shows in the app")
     r = await ask2(sock, {"action": "device.ota", "device": did, "fw": r2["fw"]})
     check("error" in r, "another account's Lite can't be updated")
+    import requests as _rq
+    _real_get, _asked = _rq.get, []
+
+    class _Resp:
+        status_code = 200
+
+        def json(self):
+            return {"target_commitish": "6c5a42cbac8cf033a550ebe604beaad88b320ac3",
+                    "published_at": "2026-11-22T18:02:40Z"}
+
+    _rq.get = lambda url, **kw: (_asked.append(url), _Resp())[1]
+    hub._fw_check_cache = None
+    r = await ask2(sock, {"action": "fw.check"})
+    r2 = await ask2(sock, {"action": "fw.check"})
+    _rq.get = _real_get
+    check(r.get("sha") == "6c5a42c" and "api.github.com/repos/Danial-Sy/ReedusAIAssistant/releases/tags/lite-fw-latest"
+          in _asked[0] and len(_asked) == 1 and r2.get("sha") == r["sha"],
+          "the app can ask which commit the latest build is from (no download, cached a minute)")
     await ws3.close()
     await sock.close()
 

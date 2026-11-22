@@ -9,6 +9,8 @@
 
 namespace audio {
 
+static volatile float micLvlDb = -90.0f;  // the mic beam's loudness, for the head (micDb)
+
 static const i2s_port_t PORT = I2S_NUM_0;
 #if XVF_I2S_MASTER_48K
 static const int R = 3;  // I2S runs at 48k, the wire at 16k
@@ -233,6 +235,13 @@ static void audioTask(void*) {
     i2s_read(PORT, rxBuf, sizeof(rxBuf), &n, portMAX_DELAY);
     if (n == sizeof(rxBuf)) {
       micDown(f.s, MIC_CHANNEL, micHist);
+      {
+        float acc2 = 0.0f;
+        for (int i = 0; i < FRAME_SAMPLES; i++) acc2 += (float)f.s[i] * (float)f.s[i];
+        float db = 10.0f * log10f(acc2 / FRAME_SAMPLES / (32768.0f * 32768.0f) + 1e-12f);
+        // fast up, slow down: a voice registers at once and lasts between syllables
+        micLvlDb = db > micLvlDb ? db : micLvlDb + 0.07f * (db - micLvlDb);
+      }
       sendNewest(micQ, &f, &micDrops);  // net is behind: keep the newest audio
       if (wakeQ) {
 #if WAKE_CHANNEL != MIC_CHANNEL
@@ -441,5 +450,6 @@ float musicLevel() { return mLvl; }
 void setDuck(bool on) { duckOn = on; }
 bool playing() { return isPlaying; }
 float level() { return lvl; }
+float micDb() { return micLvlDb; }
 
 }  // namespace audio

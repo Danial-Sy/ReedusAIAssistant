@@ -123,19 +123,41 @@ class DB:
         sql = sql.replace("DOUBLE PRECISION", "REAL")
         return sql
 
+    def _pg_run(self, fn):
+        """Run fn(cursor) on this thread's connection; if the connection turns out to be dead
+        (Postgres restarted, or an idle connection was dropped), reconnect once and retry.
+        a long-idle thread like a timer's clock is exactly the one that finds it dead."""
+        import psycopg
+        for attempt in (0, 1):
+            try:
+                with self._pg().cursor() as cur:
+                    return fn(cur)
+            except (psycopg.OperationalError, psycopg.InterfaceError):
+                conn = getattr(self._local, "conn", None)
+                self._local.conn = None
+                try:
+                    if conn is not None:
+                        conn.close()
+                except Exception:                                # noqa: BLE001
+                    pass
+                if attempt:
+                    raise
+
     def execute(self, sql: str, args: Sequence[Any] = ()) -> int:
         if self.pg:
-            with self._pg().cursor() as cur:
+            def _go(cur):
                 cur.execute(sql, args)
                 return cur.rowcount
+            return self._pg_run(_go)
         with self._lock:
             return self._sqlite.execute(self._sql(sql), tuple(args)).rowcount
 
     def all(self, sql: str, args: Sequence[Any] = ()) -> List[dict]:
         if self.pg:
-            with self._pg().cursor() as cur:
+            def _go(cur):
                 cur.execute(sql, args)
                 return [dict(r) for r in cur.fetchall()]
+            return self._pg_run(_go)
         with self._lock:
             return [dict(r) for r in self._sqlite.execute(self._sql(sql), tuple(args)).fetchall()]
 

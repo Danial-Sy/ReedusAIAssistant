@@ -176,7 +176,9 @@
           <label class="field"><span>Model</span><select id="model"></select></label>
           <label class="field" id="model-own-row" hidden><span>Model id</span>
             <input id="model-own" autocapitalize="off" spellcheck="false" placeholder="exact model id, e.g. claude-opus-5-5"></label>
+          <p class="note" id="model-info"></p>
           <div class="inline"><button class="cta" id="brain-save" type="button">Use this model</button>
+            <button class="ghost-btn small" id="model-test" type="button">Test speed</button>
             <button class="link-btn" id="models-more" type="button">Show every model my key can use</button></div>
           <p class="note" id="brain-out"></p>
         </div>
@@ -188,6 +190,9 @@
 
       <div class="card" id="listen-card">
         <h3>Listening</h3>
+        <div class="field"><span>Mode</span>
+          <div class="seg two" id="mode-pick"><button type="button" data-val="conversation">Conversation</button><button type="button" data-val="single">One question</button></div></div>
+        <p class="note" id="mode-note"></p>
         <div class="field"><span>Wait after you stop talking</span>
           <div class="seg four" id="patience-pick"><button type="button" data-val="quick">Quick</button><button type="button" data-val="normal">Normal</button><button type="button" data-val="patient">Patient</button><button type="button" data-val="very">Longest</button></div></div>
         <p class="note" id="patience-note"></p>
@@ -195,6 +200,9 @@
           <label class="slider"><span>Needs</span><input type="range" min="60" max="95" step="1" id="wake-cut"><b id="wake-cut-v"></b></label></div>
         <p class="note" id="wake-note"></p>
         <p class="note" id="wake-near"></p>
+        <div class="field"><span>Who he turns to</span>
+          <div class="seg" id="head-pick"><button type="button" data-val="close">Close</button><button type="button" data-val="normal">Normal</button><button type="button" data-val="anyone">Anyone</button></div></div>
+        <p class="note" id="head-note"></p>
       </div>
 
       <div class="card" id="say-card">

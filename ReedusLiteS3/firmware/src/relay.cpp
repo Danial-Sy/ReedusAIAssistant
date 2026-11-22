@@ -150,6 +150,7 @@ static void micUp() {
 // the relay answers with wake + listen like it does for its own wake word
 static void onDeviceWake(float score) {
   wokeAt = millis();
+  glance::silence();                     // his name always quiets a ring, right here
   face::wake();
   head::onWake();
   audio::setDuck(true);
@@ -169,6 +170,7 @@ static void onDeviceWake(float score) {
 // you can tell it heard you and the head and face can be checked on the bench
 static void onLocalWake(float score) {
   wokeAt = millis();
+  glance::silence();
   face::wake();
   head::onWake();
   sounds::wake();
@@ -238,8 +240,11 @@ static void handleText(const char* txt, size_t len) {
       sounds::wake();
     }
     audio::setDuck(true);
+  } else if (!strcmp(t, "ring_off")) {  // "stop", or the app's Stop button
+    glance::silence();
   } else if (!strcmp(t, "wake_cfg")) {
     applyWakeCutoff(doc["cutoff"] | 0.0f);
+    if (doc["head_near_db"].is<float>()) head::setNearDb(doc["head_near_db"].as<float>());
   } else if (!strcmp(t, "emotion")) {
     face::setEmotion(doc["emotion"] | "neutral", doc["strength"] | 1.0f, doc["hold"] | 3.0f);
   } else if (!strcmp(t, "expr")) {
@@ -286,6 +291,7 @@ static void handleText(const char* txt, size_t len) {
     // an older relay says nothing about it, and runs the wake word itself
     deviceWake = wake::ready() && !strcmp(doc["wake"] | "relay", "device");
     applyWakeCutoff(doc["wake_cutoff"] | 0.0f);
+    head::setNearDb(doc["head_near_db"] | HEAD_NEAR_DB);
     Serial.printf("[relay] linked to the relay (%s) as %s, wake word %s\n", desc,
                   (const char*)(doc["device"] | "?"),
                   deviceWake ? "on the S3" : "on the relay (speech gate)");
@@ -456,6 +462,14 @@ void update() {
     return;
   }
   if (heard && deviceWake) onDeviceWake(score);
+  bool ringOn;
+  const char *ringIdNow, *ringKindNow;
+  if (glance::takeRingChange(&ringOn, &ringIdNow, &ringKindNow) && connected) {
+    char b[96];
+    snprintf(b, sizeof(b), "{\"type\":\"ring\",\"on\":%s,\"id\":\"%s\",\"kind\":\"%s\"}",
+             ringOn ? "true" : "false", ringIdNow, ringKindNow);
+    ws.sendTXT(b);
+  }
   float nearP;
   if (wake::takeNearMiss(&nearP) && connected && deviceWake) {
     char b[64];

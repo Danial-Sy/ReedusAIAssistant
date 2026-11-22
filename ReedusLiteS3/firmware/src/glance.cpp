@@ -29,9 +29,14 @@ static uint32_t wallBase = 0, wallAt = 0;  // local wall-clock seconds at millis
 static bool h24 = false, haveClock = false;
 static Timer timers[4];
 static int nTimers = 0;
-static char ringKind[12] = "", ringLabel[44] = "";
+static char ringKind[12] = "", ringLabel[44] = "", ringId[24] = "";
 static bool ring = false, localRing = false;
 static uint32_t ringStart = 0;
+// rings already stopped (silenced, or gave up): a later `timers` message or a stale countdown
+// naming one of these never starts it ringing again. a few slots, oldest overwritten
+static char quiet[6][24] = {"", "", "", "", "", ""};
+static int quietNext = 0;
+static bool ringReported = false;   // what the relay was last told
 static int32_t alarmIn = -1;
 static uint32_t alarmAt = 0;
 
@@ -445,18 +450,50 @@ static void copy(char* dst, size_t n, const char* src) {
   dst[n - 1] = 0;
 }
 
+static bool isQuiet(const char* id) {
+  if (!id || !id[0]) return false;
+  for (int i = 0; i < 6; i++)
+    if (!strcmp(quiet[i], id)) return true;
+  return false;
+}
+
+static void markQuiet(const char* id) {
+  if (!id || !id[0] || isQuiet(id)) return;
+  copy(quiet[quietNext], sizeof(quiet[0]), id);
+  quietNext = (quietNext + 1) % 6;
+}
+
+bool silence() {
+  bool was = ring;
+  if (ring) markQuiet(ringId);
+  ring = localRing = false;
+  return was;
+}
+
+bool takeRingChange(bool* on, const char** id, const char** kind) {
+  if (ring == ringReported) return false;
+  ringReported = ring;
+  if (on) *on = ring;
+  if (id) *id = ringId;
+  if (kind) *kind = ringKind;
+  return true;
+}
+
 void localTick(uint32_t now, bool linked) {
   if (ring) {
-    if (localRing && now - ringStart > LOCAL_RING_MAX_MS) ring = localRing = false;
+    uint32_t cap = !strcmp(ringKind, "timer") ? RING_CAP_TIMER_MS : RING_CAP_ALARM_MS;
+    if (localRing && now - ringStart > LOCAL_RING_MAX_MS) silence();
+    else if (now - ringStart > cap) silence();  // nobody stopped it: give up, whoever started it
     return;
   }
   for (int i = 0; i < nTimers; i++) {
     Timer& t = timers[i];
-    if (t.paused) continue;
+    if (t.paused || isQuiet(t.id)) continue;
     int32_t over = (int32_t)(now - t.endsAt);
     if (over >= 0 && (!linked || over > 2500)) {
       ring = localRing = true;
       ringStart = now;
+      copy(ringId, sizeof(ringId), t.id);
       copy(ringKind, sizeof(ringKind), "timer");
       copy(ringLabel, sizeof(ringLabel), t.label);
       timers[i] = timers[--nTimers];  // it's done counting
@@ -468,6 +505,7 @@ void localTick(uint32_t now, bool linked) {
     if (over >= 0 && (!linked || over > 2)) {
       ring = localRing = true;
       ringStart = now;
+      copy(ringId, sizeof(ringId), "local-alarm");
       copy(ringKind, sizeof(ringKind), "alarm");
       copy(ringLabel, sizeof(ringLabel), "WAKE UP");
       alarmIn = -1;
@@ -497,14 +535,23 @@ void onMessage(const char* type, JsonDocument& doc) {
       t.pausedLeft = left;
       t.endsAt = now + (uint32_t)(left * 1000.0f);
     }
+    // the relay's word wins, except about a ring that was already stopped here
     JsonArray r = doc["ring"].as<JsonArray>();
     bool was = ring;
-    ring = r.size() > 0;
-    localRing = false;  // the relay's word wins
+    JsonObject live;
+    for (JsonObject it : r)
+      if (!isQuiet(it["id"] | "")) {
+        live = it;
+        break;
+      }
+    ring = !live.isNull();
+    localRing = false;
     if (ring) {
-      copy(ringKind, sizeof(ringKind), r[0]["kind"] | "timer");
-      copy(ringLabel, sizeof(ringLabel), r[0]["label"] | "");
-      if (!was) ringStart = now;
+      const char* id = live["id"] | "";
+      if (!was || strcmp(id, ringId)) ringStart = now;
+      copy(ringId, sizeof(ringId), id);
+      copy(ringKind, sizeof(ringKind), live["kind"] | "timer");
+      copy(ringLabel, sizeof(ringLabel), live["label"] | "");
     }
     alarmIn = doc["alarm"] | -1;
     alarmAt = now;

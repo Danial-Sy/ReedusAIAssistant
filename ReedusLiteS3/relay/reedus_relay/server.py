@@ -366,7 +366,30 @@ class Hub:
                 return {"error": f"unknown provider {pid!r}"}
             rows = await asyncio.to_thread(llm.list_models, pid)
             err = next((r.get("error") for r in rows if r.get("error")), "")
-            return {"provider": pid, "models": [r for r in rows if r.get("id")], "error_note": err}
+            from reedus_relay import models_info
+            return {"provider": pid, "models": models_info.annotate(pid, [r for r in rows if r.get("id")]),
+                    "error_note": err}
+        if a == "llm.probe":                   # the app's "Test speed" for one model
+            from reedus_companion.cloud import providers
+            from reedus_relay import models_info
+            from reedus_relay.brain import usable
+            pid, model = str(req.get("provider") or ""), str(req.get("model") or "").strip()
+            if not providers.known(pid) or not model:
+                return {"error": "pick a provider and a model first"}
+            if not usable(pid):
+                return {"error": f"this relay has no {providers.get(pid)['name']} key yet"}
+            m = meter.Meter()
+
+            def _probe():
+                with meter.metering(m):
+                    return models_info.probe(pid, model)
+            try:
+                out = await asyncio.to_thread(_probe)
+            except Exception as e:                                   # noqa: BLE001
+                return {"error": f"{model} didn't answer: {type(e).__name__}: {str(e)[:160]}"}
+            if m.usd > 0:
+                await asyncio.to_thread(accounts.charge, aid, m.usd, f"speed test: {m.summary()}")
+            return {"ok": True, **out, "info": models_info.info(pid, model)}
         if a == "device.create":
             if not owner:
                 return {"error": "only the relay's owner can add a Lite"}
@@ -413,6 +436,14 @@ class Hub:
                 if req["patience"] not in {p["id"] for p in listening.PATIENCE}:
                     return {"error": f"unknown patience {req['patience']!r}"}
                 cur["patience"] = req["patience"]
+            if "mode" in req:
+                if req["mode"] not in {m["id"] for m in listening.MODES}:
+                    return {"error": f"unknown mode {req['mode']!r}"}
+                cur["mode"] = req["mode"]
+            if "head" in req:
+                if req["head"] not in {h["id"] for h in listening.HEAD}:
+                    return {"error": f"unknown choice {req['head']!r}"}
+                cur["head"] = req["head"]
             if "wake" in req:                  # how sure, 0.60-0.95
                 c = listening.valid_cutoff(req["wake"])
                 if c is None:
@@ -422,8 +453,8 @@ class Hub:
             await asyncio.to_thread(accounts.set_account_settings, aid, {"listen": cur})
             self.refresh_account(aid)
             acc2 = await asyncio.to_thread(accounts.account, aid)
-            for s in self.account_sessions(aid):     # the S3s take the new cutoff straight away
-                s.send({"type": "wake_cfg", "cutoff": listening.wake_cutoff(acc2)})
+            for s in self.account_sessions(aid):     # the S3s take the new settings straight away
+                s.send({"type": "wake_cfg", **listening.device_cfg(acc2)})
             return {"ok": True, "listen": listening.public(acc2)}
         if a == "think.set":
             from reedus_relay.brain import THINK_CHOICES, THINK_IDS
@@ -458,7 +489,8 @@ class Hub:
                 for k, v in patch.items():
                     s.send({"type": k, "level": v})
             return {"ok": True, **patch}
-        if a.startswith(("device.expr", "device.look", "device.draw", "device.ota", "device.state")):
+        if a.startswith(("device.expr", "device.look", "device.draw", "device.ota", "device.state",
+                          "device.ring_off")):
             return await self._device_control(a, req, aid, owner)
         if a == "voices":
             out = await asyncio.to_thread(speech.list_voices)
@@ -514,6 +546,10 @@ class Hub:
             if not owner:
                 return {"error": "only the relay's owner can update firmware"}
             return await asyncio.to_thread(self._fw_latest)
+        if a == "fw.check":
+            if not owner:
+                return {"error": "only the relay's owner can update firmware"}
+            return await asyncio.to_thread(self._fw_check)
         if a == "ledger":
             return {"ledger": await asyncio.to_thread(accounts.ledger, aid, int(req.get("limit") or 50)),
                     "balance": await asyncio.to_thread(accounts.balance, aid)}
@@ -532,6 +568,9 @@ class Hub:
         if s is None:
             return {"error": f"{dev['name']} is offline"}
         caps = s.hello.get("caps") or []
+        if a == "device.ring_off":     # the app's Stop button: end it here and on the Lite
+            s.stop_ringing()
+            return {"ok": True}
         if a == "device.expr":
             name = str(req.get("name") or "")
             hold = max(0.5, min(30.0, float(req.get("hold") or 3.0)))
@@ -657,8 +696,37 @@ class Hub:
                               "at": time.time()}
         return {"ok": True, "fw": uid, "size": len(data), "version": self.firmware[uid]["version"]}
 
+    def _fw_check(self) -> dict:
+        """Which commit the latest build was made from, without downloading it: the GitHub
+        release's details. CI stamps that commit into the version (0.3.0-s3.<sha>), so the app
+        can tell whether a Lite is already running it. {"sha": "6c5a42c", "published": iso}
+        or {"unknown": True} when the build doesn't come from a GitHub release."""
+        import re
+        import requests
+        cached = getattr(self, "_fw_check_cache", None)
+        if cached and time.time() - cached[0] < 60:
+            return cached[1]
+        url = config.env("RELAY_FW_URL", "https://github.com/Danial-Sy/ReedusAIAssistant/releases/"
+                                         "download/lite-fw-latest/firmware.bin")
+        m = re.match(r"https://github\.com/([^/]+)/([^/]+)/releases/download/([^/]+)/", url)
+        if not m:
+            return {"unknown": True}
+        try:
+            r = requests.get(f"https://api.github.com/repos/{m[1]}/{m[2]}/releases/tags/{m[3]}",
+                             headers={"Accept": "application/vnd.github+json"}, timeout=10)
+            j = r.json() if r.status_code == 200 else {}
+        except Exception as e:                                   # noqa: BLE001
+            return {"error": f"couldn't check for updates ({type(e).__name__})"}
+        sha = str(j.get("target_commitish") or "")
+        if not re.fullmatch(r"[0-9a-f]{7,40}", sha):
+            return {"unknown": True}
+        out = {"sha": sha[:7], "published": j.get("published_at") or ""}
+        self._fw_check_cache = (time.time(), out)
+        return out
+
     def _status(self, acc: dict) -> dict:
         from reedus_companion.cloud import providers
+        from reedus_relay import models_info
         from reedus_relay.brain import THINK_CHOICES, llm_choice, think_level, usable
         aid = acc["id"]
         pid, model = llm_choice(acc)
@@ -675,17 +743,19 @@ class Hub:
                          "ota": (live.info.get("ota") if live else None),
                          "doa": (live.info.get("doa") if live else None),
                          "glance": (live.info.get("glance") if live else None),
-                         "wake_near": (live.info.get("wake_near") if live else None)})
+                         "wake_near": (live.info.get("wake_near") if live else None),
+                         "ringing": bool(live and live.is_ringing())})
         _, rev = memory.bulletin(aid)
         bal = accounts.balance(aid)
         from reedus_relay import funding, vault
         return {"account": _public_account(acc), "balance": round(bal, 4), "billing": funding.billing_status(acc),
                 "low": bal < config.LOW_BALANCE_USD, "devices": devs,
                 "llm": {"provider": pid, "model": model, "label": providers.label(pid, model),
-                        "ready": usable(pid)},
+                        "ready": usable(pid), "info": models_info.info(pid, model)},
                 "think": think_level(acc), "think_choices": THINK_CHOICES,
                 "listen": listening.public(acc),
-                "providers": [p for p in providers.public() if usable(p["id"])],
+                "providers": [{**p, "models": models_info.annotate(p["id"], p.get("models") or [])}
+                              for p in providers.public() if usable(p["id"])],
                 "payments": funding.enabled(), "stripe_mode": vault.stripe_mode(),
                 "amounts": funding.AMOUNTS, "pairing": len(self.pairing),
                 "bulletin_rev": rev, "stt": speech.stt_provider(),

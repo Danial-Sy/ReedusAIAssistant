@@ -31,6 +31,9 @@ static int histN = 0, histI = 0;
 static float lastWorld = 0, lastRel = 0;
 static uint32_t lastVoiceAt = 0, lastPlayAt = 0;
 static int sustained = 0;
+// loudness: the loudest voice since he woke (falls ~1 dB/s), and how close to it a voice must be
+static float peakDb = -90.0f, nearDb = HEAD_NEAR_DB;
+static uint32_t peakAt = 0, homeAt = 0;
 
 // calibration: config.h's defaults, overridden by `cal` (saved in NVS, see store.cpp)
 static int centerUs = SERVO_CENTER_US, dir = SERVO_DIR, doaFront = DOA_FRONT_DEG, doaSign = DOA_SIGN;
@@ -126,6 +129,19 @@ static void pollDoa(uint32_t now) {
     if (!speech) sustained = 0;
     return;
   }
+  // too quiet to be someone at the desk: a voice in the next room. not for the head or the eyes
+  float db = audio::micDb();
+  float peakNow = peakDb - (now - peakAt) / 1000.0f;   // the peak fades ~1 dB/s
+  if (!ownVoice && db > peakNow) {
+    peakDb = db;
+    peakAt = now;
+    peakNow = db;
+  }
+  if (db < HEAD_MIN_DB || db < peakNow - nearDb) {
+    if (printDoa) Serial.printf("[doa]   too quiet (%.0f dB, needs %.0f): not following\n", db,
+                                max(HEAD_MIN_DB, peakNow - nearDb));
+    return;
+  }
   float world = wrap180(rel + cur);
   // while he talks, his speaker (in the base, firing straight out the front) is a voice at
   // world ~0. keep only readings well away from it: that's someone talking over him (usually
@@ -190,6 +206,10 @@ void begin() {
 void update() {
   uint32_t now = millis();
   pollDoa(now);
+  if (homeAt && (int32_t)(now - homeAt) >= 0) {
+    homeAt = 0;
+    if (!manual && mode == M_IDLE && fabsf(cur) > 1.0f) turnTo(0, 0, true);
+  }
   if (pending && now >= pendingAt) {
     pending = false;
     target = pendingTarget;
@@ -239,11 +259,20 @@ void setState(const char* s) {
   else if (!strcmp(s, "sleep")) mode = M_SLEEP;
   else mode = M_IDLE;
   if (mode == M_SLEEP && prev != M_SLEEP && !manual) turnTo(0, 400);  // settle in, face forward
+  // the conversation's over: in a moment, ease back to facing front
+  if (mode == M_IDLE && prev != M_IDLE) homeAt = millis() + HEAD_HOME_MS;
+  if (mode != M_IDLE) homeAt = 0;
 }
+
+void setNearDb(float db) { nearDb = constrain(db, 3.0f, 60.0f); }
 
 void onWake() {
   manual = false;
+  homeAt = 0;
   lastTrack = millis();  // the wake turn first; following starts after it
+  // whoever said the name sets the bar: they're the one talking to him
+  peakDb = max(audio::micDb(), peakDb - (millis() - peakAt) / 1000.0f);
+  peakAt = millis();
   float b;
   // whoever said the name: the readings during the last ~1.2 s that agree (his own voice is
   // already left out). the share is lower than in conversation: the name is short

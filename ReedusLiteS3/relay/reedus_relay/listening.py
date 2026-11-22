@@ -22,6 +22,27 @@ PATIENCE = [
     {"id": "very", "label": "Longest", "s": 2.6,
      "note": "Lets you pause and think a lot. Slower to answer."},
 ]
+# conversation: after he answers he keeps listening, so you can just reply. single: he answers
+# and goes back to idle; say his name to ask something else
+MODES = [
+    {"id": "conversation", "label": "Conversation",
+     "note": "After he answers he keeps listening for a few seconds, so you can just reply."},
+    {"id": "single", "label": "One question",
+     "note": "He answers and goes back to sleep. Say his name again to ask something else "
+             "(he still remembers what you just asked)."},
+]
+
+# who the head turns to: a voice must be within this many dB of the loudest one since he woke
+# (whoever said his name). someone in the next room is far quieter than you at the desk
+HEAD = [
+    {"id": "close", "label": "Close", "db": 6.0,
+     "note": "Only whoever's right there talking to him. Ignores the rest of the house."},
+    {"id": "normal", "label": "Normal", "db": 10.0,
+     "note": "People in the room. Voices from further away don't turn him."},
+    {"id": "anyone", "label": "Anyone", "db": 40.0,
+     "note": "Turns to any voice he picks up, even in the next room."},
+]
+
 # how sure the wake word must be, set exactly in the app (a slider). below 60% it wakes on
 # almost anything; above 95% it barely wakes at all
 WAKE_MIN, WAKE_MAX = 0.60, 0.95
@@ -60,7 +81,28 @@ def wake_cutoff(account: Optional[dict]) -> float:
     return valid_cutoff(_settings(account).get("wake")) or 0.0
 
 
+def mode_id(account: Optional[dict]) -> str:
+    v = _settings(account).get("mode")
+    return v if any(m["id"] == v for m in MODES) else "conversation"
+
+
+def head_id(account: Optional[dict]) -> str:
+    v = _settings(account).get("head")
+    return v if any(h["id"] == v for h in HEAD) else "normal"
+
+
+def head_near_db(account: Optional[dict]) -> float:
+    return next(h["db"] for h in HEAD if h["id"] == head_id(account))
+
+
+def device_cfg(account: Optional[dict]) -> dict:
+    """What the S3 is told (welcome / wake_cfg)."""
+    return {"cutoff": wake_cutoff(account), "head_near_db": head_near_db(account)}
+
+
 def public(account: Optional[dict]) -> dict:
-    return {"patience": patience_id(account), "patience_choices": PATIENCE,
+    return {"mode": mode_id(account), "mode_choices": MODES,
+            "patience": patience_id(account), "patience_choices": PATIENCE,
+            "head": head_id(account), "head_choices": HEAD,
             "wake": wake_cutoff(account) or DEFAULT_CUTOFF, "wake_default": DEFAULT_CUTOFF,
             "wake_min": WAKE_MIN, "wake_max": WAKE_MAX}

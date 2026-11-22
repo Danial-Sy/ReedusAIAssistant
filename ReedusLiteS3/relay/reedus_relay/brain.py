@@ -438,6 +438,12 @@ class Brain:
         text = backend.chat(msgs, REPLY_TOKENS, use_adapter=False, on_token=_token,
                             name="persona", cancel=cancel)
         timing["done"] = time.monotonic() - t0
+        if isinstance(timing.get("token"), float) and level == "fast" and not timing.get("search"):
+            try:                         # what this model's first word really takes (the app shows it)
+                from reedus_relay import models_info
+                models_info.record(*self.llm_choice(), timing["token"] - timing.get("prep", 0.0))
+            except Exception:                                    # noqa: BLE001
+                pass
         if cancel is not None and cancel.is_set():
             split.buf = ""
         else:

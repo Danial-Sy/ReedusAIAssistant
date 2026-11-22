@@ -29,6 +29,10 @@ bool playing();
 // 0..1 loudness of what's coming out right now, smoothed for the mouth
 float level();
 
+// how loud the mic beam is right now (dBFS): jumps up with a voice, falls back over ~0.3 s.
+// the head uses it to tell someone talking to him from a voice in the next room
+float micDb();
+
 // music: 24 kHz mono int16, its own deeper buffer. it ducks under speech, and while
 // setDuck(true) (someone is talking to Reedus). only in the 48 kHz I2S mode
 bool musicSupported();
