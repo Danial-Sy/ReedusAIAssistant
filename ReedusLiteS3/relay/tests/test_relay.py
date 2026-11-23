@@ -336,6 +336,14 @@ check(models_info.typical("gemini", "gemini-test") == (1.6, 3)
 from reedus_relay.brain import stable_system
 check(stable_system().endswith(stable_system()[-40:]) and "Today's date" not in stable_system(),
       "the cached part of the prompt has no clock in it")
+check("head swivels" in stable_system() and "no camera" in stable_system(),
+      "he knows his own body (the turning head, no camera)")
+from reedus_relay.brain import Brain
+_past = [{"role": "user", "content": "who won last night"},
+         {"role": "assistant", "content": "The Caps, 4-2.", "searched": True},
+         {"role": "user", "content": "nice"}, {"role": "assistant", "content": "Right?"}]
+check(Brain.searched_before(_past) == ["who won last night"],
+      "a turn that really searched is remembered as searched")
 got = []
 from reedus_relay.brain import face_tag
 check(face_tag("[Excited] Whoa! [weird] ok") == ("excited", " Whoa! [weird] ok"),

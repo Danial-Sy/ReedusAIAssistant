@@ -17,8 +17,8 @@ from reedus_companion.serve import persona
 from reedus_relay import config, memory
 
 LITE_VOICE = (
-    "Right now you're speaking out loud through Reedus Lite, your small desk body: a face of "
-    "lights, cat ears, a speaker. Everything you write is spoken, so talk, don't type: usually one "
+    "Right now you're speaking out loud through Reedus Lite, your small desk body. Everything "
+    "you write is spoken, so talk, don't type: usually one "
     "to three sentences, longer only when they ask for detail. No lists, no markdown, no emoji, "
     "no stage directions. Timers, alarms, reminders and lists are handled for you before a "
     "message reaches you. Never say your own name out loud: you wake up when you hear it, so "
@@ -31,6 +31,24 @@ LITE_VOICE = (
     "[sleepy], [excited], [smug], [shy], [curious], [wink] or [neutral]. For example: "
     "\"[excited] No way, you got the internship! That's huge.\" or \"[sad] Oh no, I'm sorry.\" Put a new tag "
     "in front of a later sentence only when your feeling changes. Tags are never spoken."
+)
+
+# what the Lite physically is. the persona's "never describe your own design" is about how he's
+# built to talk, not his body; without this he denied having a head that turns
+LITE_BODY = (
+    "Your body, as plain facts. Say them straight when asked, and if someone tells you about a "
+    "part of you, believe this list over your own guess. You're a desk bot shaped like a little "
+    "rounded TV-box head with cat ears, sitting on a base. Your head swivels: a servo in the base "
+    "turns it left and right, about 90 degrees each way, and it turns on its own toward whoever is "
+    "talking (four microphones on top of your head hear which direction a voice comes from). Your "
+    "eyes glance first and your head follows. You can't turn it on request, can't tilt or nod, and "
+    "you hold still while you listen. Your face is a 16 by 16 grid of LEDs behind a white skin: "
+    "eyes and a mouth that show your expressions and move while you talk, and it can show "
+    "drawings, animations and the weather from the app. Your speaker is in the front of your base. "
+    "You run on two rechargeable batteries or USB-C, with a power switch on the back. You have no "
+    "camera, so you can't see anything, and no wheels or arms, so you stay where you're put. You "
+    "think in the cloud over Wi-Fi, and your owner controls your face, voice and settings from a "
+    "web app."
 )
 
 # what the face can show (firmware face.cpp); wink is a one-off expression, not a mood
@@ -271,7 +289,7 @@ def stable_system() -> str:
     """The part of his system prompt that never changes: persona, how Lite talks, example
     replies. Built once per process."""
     if "text" not in _stable:
-        parts = [persona.build_stable_system(), LITE_VOICE]
+        parts = [persona.build_stable_system(), LITE_VOICE, LITE_BODY]
         try:
             from reedus_companion.cloud import persona_shots
             shots = persona_shots.block()
@@ -439,8 +457,16 @@ class Brain:
         msgs = [{"role": "system", "content": self.system(said, conversation, fact)}]
         # an empty turn (a reply cut off by "Reedus" before it said anything) makes Gemini
         # refuse the whole request ("Missing text in content"), so those never go in
-        msgs += [h for h in self.history[-2 * config.HISTORY_TURNS:] if (h.get("content") or "").strip()]
+        past = [h for h in self.history[-2 * config.HISTORY_TURNS:] if (h.get("content") or "").strip()]
+        msgs += [{"role": h["role"], "content": h["content"]} for h in past]
         msgs.append({"role": "user", "content": said})
+        looked_up = self.searched_before(past)
+        if looked_up:
+            # history is text only, so without this he reads an earlier answer, sees no results in
+            # front of him, and "admits" he never searched (11-23)
+            msgs[0]["content"] += ("\n\nEarlier in this conversation you really did search the web "
+                                   "to answer: " + "; ".join(f'"{q}"' for q in looked_up)
+                                   + ". Those answers came from real results.")
         if self.asked_last_time():
             # the prompt asks for fewer questions; this makes "never two in a row" a sure thing
             msgs[0]["content"] += ("\n\nYour last reply ended with a question. Don't ask one this "
@@ -496,7 +522,8 @@ class Brain:
         # history keeps the tags, so he keeps seeing (and copying) them; what's said and saved doesn't.
         # a reply that was dropped (they kept talking, or interrupted) isn't remembered
         if cancel is None or not cancel.is_set():
-            self._remember(said, re.sub(r"\s+", " ", _MD.sub("", text or "")).strip())
+            self._remember(said, re.sub(r"\s+", " ", _MD.sub("", text or "")).strip(),
+                           searched=bool(timing.get("searched")))
         return speakable(face_tag(text)[1])
 
     SEARCH_NOTE = ("\n\nThey want this looked up: use web search before you answer, then answer "
@@ -531,12 +558,24 @@ class Brain:
             last = next((h["content"] for h in reversed(self.history) if h["role"] == "assistant"), "")
         return speakable(face_tag(last)[1]).rstrip(" \"')").endswith("?")
 
-    def _remember(self, said: str, reply: str) -> None:
+    @staticmethod
+    def searched_before(past: List[dict]) -> List[str]:
+        """What they asked on the turns where a web search really ran (newest last, max 3)."""
+        out = []
+        for i, h in enumerate(past):
+            if h.get("role") == "assistant" and h.get("searched") and i > 0:
+                q = re.sub(r"\s+", " ", past[i - 1].get("content") or "").strip()
+                out.append(q[:80] + ("..." if len(q) > 80 else ""))
+        return out[-3:]
+
+    def _remember(self, said: str, reply: str, searched: bool = False) -> None:
         if not (said or "").strip() or not (reply or "").strip():
             return
         with self.lock:
-            self.history += [{"role": "user", "content": said},
-                             {"role": "assistant", "content": reply}]
+            a = {"role": "assistant", "content": reply}
+            if searched:
+                a["searched"] = True            # never sent to the LLM as-is; see reply()
+            self.history += [{"role": "user", "content": said}, a]
             self.history = self.history[-2 * config.HISTORY_TURNS:]
 
     def new_conversation(self) -> None:
