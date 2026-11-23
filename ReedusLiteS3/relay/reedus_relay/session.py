@@ -30,6 +30,14 @@ from reedus_relay.brain import DEEP, Brain, directives, is_goodbye
 
 IDLE, LISTEN, BUSY = "idle", "listen", "busy"
 FRAME_S = config.FRAME_SAMPLES / config.RATE
+_TTS_SLOTS: Optional[asyncio.Semaphore] = None  # Inworld streams, relay-wide (FIFO: in order)
+
+
+def _tts_slots() -> asyncio.Semaphore:
+    global _TTS_SLOTS
+    if _TTS_SLOTS is None:
+        _TTS_SLOTS = asyncio.Semaphore(config.TTS_CONCURRENCY)
+    return _TTS_SLOTS
 OUT_OF_CREDIT = ("I'm out of credit, so I can't think right now. "
                  "Add some in the app and I'm all yours.")
 TROUBLE = "Sorry, my brain hiccuped there. Try me again in a second."
@@ -813,7 +821,19 @@ class Session:
                     await pending.put(s)
                     continue
                 frames: asyncio.Queue = asyncio.Queue()
+                # wait for an Inworld stream, first come first served: sentence 4 can't start
+                # before sentence 3. the slot frees when this sentence's audio is all made
+                # (faster than he speaks it), so the next one is ready before it's needed
+                slots = _tts_slots()
+                await slots.acquire()
+                if self._stale(cancel):
+                    slots.release()
+                    await pending.put(None)
+                    while await sentences.get() is not None:
+                        pass
+                    return
                 task = asyncio.ensure_future(asyncio.to_thread(self._synth, s, frames, m, cancel))
+                task.add_done_callback(lambda _t, sl=slots: sl.release())
                 await pending.put((s, frames, task))
 
         async def play():
@@ -870,14 +890,28 @@ class Session:
             return self.voice_factory()
 
     def _synth(self, text: str, frames: asyncio.Queue, m, cancel) -> None:
+        sent = 0
         try:
-            with meter.metering(m):
-                for fr in self._voice().frames(text):
-                    if self._stale(cancel):
+            for attempt in range(3):
+                if self._stale(cancel):
+                    break
+                try:
+                    with meter.metering(m):
+                        for fr in self._voice().frames(text):
+                            if self._stale(cancel):
+                                break
+                            sent += 1
+                            self.loop.call_soon_threadsafe(frames.put_nowait, fr)
+                    break
+                except Exception as e:                       # noqa: BLE001
+                    # refused or dropped before any audio (429 at the concurrency limit,
+                    # a 5xx): try again. once audio has gone out a retry would repeat words
+                    retry = sent == 0 and getattr(e, "retryable", True) and attempt < 2
+                    print(f"[relay] voice failed{', retrying' if retry else ''}: "
+                          f"{type(e).__name__}: {e}", flush=True)
+                    if not retry:
                         break
-                    self.loop.call_soon_threadsafe(frames.put_nowait, fr)
-        except Exception as e:                                   # noqa: BLE001
-            print(f"[relay] voice failed: {type(e).__name__}: {e}", flush=True)
+                    time.sleep(0.25 * (attempt + 1))
         finally:
             self.loop.call_soon_threadsafe(frames.put_nowait, None)
 

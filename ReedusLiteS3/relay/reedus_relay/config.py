@@ -61,6 +61,10 @@ FRAME_SAMPLES = 320
 LEAD_S = env_float("RELAY_LEAD_S", 1.0)           # speech sent ahead of the device's playhead:
                                                    # a Wi-Fi stall shorter than this is never heard
 SPEECH_BATCH = int(env_float("RELAY_SPEECH_BATCH", 3))  # 20 ms frames per websocket message
+# Inworld streams open at once across the whole relay. every sentence of a reply used to start
+# together (a long answer = 6+ streams) and ran into the account's concurrency limit. two is
+# the sentence he's saying plus the next one, which is all playback ever needs
+TTS_CONCURRENCY = max(1, int(env_float("RELAY_TTS_CONCURRENCY", 2)))
 PREBUFFER_S = 0.12
 
 # listening
