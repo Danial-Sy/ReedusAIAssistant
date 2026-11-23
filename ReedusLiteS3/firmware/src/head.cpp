@@ -143,10 +143,12 @@ static void pollDoa(uint32_t now) {
     return;
   }
   float world = wrap180(rel + cur);
-  // while he talks, his speaker (in the base, firing straight out the front) is a voice at
-  // world ~0. keep only readings well away from it: that's someone talking over him (usually
-  // saying "Reedus"), which is exactly who the head should turn to
-  if (ownVoice && fabsf(world) < HEAD_SPEAKER_CONE_DEG) return;
+  // while he talks (and for HEAD_ECHO_GUARD_MS after), nothing he hears steers the head. his
+  // echo doesn't come from straight ahead like the old cone assumed: in the real head it reads
+  // well off to one side (the array's own LEDs swing over to it mid-reply), so those readings
+  // filled the history and the next turn went to the echo instead of the person. someone who
+  // says "Reedus" over him is found after he goes quiet instead (onWake defers the turn)
+  if (ownVoice) return;
   histDeg[histI] = world;
   histAt[histI] = now;
   histI = (histI + 1) % HIST;
@@ -203,9 +205,13 @@ void begin() {
   lastUpdate = millis();
 }
 
+static void deferredWake(uint32_t now);
+
 void update() {
   uint32_t now = millis();
+  if (audio::playing()) lastPlayAt = now;
   pollDoa(now);
+  deferredWake(now);
   if (homeAt && (int32_t)(now - homeAt) >= 0) {
     homeAt = 0;
     if (!manual && mode == M_IDLE && fabsf(cur) > 1.0f) turnTo(0, 0, true);
@@ -266,6 +272,23 @@ void setState(const char* s) {
 
 void setNearDb(float db) { nearDb = constrain(db, 3.0f, 60.0f); }
 
+static bool echoNow(uint32_t now) {
+  return audio::playing() || now - lastPlayAt < HEAD_ECHO_GUARD_MS;
+}
+
+// the name was said over him: the readings from then are all echo, so wait until he's quiet
+// (the relay flushes his speech on a barge-in) and turn to whoever keeps talking
+static bool wakeDeferred = false;
+static uint32_t wakeDeferredAt = 0;
+
+static void wakeTurn(float b) {
+  face::hearVoice(wrap180(b - cur));
+  // the array's bearing runs a little wide, so turn most of the way and let the eyes
+  // (already looking at the voice) cover the rest. better short than past you
+  float want = constrain(cur + wrap180(b - cur) * HEAD_TURN_SCALE, -HEAD_LIMIT_DEG, HEAD_LIMIT_DEG);
+  if (fabsf(want - cur) > HEAD_DEADBAND_DEG) turnTo(want, HEAD_FOLLOW_DELAY_MS);
+}
+
 void onWake() {
   manual = false;
   homeAt = 0;
@@ -273,15 +296,32 @@ void onWake() {
   // whoever said the name sets the bar: they're the one talking to him
   peakDb = max(audio::micDb(), peakDb - (millis() - peakAt) / 1000.0f);
   peakAt = millis();
+  if (echoNow(millis())) {
+    wakeDeferred = true;
+    wakeDeferredAt = millis();
+    return;
+  }
+  wakeDeferred = false;
   float b;
   // whoever said the name: the readings during the last ~1.2 s that agree (his own voice is
   // already left out). the share is lower than in conversation: the name is short
   if (!recentBearing(1200, b, 2, 0.5f) && !recentBearing(2000, b, 1, 0.4f)) return;
-  face::hearVoice(wrap180(b - cur));
-  // the array's bearing runs a little wide, so turn most of the way and let the eyes
-  // (already looking at the voice) cover the rest. better short than past you
-  float want = constrain(cur + wrap180(b - cur) * HEAD_TURN_SCALE, -HEAD_LIMIT_DEG, HEAD_LIMIT_DEG);
-  if (fabsf(want - cur) > HEAD_DEADBAND_DEG) turnTo(want, HEAD_FOLLOW_DELAY_MS);
+  wakeTurn(b);
+}
+
+static void deferredWake(uint32_t now) {
+  if (!wakeDeferred) return;
+  if (now - wakeDeferredAt > HEAD_WAKE_DEFER_MS) {  // they stopped talking: nothing to go on
+    wakeDeferred = false;
+    return;
+  }
+  if (echoNow(now) || manual) return;
+  float b;
+  // only readings since he went quiet are in the history (ownVoice never goes in)
+  if (recentBearing(now - lastPlayAt, b, 3, 0.5f)) {
+    wakeDeferred = false;
+    wakeTurn(b);
+  }
 }
 
 void look(float worldDeg) {

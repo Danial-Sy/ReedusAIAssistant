@@ -120,9 +120,13 @@ class AnthropicBackend(CloudBackend):
         if client is None:
             raise CloudUnavailable("claude backend is closed", provider="anthropic")
 
+        self.last_searched = False if grounded else None   # did the web search really run
         if on_token is None and cancel is None:
             msg = self._call(lambda k: client.messages.create(**k), kw, _OPTIONAL)
-            return _from_message(msg)
+            out = _from_message(msg)
+            if grounded:
+                self.last_searched = out[3] > 0
+            return out
 
         pieces: List[str] = []
         final = None
@@ -144,6 +148,8 @@ class AnthropicBackend(CloudBackend):
         if final is None:                    # cancelled mid-reply
             return "".join(pieces), 0, 0, 0
         text, n_in, n_out, searches = _from_message(final)
+        if grounded:
+            self.last_searched = searches > 0
         return text or "".join(pieces), n_in, n_out, searches
 
 

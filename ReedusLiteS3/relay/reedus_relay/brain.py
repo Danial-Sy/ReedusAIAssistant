@@ -203,6 +203,43 @@ _SEARCH_CMD = re.compile(
     r"|^\W*(?:(?:can|could|would) you |please |go )google\s+\S", re.I)
 
 
+# asking for a search anywhere in the sentence, in the ways people actually say it: "search the
+# best weapon in BG3", "can you search what time it opens", "... search it up", "google who won".
+# the words stay in the question. "how do I search for files" / "my search history" don't count
+_SEARCH_ASK = re.compile(
+    r"\b(?:search|google)\s+(?:it|that|this)\s+up\b"
+    r"|\b(?:look|check)\s+(?:it|that|this)\s+up\b"
+    r"|\b(?:search|google)\s+(?:up|for|on|about|online|the|a|an|what|who|whose|how|when|where|"
+    r"which|why|whether|if|is|are|does|do)\b"
+    r"|\b(?:look|check)\s+up\b"
+    r"|^\W*(?:(?:okay|ok|alright|so|hey)[\s,]+)*(?:(?:can|could|would) you |please |go )?"
+    r"(?:search|google)\s+\S", re.I)
+_SEARCH_HOWTO = re.compile(
+    r"\b(?:how|where) (?:do|can|should|would|could) (?:i|you|we|they|people) "
+    r"(?:\w+ ){0,2}(?:search|google|look)\b"
+    r"|\b(?:search|google) (?:history|histories|bars?|engines?|results?|terms?|party|warrant)\b", re.I)
+
+
+def asks_search(said: str) -> bool:
+    t = said or ""
+    return bool(_SEARCH_ASK.search(t)) and not _SEARCH_HOWTO.search(t)
+
+
+# a reply that only promises a search ("Okay, searching now!", "Let me look that up") when no
+# search ran: the model said it would and then couldn't. the brain runs it again with the search
+# tool on, so the promise is kept
+_PROMISED_SEARCH = re.compile(
+    r"\b(?:search(?:ing)?(?: (?:it|that|this|for (?:it|that|you)))?(?: (?:now|up|real quick|quickly))?"
+    r"|look(?:ing)? (?:it|that|this) up|pull(?:ing)? (?:it|that|this) up|check(?:ing)? (?:on )?(?:it|that|this)"
+    r"|let me (?:check|look|find|see)|i'?ll (?:check|look|find)|one (?:sec|second|moment)|hang on|give me a (?:sec|second|moment))\b",
+    re.I)
+
+
+def promised_search(reply: str) -> bool:
+    t = speakable(face_tag(reply or "")[1])
+    return bool(t) and len(t.split()) <= 25 and bool(_PROMISED_SEARCH.search(t))
+
+
 def directives(said: str) -> tuple:
     """(think, search, the rest). "think about this before you answer and search the
     internet, who won last night" -> (True, True, "who won last night"). Just the directive
@@ -216,7 +253,7 @@ def directives(said: str) -> tuple:
                 break
             think, search = think or bool(m.group("t")), search or bool(m.group("s"))
             rest = (rest[:m.start()] + rest[m.end():]).strip()
-    if _SEARCH_CMD.match(rest):
+    if _SEARCH_CMD.match(rest) or asks_search(rest):
         search = True
     return think, search, rest.strip(" ,")
 
@@ -432,11 +469,19 @@ class Brain:
         level = think if think in THINK_IDS else think_level(self.account)
         apply_think(backend, level)
         timing["think"] = level
-        timing["search"] = bool(getattr(backend, "_search", False))
         timing["prep"] = time.monotonic() - t0
-        # the example replies are already in the stable part of the system prompt
-        text = backend.chat(msgs, REPLY_TOKENS, use_adapter=False, on_token=_token,
-                            name="persona", cancel=cancel)
+        text = self._ask(backend, msgs, _token, cancel, search=bool(getattr(backend, "_search", False)),
+                         forced=search)
+        if (searchable and not timing.get("search") and not (cancel is not None and cancel.is_set())
+                and promised_search(text)):
+            # he said he'd look it up but had no search tool this turn: keep the promise. what he
+            # already said ("one sec, searching") stays as the filler
+            split.flush()
+            timing["retried"] = True
+            msgs = msgs + [{"role": "assistant", "content": text}]
+            backend._search = True
+            text = text + " " + self._ask(backend, msgs, _token, cancel, search=True, forced=True,
+                                          follow_up=True)
         timing["done"] = time.monotonic() - t0
         if isinstance(timing.get("token"), float) and level == "fast" and not timing.get("search"):
             try:                         # what this model's first word really takes (the app shows it)
@@ -453,6 +498,32 @@ class Brain:
         if cancel is None or not cancel.is_set():
             self._remember(said, re.sub(r"\s+", " ", _MD.sub("", text or "")).strip())
         return speakable(face_tag(text)[1])
+
+    SEARCH_NOTE = ("\n\nThey want this looked up: use web search before you answer, then answer "
+                   "with what you found, specific and short. Don't announce that you're searching; "
+                   "that's already been said out loud.")
+    FOLLOW_NOTE = ("\n\nYou just told them you'd look it up. Search the web now and give the answer; "
+                   "don't repeat that you're searching.")
+
+    def _ask(self, backend, msgs, on_token, cancel, *, search: bool, forced: bool = False,
+             follow_up: bool = False) -> str:
+        """One call to the LLM. With search on, the system prompt says to really use it (a fast
+        model handed the tool often just says it's searching and stops). Records in timing
+        whether a search really ran."""
+        if search:
+            msgs = [{**msgs[0], "content": msgs[0]["content"]
+                     + (self.FOLLOW_NOTE if follow_up else self.SEARCH_NOTE if forced else "")}] + msgs[1:]
+        if hasattr(backend, "last_searched"):
+            backend.last_searched = None
+        # the example replies are already in the stable part of the system prompt
+        text = backend.chat(msgs, REPLY_TOKENS, use_adapter=False, on_token=on_token,
+                            name="persona", cancel=cancel)
+        self.timing["search"] = bool(search) or bool(self.timing.get("search"))
+        if search:
+            ran = getattr(backend, "last_searched", None)
+            if ran is not None:
+                self.timing["searched"] = bool(ran) or bool(self.timing.get("searched"))
+        return text or ""
 
     def asked_last_time(self) -> bool:
         """Did his previous reply (this conversation) end on a question?"""

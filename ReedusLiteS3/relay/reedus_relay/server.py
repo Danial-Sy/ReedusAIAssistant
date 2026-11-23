@@ -490,7 +490,7 @@ class Hub:
                     s.send({"type": k, "level": v})
             return {"ok": True, **patch}
         if a.startswith(("device.expr", "device.look", "device.draw", "device.ota", "device.state",
-                          "device.ring_off")):
+                          "device.ring_off", "device.cal")):
             return await self._device_control(a, req, aid, owner)
         if a == "voices":
             out = await asyncio.to_thread(speech.list_voices)
@@ -589,6 +589,22 @@ class Hub:
             s.send({"type": "look", "angle": angle})
             s.info["look"] = {"angle": angle, "at": time.time()}
             return {"ok": True, "angle": angle}
+        if a == "device.cal":         # hearing calibration: which way is straight ahead
+            if "cal" not in caps:
+                return {"error": "this Lite's firmware is too old for that: update it first"}
+            op = str(req.get("op") or "")
+            if op not in ("front", "flip", "reset", ""):
+                return {"error": "unknown calibration step"}
+            before = (s.info.get("cal") or {}).get("at", 0)
+            s.send({"type": "cal", "op": op})
+            for _ in range(30):                     # the Lite answers within a few hundred ms
+                await asyncio.sleep(0.1)
+                got = s.info.get("cal") or {}
+                if got.get("at", 0) > before:
+                    if got.get("error"):
+                        return {"error": got["error"]}
+                    return {"ok": True, "front": got.get("front"), "sign": got.get("sign")}
+            return {"error": "he didn't answer; try again"}
         if a == "device.draw":
             if "draw" not in caps:
                 return {"error": "this Lite's firmware can't show drawings yet: flash the new "

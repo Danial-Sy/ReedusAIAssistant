@@ -257,6 +257,32 @@ static void handleText(const char* txt, size_t len) {
     face::setBrightness(doc["level"] | 100);
   } else if (!strcmp(t, "look")) {
     head::look(doc["angle"] | 0.0f);
+  } else if (!strcmp(t, "cal")) {
+    // the app's hearing calibration (the serial console's `cal front` / `cal doaflip`):
+    // "front" = the voice he heard last (within 10 s) is straight ahead
+    head::Cal c = head::cal();
+    const char* op = doc["op"] | "";
+    const char* err = "";
+    if (!strcmp(op, "front")) {
+      int raw;
+      uint32_t age;
+      if (head::lastRawDoa(raw, age) && age < 10000) c.doaFront = raw;
+      else err = "talk to him from straight in front first, then tap it within 10 s";
+    } else if (!strcmp(op, "flip")) {
+      c.doaSign = -c.doaSign;
+    } else if (!strcmp(op, "reset")) {
+      c.doaFront = DOA_FRONT_DEG;
+      c.doaSign = DOA_SIGN;
+    } else if (op[0]) {
+      err = "unknown calibration step";
+    }
+    if (!err[0] && op[0]) head::setCal(c, true);
+    c = head::cal();
+    char b[160];
+    snprintf(b, sizeof(b), "{\"type\":\"cal\",\"front\":%d,\"sign\":%d,\"error\":\"%s\"}",
+             c.doaFront, c.doaSign, err);
+    ws.sendTXT(b);
+    Serial.printf("[head] hearing calibration %s: front %d sign %+d %s\n", op, c.doaFront, c.doaSign, err);
   } else if (!strcmp(t, "draw")) {
     if (!strcmp(doc["op"] | "", "clear")) face::artClear();
   } else if (!strcmp(t, "ota")) {
@@ -312,6 +338,7 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t len) {
       if (wake::ready()) hello["caps"].add("wake");  // we can say {"type":"wake"} ourselves
       hello["caps"].add("draw");  // drawings / animations from the app (binary kind 3)
       hello["caps"].add("ota");   // firmware updates from the app
+      hello["caps"].add("cal");   // hearing calibration from the app
       hello["device"] = DEVICE_NAME;
       hello["fw"] = FW_VERSION;
       hello["caps"].add("pair");  // no token: the relay shows a code and hands one over
@@ -504,10 +531,13 @@ void update() {
   uint32_t age;
   if (now - lastDoa > 250 && head::lastVoice(world, rel, age) && age < 300) {
     lastDoa = now;
-    char b[112];
+    char b[140];
+    int raw = -1;
+    uint32_t rawAge;
+    if (!head::lastRawDoa(raw, rawAge)) raw = -1;
     snprintf(b, sizeof(b),
-             "{\"type\":\"doa\",\"angle\":%.0f,\"rel\":%.0f,\"head\":%.0f,\"speech\":true}", world,
-             rel, head::angle());
+             "{\"type\":\"doa\",\"angle\":%.0f,\"rel\":%.0f,\"head\":%.0f,\"raw\":%d,\"speech\":true}",
+             world, rel, head::angle(), raw);
     ws.sendTXT(b);
   }
   if (now - lastBatt > 60000 || (battery::percent() != lastSentBatt && now - lastBatt > 5000)) {

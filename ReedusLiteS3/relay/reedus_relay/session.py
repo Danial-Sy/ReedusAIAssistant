@@ -81,6 +81,15 @@ def is_stop(said: str) -> bool:
     return bool(_STOP.match(said or ""))
 
 
+
+def _search_note(bt: dict) -> str:
+    """the turn log's word on the web search: was it on, and did it really run"""
+    if not bt.get("search"):
+        return ""
+    ran = bt.get("searched")
+    note = ", searched" if ran else ", search on but not used" if ran is False else ", search on"
+    return note + (" (after promising one)" if bt.get("retried") else "")
+
 class Session:
     def __init__(self, hub, ws, device: dict, account: dict, hello: dict, voice_factory,
                  brain: Optional[Brain] = None, wake=None, assistant=None, stt=None):
@@ -351,8 +360,8 @@ class Session:
                 self.wake.reset()
                 if self.wake.gate_opened():
                     self.on_wake()
-        elif t in ("status", "battery", "doa", "music"):
-            self.info[t] = {**msg, "at": time.time()} if t == "doa" else msg
+        elif t in ("status", "battery", "doa", "music", "cal"):
+            self.info[t] = {**msg, "at": time.time()} if t in ("doa", "cal") else msg
         elif t == "ota":                     # a firmware update's progress, for the app
             self.info["ota"] = {**(self.info.get("ota") or {}), **msg, "at": time.time()}
             if msg.get("state") in ("done", "error"):
@@ -701,7 +710,7 @@ class Session:
                     return f"{int(bt[k] * 1000)}" if isinstance(bt.get(k), float) else "-"
                 phases = ("fast path" if bt.get("fast") else
                           f"prep {_ms('prep')}, first token {_ms('token')}, first sentence "
-                          f"{_ms('sentence')}{', searched' if bt.get('search') else ''}"
+                          f"{_ms('sentence')}{_search_note(bt)}"
                           f"{', thinking ' + bt['think'] if bt.get('think') not in (None, 'fast') else ''}")
                 voice_ms = (int((self.t_first_audio - t_heard - bt['sentence']) * 1000)
                             if isinstance(bt.get("sentence"), float) else None)

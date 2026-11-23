@@ -136,8 +136,11 @@
 #define HEAD_NEW_SPEAKER_DEG 45.0f // further than this: someone else is talking, turn at full speed
 #define HEAD_CLUSTER_DEG 20.0f     // readings within this of each other are the same voice
 #define HEAD_CLUSTER_SHARE 0.6f    // the voice must be this share of recent readings to count
-#define HEAD_ECHO_GUARD_MS 350     // while he talks and this long after, his own echo is around...
-#define HEAD_SPEAKER_CONE_DEG 35.0f  // ...so voices within this of the base's front are ignored
+#define HEAD_ECHO_GUARD_MS 900     // while he talks and this long after, what the array hears is
+                                   // mostly his own echo (it reads off to one side, not straight
+                                   // ahead), and the XVF's DoA lags: none of it steers the head
+#define HEAD_WAKE_DEFER_MS 3500    // "Reedus" said over him: turn to whoever keeps talking once
+                                   // he's quiet, for this long
 #define HEAD_DETACH_MS 500         // stop pulsing once there, an idle SG90 buzzes
 // who the head turns to: a voice only counts if it's within HEAD_NEAR_DB of the loudest voice
 // since he woke (whoever said his name, close by) and louder than HEAD_MIN_DB. someone in the

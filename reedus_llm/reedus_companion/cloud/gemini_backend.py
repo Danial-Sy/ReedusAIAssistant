@@ -234,6 +234,8 @@ class GeminiBackend:
         if system:
             kwargs["system_instruction"] = system
         grounded = bool(self._search and not is_router)
+        if not is_router:
+            self.last_searched = False if grounded else None   # did Google Search really run
         if grounded:
             kwargs["tools"] = [{"type": "google_search"}]
 
@@ -289,6 +291,8 @@ class GeminiBackend:
         wall = time.perf_counter() - t0
         n_in = int(usage.get("prompt_tokens") or _estimate_tokens(system, turns))
         n_out = int(usage.get("completion_tokens") or _estimate_tokens("", [{"content": reply}]))
+        if grounded and not is_router and usage_src is not None:
+            self.last_searched = _had_citations(usage_src)
         try:
             budget.record_tokens(self.model, n_in, n_out,
                                  grounded=grounded and _had_citations(usage_src))
@@ -367,6 +371,8 @@ class GeminiBackend:
                       f"using {nxt!r}", flush=True)
                 _THINK_LEARNED[self.model] = level = nxt
         reply = "".join(pieces).strip()
+        if grounded and not is_router:
+            self.last_searched = cited
         wall = time.perf_counter() - t0
         n_in = int(usage.get("prompt_tokens") or _estimate_tokens(system, turns))
         n_out = int(usage.get("completion_tokens") or _estimate_tokens("", [{"content": reply}]))

@@ -1228,6 +1228,12 @@ const Ctl = (() => {
     svg.addEventListener("pointerup", (e) => { if (!drag) return; drag = false; look(angleAt(e)); });
     svg.addEventListener("pointercancel", () => { drag = false; });
     $("#look-center").addEventListener("click", () => look(0));
+    const calStep = async (op, ok) => {
+      const r = await send("device.cal", { op });
+      if (r && r.ok) toast(ok(r));
+    };
+    $("#cal-front").addEventListener("click", () => calStep("front", () => "Got it: that's straight ahead now"));
+    $("#cal-flip").addEventListener("click", () => calStep("flip", () => "Flipped left and right"));
     $("#look-voice").addEventListener("click", () => {
       const d = device();
       if (d && d.doa && d.doa.angle != null) look(Math.max(-90, Math.min(90, Math.round(d.doa.angle))));
@@ -1250,6 +1256,14 @@ const Ctl = (() => {
       const [x, y] = toXY(Math.max(-90, Math.min(90, d.doa.angle)));
       doa.setAttribute("cx", x); doa.setAttribute("cy", y); doa.setAttribute("opacity", "1");
     } else doa.setAttribute("opacity", "0");
+    const hear = $("#hear-read");
+    if (hear) {
+      if (fresh) {
+        const a = Math.round(d.doa.angle);
+        const where = Math.abs(a) < 8 ? "straight ahead" : `${Math.abs(a)}° to his ${a > 0 ? "left" : "right"}`;
+        hear.textContent = `Last voice: ${where}` + (d.doa.raw != null && d.doa.raw >= 0 ? ` (array reads ${d.doa.raw}°)` : "");
+      } else hear.textContent = "He hasn't heard anyone lately";
+    }
   }
   async function look(angle) {
     lookTarget = angle;
