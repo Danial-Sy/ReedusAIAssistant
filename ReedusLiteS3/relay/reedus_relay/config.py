@@ -58,7 +58,9 @@ DATABASE_URL = env("DATABASE_URL")
 # audio, same wire format as the run box (ReedusLite/PROTOCOL.md)
 RATE = 16000
 FRAME_SAMPLES = 320
-LEAD_S = env_float("RELAY_LEAD_S", 0.35)          # speech sent ahead of the device's playhead
+LEAD_S = env_float("RELAY_LEAD_S", 1.0)           # speech sent ahead of the device's playhead:
+                                                   # a Wi-Fi stall shorter than this is never heard
+SPEECH_BATCH = int(env_float("RELAY_SPEECH_BATCH", 3))  # 20 ms frames per websocket message
 PREBUFFER_S = 0.12
 
 # listening

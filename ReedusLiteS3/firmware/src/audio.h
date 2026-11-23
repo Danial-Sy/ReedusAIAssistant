@@ -24,6 +24,7 @@ void setVolume(int level);                          // 0-100
 int volume();
 uint32_t bufferedMs();
 uint32_t underruns();
+uint32_t overflowMs();  // speech thrown away because the buffer was full (should stay 0)
 bool playing();
 
 // 0..1 loudness of what's coming out right now, smoothed for the mouth

@@ -48,6 +48,9 @@ static portMUX_TYPE ringMux = portMUX_INITIALIZER_UNLOCKED;
 static volatile bool isPlaying = false;
 static volatile uint32_t nUnderruns = 0;
 static volatile uint32_t drainedAt = 0;  // millis() the ring last ran dry mid-stream
+static volatile uint32_t nOverflow = 0;  // samples dropped on a full ring
+static volatile bool lateRestart = false;  // ran dry mid-reply: build a deeper cushion first
+static volatile uint32_t lastPushAt = 0;   // millis() speech last arrived
 static volatile float gain = 0.5f;
 static volatile int vol = DEFAULT_VOLUME;
 static volatile float lvl = 0.0f;
@@ -136,12 +139,15 @@ static void ringPush(const int16_t* s, size_t n) {
   if (!isPlaying && drainedAt && millis() - drainedAt < 300) {
     nUnderruns++;
     drainedAt = 0;
+    lateRestart = true;
   }
+  lastPushAt = millis();
   portENTER_CRITICAL(&ringMux);
   for (size_t i = 0; i < n; i++) {
     if (rCount == PLAY_CAP) {  // full: drop the oldest, the server's pacing shouldn't allow it
       rTail = (rTail + 1) % PLAY_CAP;
       rCount--;
+      nOverflow++;
     }
     ring[rHead] = s[i];
     rHead = (rHead + 1) % PLAY_CAP;
@@ -151,9 +157,18 @@ static void ringPush(const int16_t* s, size_t n) {
 }
 
 static size_t ringPop(int16_t* out, size_t n) {
+  uint32_t nowMs = millis();
   portENTER_CRITICAL(&ringMux);
   size_t got = 0;
-  if (!isPlaying && rCount >= PREBUFFER) isPlaying = true;
+  // after a mid-reply dropout, restarting on the usual 120 ms just stutters (play a little,
+  // run dry, play a little): that chopping is what sounds garbled. wait for a real cushion
+  // (a tail shorter than the cushion with nothing more coming plays anyway, or it'd sit here
+  // and come out at the start of the next reply)
+  if (!isPlaying && rCount &&
+      (rCount >= (lateRestart ? PREBUFFER * 3 : PREBUFFER) || nowMs - lastPushAt > 150)) {
+    isPlaying = true;
+    lateRestart = false;
+  }
   if (isPlaying) {
     got = n < rCount ? n : rCount;
     for (size_t i = 0; i < got; i++) {
@@ -391,6 +406,7 @@ void flush() {
   rHead = rTail = rCount = 0;
   isPlaying = false;
   drainedAt = 0;
+  lateRestart = false;
   portEXIT_CRITICAL(&ringMux);
   haveOdd = false;
 }
@@ -412,6 +428,7 @@ uint32_t bufferedMs() {
 }
 
 uint32_t underruns() { return nUnderruns; }
+uint32_t overflowMs() { return nOverflow * 1000 / AUDIO_RATE; }
 
 bool musicSupported() { return MUSIC && mring != nullptr; }
 

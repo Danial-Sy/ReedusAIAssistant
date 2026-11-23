@@ -427,8 +427,8 @@ class Device:
         try:
             async for m in self.ws:
                 if isinstance(m, bytes):
-                    if m[:1] == b"\x01":
-                        self.speech_frames += 1
+                    if m[:1] == b"\x01":   # counted in 20 ms frames (the relay batches them)
+                        self.speech_frames += (len(m) - 1) // 640
                 else:
                     msg = json.loads(m)
                     self.events.append(msg)

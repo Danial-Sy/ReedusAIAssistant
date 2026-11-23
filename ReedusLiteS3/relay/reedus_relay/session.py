@@ -108,6 +108,7 @@ class Session:
         self.cancel = threading.Event()
         self.task: Optional[asyncio.Task] = None
         self.play_end = 0.0
+        self.pb: Optional[dict] = None   # this reply's playback report from the Lite
         self.last_frame = time.monotonic()
         self.conversation = uuid.uuid4().hex
         self.turns_in_conv = 0
@@ -360,6 +361,8 @@ class Session:
                 self.wake.reset()
                 if self.wake.gate_opened():
                     self.on_wake()
+        elif t == "pb":
+            self._on_playback(msg)
         elif t in ("status", "battery", "doa", "music", "cal"):
             self.info[t] = {**msg, "at": time.time()} if t in ("doa", "cal") else msg
         elif t == "ota":                     # a firmware update's progress, for the app
@@ -723,6 +726,7 @@ class Session:
             if self._stale(cancel):
                 return
             await self._finish_playback(cancel)
+            self._log_playback()
             if self._stale(cancel):
                 return
             self.turns_in_conv += 1
@@ -833,18 +837,28 @@ class Session:
                 if emo != "neutral":
                     self.send({"type": "emotion", "emotion": emo, "strength": strength,
                                "hold": emotion.speech_seconds(s)})
+                # a few frames per message: the Lite reads one message per pass of its main loop,
+                # and 50 tiny ones a second was more than it kept up with during a long reply
+                batch = b""
                 while True:
                     fr = await frames.get()
                     if fr is None:
                         break
                     if self._stale(cancel):
+                        batch = b""
                         continue
                     if first:
                         self.set_state("speaking")
                         self.t_first_audio = time.monotonic()
                         self.stop_ep = self._stop_endpointer()   # listen for "stop" over him
+                        self.pb = {"min": None, "under0": None, "under": None, "over": None}
                         first = False
-                    await self._send_speech(fr)
+                    batch += fr
+                    if len(batch) >= config.SPEECH_BATCH * config.FRAME_SAMPLES * 2:
+                        await self._send_speech(batch)
+                        batch = b""
+                if batch and not self._stale(cancel):
+                    await self._send_speech(batch)
                 await task
 
         await asyncio.gather(dispatch(), play())
@@ -877,8 +891,40 @@ class Session:
         now = time.monotonic()
         if self.play_end < now:
             self.play_end = now + config.PREBUFFER_S
-        self.play_end += FRAME_S
+        self.play_end += len(frame) / 2 / config.RATE
         self._put(b"\x01" + frame)
+
+    def _on_playback(self, msg: dict) -> None:
+        """The Lite's own count of what it has queued (firmware 0.3.2+, every 250 ms while he
+        talks). If it stalled and restarted, its playhead is behind our clock: move ours back
+        so we don't overfill it (a full buffer drops audio, which is the garbling)."""
+        buf = msg.get("buf")
+        if isinstance(buf, (int, float)) and self.play_end:
+            self.play_end = max(self.play_end, time.monotonic() + buf / 1000.0)
+        pb = getattr(self, "pb", None)
+        if pb is None or self.state != "speaking":
+            return
+        if isinstance(buf, (int, float)) and msg.get("playing"):
+            pb["min"] = buf if pb["min"] is None else min(pb["min"], buf)
+        for k, key in (("under", "under"), ("over", "over")):
+            v = msg.get(k)
+            if isinstance(v, int):
+                if pb.get(key + "0") is None:
+                    pb[key + "0"] = v
+                pb[key] = v
+
+    def _log_playback(self) -> None:
+        pb = getattr(self, "pb", None)
+        if not pb or pb.get("min") is None:
+            return
+        self.pb = None
+        under = (pb.get("under") or 0) - (pb.get("under0") or 0)
+        over = (pb.get("over") or 0) - (pb.get("over0") or 0)
+        rssi = (self.info.get("status") or {}).get("rssi")
+        bad = under or over
+        print(f"[relay] {self.device.get('name')}: playback {'GLITCHED' if bad else 'clean'}: "
+              f"{under} dropouts, {over} ms dropped (buffer full), lowest buffer {int(pb['min'])} ms"
+              f"{f', wifi {rssi} dBm' if rssi is not None else ''}", flush=True)
 
     async def _finish_playback(self, cancel) -> None:
         while not self._stale(cancel) and self.play_end - time.monotonic() > 0:

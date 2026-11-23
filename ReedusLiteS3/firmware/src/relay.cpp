@@ -41,6 +41,7 @@ static uint32_t lastStatus = 0, lastBatt = 0, lastDoa = 0, wifiSince = 0;
 static int lastSentBatt = -2;
 static int proto = 1;  // what the relay agreed to in welcome
 static uint32_t lastMusic = 0, musicIdleAt = 0;
+static uint32_t lastPb = 0, pbIdleAt = 0;
 static char desc[64] = "-";
 
 // a firmware update the relay asked for (ota.cpp runs it from update(), outside the socket
@@ -483,6 +484,10 @@ void update() {
     return;
   }
   ws.loop();
+  // the library takes one websocket message per loop() call. one per pass of the main loop
+  // (face, head, mic upload in between) fell behind his speech in a long reply, so drain
+  // what's waiting. an idle call is cheap
+  for (int i = 0; i < 8 && connected; i++) ws.loop();
   if (!connected) {
     // keep the mic queue from backing up while there's nowhere to send it
     int16_t frame[FRAME_SAMPLES];
@@ -569,6 +574,19 @@ void update() {
     snprintf(b, sizeof(b), "{\"type\":\"music\",\"buffered_ms\":%u,\"underruns\":%u,\"playing\":%s}",
              (unsigned)audio::musicBufferedMs(), (unsigned)audio::musicUnderruns(),
              audio::musicPlaying() ? "true" : "false");
+    ws.sendTXT(b);
+  }
+  // while he talks: how much speech is queued here, so the relay paces against the real
+  // playhead (not its own clock) and logs dropouts per reply
+  bool pbActive = audio::playing() || audio::bufferedMs() > 0;
+  if (pbActive) pbIdleAt = 0;
+  else if (!pbIdleAt) pbIdleAt = now;
+  if ((pbActive || now - pbIdleAt < 600) && now - lastPb > 250) {
+    lastPb = now;
+    char b[112];
+    snprintf(b, sizeof(b), "{\"type\":\"pb\",\"buf\":%u,\"under\":%u,\"over\":%u,\"playing\":%s}",
+             (unsigned)audio::bufferedMs(), (unsigned)audio::underruns(),
+             (unsigned)audio::overflowMs(), audio::playing() ? "true" : "false");
     ws.sendTXT(b);
   }
   if (now - lastStatus > 10000) {
