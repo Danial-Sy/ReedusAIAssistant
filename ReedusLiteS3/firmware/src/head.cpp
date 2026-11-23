@@ -341,7 +341,8 @@ float angle() { return cur; }
 Cal cal() { return {centerUs, dir, doaFront, doaSign}; }
 
 void setCal(const Cal& c, bool save) {
-  bool moved = c.centerUs != centerUs || c.dir != dir;
+  bool flipped = (c.dir < 0 ? -1 : 1) != dir;
+  bool moved = c.centerUs != centerUs || flipped;
   centerUs = constrain(c.centerUs, 800, 2200);
   dir = c.dir < 0 ? -1 : 1;
   doaFront = ((c.doaFront % 360) + 360) % 360;
@@ -352,7 +353,18 @@ void setCal(const Cal& c, bool save) {
     store::putInt("doa_f", doaFront);
     store::putInt("doa_s2", doaSign);
   }
-  if (moved) writeServo(cur);  // show the new center right away
+  if (flipped) {
+    // the neck is physically where the old direction put it, which is -cur in the new one:
+    // relabel it (no jump), then ease back to center so the next turn starts from the truth
+    pending = false;
+    cur = target = -cur;
+    vel = 0;
+    histN = 0;
+  }
+  if (moved) {
+    writeServo(cur);  // show the new center right away
+    if (flipped && fabsf(cur) > 1.0f) turnTo(0, 0, true);
+  }
   arrivedAt = millis();
 }
 

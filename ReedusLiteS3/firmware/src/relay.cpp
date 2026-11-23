@@ -270,19 +270,28 @@ static void handleText(const char* txt, size_t len) {
       else err = "talk to him from straight in front first, then tap it within 10 s";
     } else if (!strcmp(op, "flip")) {
       c.doaSign = -c.doaSign;
+    } else if (!strcmp(op, "mirror") || !strcmp(op, "mirror_on") || !strcmp(op, "mirror_off")) {
+      // which way the servo turns for a given angle (the serial console's servo dir). hearing
+      // stays as is: use this when the dot lands on you but the head swings the other way
+      int mirrored = -SERVO_DIR;
+      if (!strcmp(op, "mirror")) c.dir = -c.dir;
+      else c.dir = !strcmp(op, "mirror_on") ? mirrored : -mirrored;
     } else if (!strcmp(op, "reset")) {
       c.doaFront = DOA_FRONT_DEG;
       c.doaSign = DOA_SIGN;
+      c.dir = SERVO_DIR;
     } else if (op[0]) {
       err = "unknown calibration step";
     }
     if (!err[0] && op[0]) head::setCal(c, true);
     c = head::cal();
-    char b[160];
-    snprintf(b, sizeof(b), "{\"type\":\"cal\",\"front\":%d,\"sign\":%d,\"error\":\"%s\"}",
-             c.doaFront, c.doaSign, err);
+    char b[200];
+    snprintf(b, sizeof(b),
+             "{\"type\":\"cal\",\"front\":%d,\"sign\":%d,\"dir\":%d,\"mirror\":%s,\"error\":\"%s\"}",
+             c.doaFront, c.doaSign, c.dir, c.dir != SERVO_DIR ? "true" : "false", err);
     ws.sendTXT(b);
-    Serial.printf("[head] hearing calibration %s: front %d sign %+d %s\n", op, c.doaFront, c.doaSign, err);
+    Serial.printf("[head] calibration %s: front %d sign %+d servo dir %+d %s\n", op, c.doaFront,
+                  c.doaSign, c.dir, err);
   } else if (!strcmp(t, "draw")) {
     if (!strcmp(doc["op"] | "", "clear")) face::artClear();
   } else if (!strcmp(t, "ota")) {

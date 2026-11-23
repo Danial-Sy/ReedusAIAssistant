@@ -1192,8 +1192,18 @@ const Ctl = (() => {
     $$("#ctl-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
     $$(".ctl-pane").forEach((p) => { p.hidden = p.id !== `ctl-${t}`; });
     if (t === "draw") paint();
-    if (t === "head") renderDial();
+    if (t === "head") { renderDial(); readMirror(); }
     if (t === "fw") { renderFw(); checkFw(); }
+  }
+
+  // what the Lite has saved for turning: ask it (op "" only reads) when the Head tab opens
+  async function readMirror() {
+    const box = $("#mirror-on");
+    const d = device();
+    if (!box || !d || !d.online) return;
+    const r = await Relay.call("device.cal", { device: dev, op: "" });
+    if (r && r.ok && r.mirror != null) box.checked = !!r.mirror;
+    box.disabled = !!(r && r.error);
   }
 
   async function send(action, extra, okText) {
@@ -1234,6 +1244,14 @@ const Ctl = (() => {
     };
     $("#cal-front").addEventListener("click", () => calStep("front", () => "Got it: that's straight ahead now"));
     $("#cal-flip").addEventListener("click", () => calStep("flip", () => "Flipped left and right"));
+    $("#mirror-on").addEventListener("change", async (e) => {
+      const want = e.target.checked;
+      const r = await send("device.cal", { op: want ? "mirror_on" : "mirror_off" });
+      if (r && r.ok) {
+        e.target.checked = !!r.mirror;
+        toast(r.mirror ? "Mirrored: he'll turn the other way now" : "Turning back to normal");
+      } else e.target.checked = !want;
+    });
     $("#look-voice").addEventListener("click", () => {
       const d = device();
       if (d && d.doa && d.doa.angle != null) look(Math.max(-90, Math.min(90, Math.round(d.doa.angle))));

@@ -593,7 +593,7 @@ class Hub:
             if "cal" not in caps:
                 return {"error": "this Lite's firmware is too old for that: update it first"}
             op = str(req.get("op") or "")
-            if op not in ("front", "flip", "reset", ""):
+            if op not in ("front", "flip", "mirror", "mirror_on", "mirror_off", "reset", ""):
                 return {"error": "unknown calibration step"}
             before = (s.info.get("cal") or {}).get("at", 0)
             s.send({"type": "cal", "op": op})
@@ -603,7 +603,8 @@ class Hub:
                 if got.get("at", 0) > before:
                     if got.get("error"):
                         return {"error": got["error"]}
-                    return {"ok": True, "front": got.get("front"), "sign": got.get("sign")}
+                    return {"ok": True, "front": got.get("front"), "sign": got.get("sign"),
+                            "dir": got.get("dir"), "mirror": got.get("mirror")}
             return {"error": "he didn't answer; try again"}
         if a == "device.draw":
             if "draw" not in caps:
