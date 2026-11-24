@@ -64,6 +64,8 @@ def search_tool(model: str) -> dict:
 
 class AnthropicBackend(CloudBackend):
     PROVIDER = "anthropic"
+    # set by a caller that streams: called when a web search starts mid-reply (see _once)
+    on_search = None
 
     def __init__(self, model: Optional[str] = None, api_key: Optional[str] = None):
         key = (api_key or llm_settings.key("anthropic")).strip()
@@ -131,16 +133,34 @@ class AnthropicBackend(CloudBackend):
         pieces: List[str] = []
         final = None
 
+        on_search = self.on_search
+
         def _stream(k):
             nonlocal final
             pieces.clear()
             with client.messages.stream(**k) as stream:
-                for text in stream.text_stream:
+                if not hasattr(type(stream), "__iter__"):        # a bare text stream (tests)
+                    for text in stream.text_stream:
+                        if cancelled(cancel):
+                            return None
+                        pieces.append(text)
+                        if on_token is not None:
+                            on_token(text)
+                    final = stream.get_final_message()
+                    return final
+                for ev in stream:
                     if cancelled(cancel):
                         return None          # leaving the with-block closes the connection
-                    pieces.append(text)
-                    if on_token is not None:
-                        on_token(text)
+                    kind = getattr(ev, "type", "")
+                    if kind == "text":
+                        pieces.append(ev.text)
+                        if on_token is not None:
+                            on_token(ev.text)
+                    elif (kind == "content_block_start" and on_search is not None
+                          and getattr(getattr(ev, "content_block", None), "type", "") == "server_tool_use"):
+                        # the text so far was "let me look that up"; the caller decides whether
+                        # to say it (covers the search) or drop it (a filler already did)
+                        on_search()
                 final = stream.get_final_message()
             return final
 

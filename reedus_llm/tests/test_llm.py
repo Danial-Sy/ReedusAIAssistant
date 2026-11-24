@@ -257,6 +257,26 @@ check(kw["tools"][0]["type"] == "web_search_20260209" and kw["tools"][0]["name"]
       "dynamic web search tool on the persona call")
 b.chat([{"role": "user", "content": "classify"}], 1, use_adapter=False, temperature=0.0, tier="router")
 check("tools" not in b._client.messages.calls[-1], "no search on router calls")
+
+
+class EventStream(FakeStream):
+    """A real SDK stream is iterable: text events, plus a block start when a search runs."""
+    def __iter__(self):
+        ns = types.SimpleNamespace
+        yield ns(type="text", text="Let me look that up. ")
+        yield ns(type="content_block_start", content_block=ns(type="server_tool_use"))
+        yield ns(type="content_block_start", content_block=ns(type="web_search_tool_result"))
+        yield ns(type="text", text="The Hokies won.")
+
+
+b._client.messages.stream = lambda **kw: EventStream([], message("Let me look that up. The Hokies won.", searches=1))
+seen = []
+b.on_search = lambda: seen.append(("search", "".join(toks2)))
+toks2 = []
+b.chat([{"role": "user", "content": "did vt win"}], 120, use_adapter=False, on_token=toks2.append)
+b.on_search = None
+check(seen == [("search", "Let me look that up. ")] and "".join(toks2).endswith("The Hokies won."),
+      "the caller hears when a web search starts, between the text before it and after")
 led = json.loads(Path(os.environ["REEDUS_CLOUD_LEDGER"]).read_text())
 check("claude-sonnet-5-5" in led["by_model"] and led.get("searches", 0) >= 1, "tokens and searches billed")
 

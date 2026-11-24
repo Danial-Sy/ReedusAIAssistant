@@ -469,21 +469,52 @@ class Brain:
             msgs[0]["content"] += ("\n\nEarlier in this conversation you really did search the web "
                                    "to answer: " + "; ".join(f'"{q}"' for q in looked_up)
                                    + ". Those answers came from real results.")
-        if self.asked_last_time():
-            # the prompt asks for fewer questions; this makes "never two in a row" a sure thing
-            msgs[0]["content"] += ("\n\nYour last reply ended with a question. Don't ask one this "
-                                   "time: answer or react, and end on a statement.")
+        no_question = self.asked_recently()
+        if no_question:
+            # the persona asks for few questions; a model that asks anyway (Haiku did, every
+            # turn) gets the note next to their words, and _sentence below drops the question
+            msgs[-1] = {"role": "user", "content": said + "\n\n(" + self.NO_QUESTION_NOTE + ")"}
         timing = self.timing
+        dropped: List[str] = []           # said by the model, never spoken, kept out of history
 
         def _sentence(s: str) -> None:
+            if no_question and timing.get("sentence") is not None and "?" in s:
+                # a question he wasn't meant to ask this turn: say the rest of the piece
+                keep = []
+                for part in re.split(r"(?<=[.!?…])\s+", s):
+                    if part.rstrip(" \"')").endswith("?"):
+                        dropped.append(part)
+                    else:
+                        keep.append(part)
+                s = " ".join(keep).strip()
+                if not s:
+                    return
             timing.setdefault("sentence", time.monotonic() - t0)
             on_sentence(s)
 
         split = SentenceSplitter(_sentence, on_face=on_face, first_clause=20)
+        # a filler ("Let me look that up") is already playing on a forced search, so the model's
+        # own "I'll search for that" before its search is held back and dropped, not said twice
+        hold = {"on": False, "text": ""}
 
         def _token(tok: str) -> None:
             timing.setdefault("token", time.monotonic() - t0)
+            if hold["on"]:
+                hold["text"] += tok
+                if len(hold["text"]) < 160:
+                    return
+                tok, hold["on"], hold["text"] = hold["text"], False, ""   # that's the answer
             split.feed(tok)
+
+        def _searching() -> None:
+            timing["search_at"] = time.monotonic() - t0
+            if hold["on"]:
+                if hold["text"].strip():
+                    dropped.append(hold["text"])
+                hold["text"] = ""
+                hold["on"] = False
+            else:
+                split.flush()                # say "let me check" now: it covers the search
 
         backend = self.backend()
         searchable = getattr(backend, "_search_default", None)
@@ -498,8 +529,23 @@ class Brain:
         apply_think(backend, level)
         timing["think"] = level
         timing["prep"] = time.monotonic() - t0
-        text = self._ask(backend, msgs, _token, cancel, search=bool(getattr(backend, "_search", False)),
-                         forced=search)
+        searching = bool(getattr(backend, "_search", False))
+        tells = hasattr(backend, "on_search")
+        if tells:
+            backend.on_search = _searching
+            hold["on"] = searching and search
+        try:
+            text = self._ask(backend, msgs, _token, cancel, search=searching, forced=search)
+        finally:
+            if tells:
+                backend.on_search = None
+        if hold["on"]:                   # it never searched: what it held is the reply after all
+            hold["on"] = False
+            if not (searchable and promised_search(hold["text"])):
+                split.feed(hold["text"])
+            elif hold["text"].strip():
+                dropped.append(hold["text"])  # "searching now!" with no search: retried below
+            hold["text"] = ""
         if (searchable and not timing.get("search") and not (cancel is not None and cancel.is_set())
                 and promised_search(text)):
             # he said he'd look it up but had no search tool this turn: keep the promise. what he
@@ -523,16 +569,25 @@ class Brain:
             split.flush()
         # history keeps the tags, so he keeps seeing (and copying) them; what's said and saved doesn't.
         # a reply that was dropped (they kept talking, or interrupted) isn't remembered
+        for d in dropped:                # history is what he really said out loud
+            text = text.replace(d, " ", 1) if d in text else text
         if cancel is None or not cancel.is_set():
             self._remember(said, re.sub(r"\s+", " ", _MD.sub("", text or "")).strip(),
                            searched=bool(timing.get("searched")))
         return speakable(face_tag(text)[1])
 
-    SEARCH_NOTE = ("\n\nThey want this looked up: use web search before you answer, then answer "
-                   "with what you found, specific and short. Don't announce that you're searching; "
-                   "that's already been said out loud.")
+    SEARCH_NOTE = ("\n\nThey want this looked up: use web search before you answer. Don't announce "
+                   "that you're searching; that's already been said out loud.")
     FOLLOW_NOTE = ("\n\nYou just told them you'd look it up. Search the web now and give the answer; "
                    "don't repeat that you're searching.")
+    # with search on, every turn: results are what he knows, not a script to read out (11-23
+    # Haiku read a search back as a list of facts)
+    VOICE_NOTE = ("\n\nIf you search, you're still you talking to a friend, not reading out a "
+                  "news brief. Pick the one or two things that answer what they asked, say them in "
+                  "your own words, and add your reaction or take. No run of stats, dates, names or "
+                  "sources, and don't cover everything you found; if they want more, they'll ask.")
+    NO_QUESTION_NOTE = ("You've asked a question recently, so don't ask one this time: react or give "
+                        "your take, and end on a statement.")
 
     def _ask(self, backend, msgs, on_token, cancel, *, search: bool, forced: bool = False,
              follow_up: bool = False) -> str:
@@ -541,7 +596,8 @@ class Brain:
         whether a search really ran."""
         if search:
             msgs = [{**msgs[0], "content": msgs[0]["content"]
-                     + (self.FOLLOW_NOTE if follow_up else self.SEARCH_NOTE if forced else "")}] + msgs[1:]
+                     + (self.FOLLOW_NOTE if follow_up else self.SEARCH_NOTE if forced else "")
+                     + self.VOICE_NOTE}] + msgs[1:]
         if hasattr(backend, "last_searched"):
             backend.last_searched = None
         # the example replies are already in the stable part of the system prompt
@@ -559,6 +615,14 @@ class Brain:
         with self.lock:
             last = next((h["content"] for h in reversed(self.history) if h["role"] == "assistant"), "")
         return speakable(face_tag(last)[1]).rstrip(" \"')").endswith("?")
+
+    QUESTION_GAP = 2      # replies after a question that don't ask one: at most one in three
+
+    def asked_recently(self) -> bool:
+        """Did any of his last QUESTION_GAP replies (this conversation) ask a question?"""
+        with self.lock:
+            mine = [h["content"] for h in self.history if h["role"] == "assistant"][-self.QUESTION_GAP:]
+        return any("?" in speakable(face_tag(m)[1]) for m in mine)
 
     @staticmethod
     def searched_before(past: List[dict]) -> List[str]:

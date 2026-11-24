@@ -134,6 +134,11 @@ class FakeVoice:
 BACKEND = FakeBackend()
 
 
+def last_said() -> str:
+    """What the last persona call was asked, without a this-turn note tacked on."""
+    return BACKEND.calls[-1]["messages"][-1]["content"].split("\n\n(")[0]
+
+
 # ---------- a fake Stripe (just the three calls the relay makes) ----------
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qsl
@@ -389,6 +394,67 @@ check(speech.clean_transcript("Thank you.", b"\0" * 16000) == "" and
       speech.clean_transcript("Thank you so much for the help", b"\0" * 16000) != "" and
       speech.clean_transcript("[background noise]", b"\0" * 64000) == "",
       "what speech-to-text makes up from noise is dropped")
+# questions: at most one in three replies, and a question he wasn't meant to ask isn't spoken
+bq = Brain({"id": "x", "settings": {}}, {"id": "y"}, backend=BACKEND)
+bq.history = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "[happy] Hey! How's it going?"},
+              {"role": "user", "content": "good"}, {"role": "assistant", "content": "[happy] Nice, glad to hear it."}]
+heard_q: list = []
+bq.reply("what are you up to", "", heard_q.append)
+check(heard_q and not any("?" in x for x in heard_q) and "That sounds great!" in " ".join(heard_q)
+      and "What happens next" not in bq.history[-1]["content"]
+      and "don't ask one this time" in BACKEND.calls[-1]["messages"][-1]["content"],
+      f"asked a question two replies ago: this one doesn't ask, and isn't remembered asking ({heard_q})")
+bq.history = bq.history[:2] + [{"role": "user", "content": "x"}, {"role": "assistant", "content": "Cool."},
+                               {"role": "user", "content": "y"}, {"role": "assistant", "content": "Sure."}]
+heard_q = []
+bq.reply("what are you up to", "", heard_q.append)
+check(any(x.endswith("?") for x in heard_q), "two replies without one: he can ask again")
+
+
+class SearchyBackend:
+    """Talks before it searches, like Claude does."""
+    CLOUD = True
+    model = "fake-claude"
+    on_search = None
+
+    def __init__(self):
+        self._search = True
+        self.last_searched = None
+
+    def chat(self, messages, max_tokens, use_adapter=True, on_token=None, name="", cancel=None, **kw):
+        self.sys = messages[0]["content"]
+        for tok in ("[curious] ", "Let me ", "look that up. "):
+            on_token(tok)
+        if self.on_search:
+            self.on_search()
+        for tok in ("The Hokies ", "won by ", "seven. ", "Big win."):
+            on_token(tok)
+        self.last_searched = True
+        return "[curious] Let me look that up. The Hokies won by seven. Big win."
+
+    def close(self):
+        pass
+
+
+class OwnBrain(Brain):
+    def backend(self):                  # Brain.backend is patched to BACKEND for the rest
+        return self._backend
+
+
+bs = OwnBrain({"id": "x", "settings": {}}, {"id": "y"}, backend=SearchyBackend())
+heard_s: list = []
+bs.reply("look up the vt game", "", heard_s.append, search=True)
+check(heard_s and not any("look that up" in x for x in heard_s) and "Hokies" in " ".join(heard_s)
+      and "look that up" not in bs.history[-1]["content"],
+      f"a filler already said it: the model's own 'let me look that up' isn't said twice ({heard_s})")
+bs2 = OwnBrain({"id": "x", "settings": {}}, {"id": "y"}, backend=SearchyBackend())
+heard_s = []
+bs2.reply("who won the vt game last night", "", heard_s.append)
+check(heard_s == ["Let me look that up.", "The Hokies won by seven.", "Big win."],
+      f"no filler: his 'let me look that up' is said as the search starts, covering it ({heard_s})")
+check("not reading out a news brief" in bs2.backend().sys,
+      "search turns are told to talk like himself, not read out a list of facts")
+
 _fx = speech.fix_name
 check(_fx("Hey Rita, what's the weather?") == "Hey Reedus, what's the weather?" and
       _fx("Frita can you set a timer") == "Reedus can you set a timer" and
@@ -555,7 +621,7 @@ async def main():
     check(any(e["type"] == "emotion" for e in d.events), "emotion from the reply")
     sys_prompt = BACKEND.calls[-1]["messages"][0]["content"]
     check("You are Reedus" in sys_prompt and "Reedus Lite" in sys_prompt, "his persona + the Lite voice rules")
-    check(BACKEND.calls[-1]["messages"][-1]["content"] == "I've got a physics exam on Friday",
+    check(last_said() == "I've got a physics exam on Friday",
           "the transcript (wake words stripped) is the user turn")
     await d.wait_for(lambda: accounts.balance(aid) < bal0, 2)
     spent = bal0 - accounts.balance(aid)
@@ -627,20 +693,20 @@ async def main():
     check(ok and n_persona() == n_llm, "the bare ask arms it: a quick 'go ahead', no LLM yet")
     await d.say(wake=False)
     ok = await d.wait_for(lambda: n_persona() > n_llm and d.states()[-1] == "listening", 8)
-    check(ok and BACKEND.calls[-1]["messages"][-1]["content"] == "why is the sky blue"
+    check(ok and last_said() == "why is the sky blue"
           and sess.brain.timing.get("think") == "high" and not sess.think_next,
           "...and the next question is answered with deep thinking, just that one")
     n_llm = n_persona()
     SCRIPT[:] = ["think hard about this, what is 17 times 23"]
     await d.say(wake=False)
     ok = await d.wait_for(lambda: n_persona() > n_llm and d.states()[-1] == "listening", 8)
-    check(ok and BACKEND.calls[-1]["messages"][-1]["content"] == "what is 17 times 23"
+    check(ok and last_said() == "what is 17 times 23"
           and sess.brain.timing.get("think") == "high", "asked in the same breath: that question, thought through")
     n_llm = n_persona()
     SCRIPT[:] = ["what do you think about pizza"]
     await d.say(wake=False)
     ok = await d.wait_for(lambda: n_persona() > n_llm and d.states()[-1] == "listening", 8)
-    check(ok and BACKEND.calls[-1]["messages"][-1]["content"] == "what do you think about pizza"
+    check(ok and last_said() == "what do you think about pizza"
           and sess.brain.timing.get("think") == "fast", "plain 'think' in a sentence changes nothing")
     BACKEND._search = True                # pretend this brain can search the web
     n_llm = n_persona()
@@ -650,14 +716,14 @@ async def main():
     check(ok and n_persona() == n_llm, "think + search, said alone: both armed, no LLM yet")
     await d.say(wake=False)
     ok = await d.wait_for(lambda: n_persona() > n_llm and d.states()[-1] == "listening", 8)
-    check(ok and BACKEND.calls[-1]["messages"][-1]["content"] == "who won the game last night"
+    check(ok and last_said() == "who won the game last night"
           and sess.brain.timing.get("think") == "high" and sess.brain.timing.get("search") is True,
           "...the next question is thought through AND searched")
     n_llm = n_persona()
     SCRIPT[:] = ["what's your favourite colour, look it up"]
     await d.say(wake=False)
     ok = await d.wait_for(lambda: n_persona() > n_llm and d.states()[-1] == "listening", 8)
-    check(ok and BACKEND.calls[-1]["messages"][-1]["content"] == "what's your favourite colour"
+    check(ok and last_said() == "what's your favourite colour"
           and sess.brain.timing.get("search") is True and sess.brain.timing.get("think") == "fast",
           "'look it up' at the end forces a search even when the question wouldn't")
     n_llm = n_persona()
@@ -689,7 +755,7 @@ async def main():
     ok3 = await d.wait_for(lambda: n_persona() > n_llm and d.states()[-1] == "listening"
                            and "speaking" in d.states()[n_states:], 10)
     users = [h["content"] for h in sess.brain.history if h["role"] == "user"]
-    check(ok and ok2 and ok3 and BACKEND.calls[-1]["messages"][-1]["content"].endswith("why the sky is blue")
+    check(ok and ok2 and ok3 and last_said().endswith("why the sky is blue")
           and "so the thing I wanted to ask you" not in users,
           "talking again while he thinks: he drops that reply, keeps listening, answers the whole thing")
     for _ in range(40):
@@ -703,7 +769,7 @@ async def main():
     check(ok and n_persona() == n_llm, "a sentence that trails off: he waits for the rest, no reply yet")
     await d.say(wake=False)
     ok = await d.wait_for(lambda: n_persona() > n_llm and d.states()[-1] == "listening", 8)
-    check(ok and BACKEND.calls[-1]["messages"][-1]["content"] == "I need to buy milk and eggs, what should I make",
+    check(ok and last_said() == "I need to buy milk and eggs, what should I make",
           "...and answers it as one sentence once they finish")
     # it trails off and they don't go on: after a couple of seconds he answers what's there
     n_llm = n_persona()
@@ -713,9 +779,9 @@ async def main():
     for _ in range(130):
         await ws.send(SILENT)
     ok2 = await d.wait_for(lambda: n_persona() > n_llm, 6)
-    check(ok and ok2 and BACKEND.calls[-1]["messages"][-1]["content"] == "tell me something about, um",
+    check(ok and ok2 and last_said() == "tell me something about, um",
           "...and if nothing more comes, he answers what they said")
-    check("Your last reply ended with a question" in BACKEND.calls[-1]["messages"][0]["content"]
+    check("don't ask one this time" in BACKEND.calls[-1]["messages"][-1]["content"]
           and "just not on every reply" in BACKEND.calls[-1]["messages"][0]["content"],
           "he asked last time, so this reply is told not to")
     for _ in range(40):
@@ -1129,7 +1195,7 @@ async def main():
     check(ok, f"the S3's wake → listening → thinking → speaking → listening ({d2.states()})")
     check("wake" in d2.types() and {"type": "listen", "open": True} in d2.events,
           "the relay answers the S3's wake with wake + listen")
-    check(BACKEND.calls[-1]["messages"][-1]["content"] == "tell me a joke about physics",
+    check(last_said() == "tell me a joke about physics",
           "the name is stripped from what was said after it")
     BACKEND.slow = 0.15
     SCRIPT[:] = ["tell me a long story"]
