@@ -14,6 +14,10 @@ barge-in stays instant.
 every cost in a turn (speech-to-text, LLM, web search, Inworld) is metered and taken from the
 account's pool when the turn ends; the memory gets the turn, the bulletin is refreshed once the
 conversation is over.
+
+who's talking: each turn's audio also gets a voiceprint (voices.py), matched against the people
+set up in the app while speech-to-text runs, so the brain knows whose notes to use. teaching
+him a voice is its own mode (enroll), started from the app.
 """
 from __future__ import annotations
 
@@ -25,10 +29,10 @@ import time
 import uuid
 from typing import List, Optional
 
-from reedus_relay import accounts, config, listening, memory, meter, speech
+from reedus_relay import accounts, config, listening, memory, meter, speech, voiceprint, voices
 from reedus_relay.brain import DEEP, Brain, directives, is_goodbye
 
-IDLE, LISTEN, BUSY = "idle", "listen", "busy"
+IDLE, LISTEN, BUSY, ENROLL = "idle", "listen", "busy", "enroll"
 FRAME_S = config.FRAME_SAMPLES / config.RATE
 _TTS_SLOTS: Optional[asyncio.Semaphore] = None  # Inworld streams, relay-wide (FIFO: in order)
 
@@ -157,6 +161,9 @@ class Session:
         self.stop_checks = 0
         self.stop_busy = False
         self.search_next = False         # "search the internet": the next question
+        self.speaker_id = ""             # who he last recognized this conversation (voices.py)
+        self.enroll: Optional[dict] = None   # teaching him someone's voice (enroll_start)
+        self.enroll_ep: Optional[speech.Endpointer] = None
 
         if assistant is None:
             from reedus_relay.assist_store import DbAssistant
@@ -245,6 +252,8 @@ class Session:
             # listening but the device went quiet (it should be streaming): don't hang there
             if self.mode == LISTEN and now - self.last_frame > 4.0:
                 self.end_conversation(keep=self.single())
+            if self.mode == ENROLL and self.enroll_ep is not None and now - self.last_frame > 6.0:
+                self._enroll_fail("I lost the audio from the Lite. Try again?")
             if self.mode == IDLE and self.rest_until and now >= self.rest_until:
                 self.end_conversation()          # one question mode: that conversation's over
             if now >= self.next_glance:
@@ -332,6 +341,9 @@ class Session:
     # ---------- inbound ----------
     def on_frame(self, pcm: bytes) -> None:
         self.last_frame = time.monotonic()
+        if self.mode == ENROLL:                  # teaching him a voice: no wake word, no turns
+            self._enroll_frame(pcm)
+            return
         if self.mode == LISTEN and self.ep is not None:
             ev = self.ep.feed(pcm)
             if ev == "pause":
@@ -374,7 +386,7 @@ class Session:
         if t == "wake":
             # the S3 heard the name. already listening: it's part of what's being said
             self.info["wake"] = msg
-            if self.device_wake and self.mode != LISTEN:
+            if self.device_wake and self.mode not in (LISTEN, ENROLL):
                 if self.mode == BUSY and self.t_first_audio:
                     self._log_barge(f"the S3 heard the name over him (score {msg.get('score')})")
                 self.on_wake()
@@ -385,7 +397,7 @@ class Session:
                 self.talkover_at = time.monotonic()
                 self.talkovers += 1
         elif t == "gate":
-            if msg.get("open") and self.mode == IDLE:
+            if msg.get("open") and self.mode == IDLE and not self.enroll:
                 self.wake.reset()
                 if self.wake.gate_opened():
                     self.on_wake()
@@ -545,6 +557,7 @@ class Session:
             self.rest_until = time.monotonic() + self.REST_S
             return
         self.rest_until = 0.0
+        self.speaker_id = ""
         if self.turns_in_conv:
             self._fold_in_background(self.conversation)
         self.brain.new_conversation()
@@ -673,8 +686,12 @@ class Session:
     async def turn(self, audio: bytes, cancel: threading.Event, text: Optional[str] = None) -> None:
         m = meter.Meter()
         said, reply = "", ""
+        who = voices.Who()
         t_end = getattr(self, "t_end", 0.0) or time.monotonic()
         self.t_first_audio = 0.0
+        # who said it, while speech-to-text runs (~30 ms; never raises)
+        who_job = asyncio.ensure_future(asyncio.to_thread(
+            voices.identify, self.aid, audio, self.speaker_id, self.device.get("name", "")))
         try:
             self.funded_hint = await asyncio.to_thread(accounts.funded, self.aid)
             if not self.funded_hint:
@@ -736,6 +753,7 @@ class Session:
                 said = rest
                 deep = DEEP if want_think else deep
                 force_search = force_search or want_search
+            who = await self._who(who_job)
             from reedus_companion.lite import emotion
             react = emotion.react(said)
             if react:
@@ -749,7 +767,8 @@ class Session:
             def _on_face(tag: str) -> None:
                 self.loop.call_soon_threadsafe(sentences.put_nowait, {"face": tag})
 
-            extra = {**({"think": deep} if deep else {}), **({"search": True} if force_search else {})}
+            extra = {**({"think": deep} if deep else {}), **({"search": True} if force_search else {}),
+                     **({"who": who} if who.active else {})}
 
             def _think() -> str:
                 with meter.metering(m):
@@ -818,9 +837,201 @@ class Session:
                 await asyncio.to_thread(accounts.charge, self.aid, usd,
                                         f"{self.device.get('name', 'Lite')}: {m.summary()}")
                 self.funded_hint = await asyncio.to_thread(accounts.funded, self.aid)
+            if not who_job.done():
+                who_job.cancel()
             if said and reply and not cancel.is_set():     # a reply nobody heard isn't a turn
                 await asyncio.to_thread(memory.record_turn, self.aid, self.did, self.conversation,
-                                        said, reply, usd)
+                                        said, reply, usd, who.turn_id)
+                if who.voice is not None:
+                    await asyncio.to_thread(voices.after_turn, who)
+
+    async def _who(self, job) -> "voices.Who":
+        try:
+            who = await job
+        except Exception:                                        # noqa: BLE001
+            return voices.Who()
+        if who.voice is not None:
+            self.speaker_id = who.voice["id"]
+        if who.match is not None:
+            self.info["speaker"] = {"name": who.name, "id": who.voice["id"] if who.voice else "",
+                                    "score": round(who.match.score, 2), "how": who.match.how,
+                                    "secs": round(who.match.secs, 1), "at": time.time()}
+        return who
+
+    # ---------- teaching him a voice ----------
+    ENROLL_NEED_S = 20.0      # seconds of speech for a good voiceprint
+    ENROLL_MIN_S = 8.0        # they stopped early: this much is still worth keeping
+    ENROLL_MIN_SENTENCES = 3
+    ENROLL_QUIET_S = 15.0     # nobody says anything this long: give up
+
+    def enroll_start(self, person: dict, reset: bool = False) -> Optional[str]:
+        """The app's "Teach him": he says what's happening, listens until he has ENROLL_NEED_S
+        of their speech, saves a voiceprint per sentence, and says he's got it. Returns an
+        error for the app, or None once it's started. Progress: info["enroll"]."""
+        if self.enroll or self.mode != IDLE or self.state not in ("idle",):
+            return "he's busy right now: try again when he's idle"
+        if not voiceprint.available():
+            return "voice recognition isn't working on this relay: " + (voiceprint.why_not() or "no model")
+        self.enroll = {"voice": person["id"], "name": person["name"], "me": bool(person.get("me")),
+                       "reset": bool(reset), "vecs": [], "secs": 0.0, "busy": 0}
+        self._enroll_info("starting")
+        self.mode = ENROLL
+        self.cancel = threading.Event()
+        self.task = asyncio.ensure_future(self._enroll_intro(self.cancel))
+        print(f"[relay] {self.device.get('name')}: learning {person['name']}'s voice", flush=True)
+        return None
+
+    def _enroll_info(self, state: str, **more) -> None:
+        e = self.enroll or {}
+        self.info["enroll"] = {"voice": e.get("voice", ""), "name": e.get("name", ""), "state": state,
+                               "secs": round(min(e.get("secs", 0.0), self.ENROLL_NEED_S), 1),
+                               "need": self.ENROLL_NEED_S, "sentences": len(e.get("vecs", [])),
+                               "at": time.time(), **more}
+
+    async def _enroll_intro(self, cancel: threading.Event) -> None:
+        m = meter.Meter()
+        name = (self.enroll or {}).get("name", "")
+        try:
+            self.send({"type": "expr", "name": "curious", "hold": 1.5})
+            await self.speak_lines([f"Okay {name}, I'm listening. Talk to me for about twenty "
+                                    f"seconds, in your normal voice. Read the lines in the app, or "
+                                    f"just tell me about your day."], m, cancel)
+            await self._finish_playback(cancel)
+        finally:
+            if m.usd > 0:
+                await asyncio.to_thread(accounts.charge, self.aid, m.usd,
+                                        f"{self.device.get('name', 'Lite')}: voice setup ({m.summary()})")
+        if self._stale(cancel) or not self.enroll:
+            return
+        self.enroll_ep = self._enroll_endpointer()
+        self.last_frame = time.monotonic()
+        self.listen(True)
+        self.set_state("listening")
+        self._enroll_info("listening")
+
+    def _enroll_endpointer(self) -> speech.Endpointer:
+        return speech.Endpointer(start_timeout=self.ENROLL_QUIET_S, end_silence=0.7, max_len=8.0,
+                                 spec_after=0.0)
+
+    def _enroll_frame(self, pcm: bytes) -> None:
+        ep = self.enroll_ep
+        if ep is None or not self.enroll:
+            return
+        ev = ep.feed(pcm)
+        if ev in ("end", "max"):
+            audio = ep.audio()
+            self.enroll_ep = self._enroll_endpointer()
+            self.enroll["busy"] += 1
+            token = self.cancel
+
+            def _go():
+                try:
+                    got = voiceprint.embed(audio)
+                except Exception as e:                           # noqa: BLE001
+                    print(f"[relay] voice setup: voiceprint failed: {type(e).__name__}: {e}", flush=True)
+                    got = None
+                self.loop.call_soon_threadsafe(self._enroll_got, got, token)
+            threading.Thread(target=_go, name="enroll-embed", daemon=True).start()
+        elif ev == "timeout":
+            if self.enroll.get("vecs"):
+                self._enroll_finish()        # they stopped early: use what's there if it's enough
+            else:
+                self._enroll_fail("I didn't hear anything. Try again when you're ready.")
+
+    def _enroll_got(self, got, token: threading.Event) -> None:
+        if token is not self.cancel or not self.enroll:
+            return
+        self.enroll["busy"] -= 1
+        if got is not None and got[1] >= 1.0:
+            vec, secs = got
+            self.enroll["vecs"].append(vec)
+            self.enroll["secs"] += secs
+        self._enroll_info("listening")
+        e = self.enroll
+        if e["secs"] >= self.ENROLL_NEED_S and len(e["vecs"]) >= self.ENROLL_MIN_SENTENCES \
+                and not e["busy"]:
+            self._enroll_finish()
+
+    def _enroll_finish(self) -> None:
+        e = self.enroll
+        if not e:
+            return
+        if e["secs"] < min(self.ENROLL_MIN_S, self.ENROLL_NEED_S) or len(e["vecs"]) < 2:
+            self._enroll_fail("That wasn't quite enough to learn your voice. Let's try again, "
+                              "and keep talking a little longer.")
+            return
+        self.enroll_ep = None
+        self.listen(False)
+        self.set_state("thinking")
+        vecs = voiceprint.consistent(e["vecs"])
+        warn = ""
+        try:
+            mine = voiceprint.average(vecs)
+            others = [p for p in voices.known(self.aid) if p["id"] != e["voice"] and p.get("vec") is not None]
+            close = max(others, key=lambda p: float(mine @ p["vec"]), default=None) if mine is not None else None
+            if close is not None and float(mine @ close["vec"]) >= voiceprint.match_cutoff():
+                warn = (f"sounds a lot like {close['name']} ({float(mine @ close['vec']):.2f}), so he "
+                        f"may mix them up")
+            voices.add_samples(e["voice"], vecs, kind="enroll", reset=e["reset"])
+        except Exception as ex:                                  # noqa: BLE001
+            print(f"[relay] voice setup: couldn't save: {type(ex).__name__}: {ex}", flush=True)
+            self._enroll_fail("Something went wrong saving that. Try again?")
+            return
+        print(f"[relay] {self.device.get('name')}: learned {e['name']}'s voice ({len(vecs)} sentences, "
+              f"{e['secs']:.0f} s{'; ' + warn if warn else ''})", flush=True)
+        self._enroll_info("done", warn=warn)
+        line = ("Got it. I'll know it's you now." if e["me"] else
+                f"Got it. Nice to meet you, {e['name']}.")
+        self._enroll_end(line, "happy")
+
+    def _enroll_fail(self, line: str) -> None:
+        if not self.enroll:
+            return
+        self._enroll_info("failed", error=line)
+        self._enroll_end(line, "confused")
+
+    def enroll_cancel(self) -> bool:
+        if not self.enroll:
+            return False
+        self._enroll_info("cancelled")
+        self.cancel.set()
+        self.send({"type": "flush"})
+        self.play_end = 0.0
+        self._enroll_end(None, None)
+        return True
+
+    def _enroll_end(self, line: Optional[str], face: Optional[str]) -> None:
+        """Back to idle, saying how it went."""
+        self.enroll = None
+        self.enroll_ep = None
+        self.listen(False)
+        if self.task is not None and not self.task.done() and line is None:
+            self.task.cancel()
+        if not line:
+            self.mode = IDLE
+            self.set_state("idle")
+            return
+        self.mode = BUSY                     # nothing else starts while he says it
+        cancel = self.cancel = threading.Event()
+
+        async def _say():
+            m = meter.Meter()
+            try:
+                if face:
+                    self.send({"type": "emotion", "emotion": face, "strength": 0.9, "hold": 2.5})
+                await self.speak_lines([line], m, cancel)
+                await self._finish_playback(cancel)
+            except Exception as e:                               # noqa: BLE001
+                print(f"[relay] voice setup: couldn't say how it went: {e!r}", flush=True)
+            finally:
+                if m.usd > 0:
+                    await asyncio.to_thread(accounts.charge, self.aid, m.usd,
+                                            f"{self.device.get('name', 'Lite')}: voice setup ({m.summary()})")
+                if not self._stale(cancel):
+                    self.mode = IDLE
+                    self.set_state("idle")
+                    self.wake.reset()
+        self.task = asyncio.ensure_future(_say())
 
     def is_ringing(self) -> bool:
         """Ringing here (the relay's timer store) or on the Lite (it can ring on its own)."""

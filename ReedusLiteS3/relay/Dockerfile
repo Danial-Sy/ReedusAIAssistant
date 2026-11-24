@@ -30,6 +30,12 @@ COPY reedus_llm/reedus_companion/voice/__init__.py reedus_llm/reedus_companion/v
 COPY reedus_llm/reedus_companion/data/__init__.py reedus_llm/reedus_companion/data/reedus_voice.jsonl \
      /app/reedus_llm/reedus_companion/data/
 COPY ReedusLiteS3/relay /app/relay
+# the speaker model for "who's talking" (reedus_relay/voiceprint.py), ~29 MB, checked by hash
+RUN python -c "import hashlib, urllib.request, sys; \
+from reedus_relay import voiceprint as v; \
+p = '/app/relay/models/' + v.MODEL_NAME; urllib.request.urlretrieve(v.MODEL_URL, p); \
+h = hashlib.sha256(open(p, 'rb').read()).hexdigest(); \
+sys.exit(0 if h == v.MODEL_SHA256 else 'speaker model hash mismatch: ' + h)"
 # the website (setup, pairing, credit, chat), served at the relay's root
 COPY ReedusLiteS3/web /app/ui
 

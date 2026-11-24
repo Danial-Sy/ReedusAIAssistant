@@ -77,6 +77,25 @@ SCHEMA = [
         at DOUBLE PRECISION NOT NULL,
         usd DOUBLE PRECISION NOT NULL,     -- + top-up, - spend
         what TEXT NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS voices (
+        id TEXT PRIMARY KEY,               -- a person he knows by voice (voices.py)
+        account_id TEXT NOT NULL REFERENCES accounts(id),
+        name TEXT NOT NULL,
+        me INTEGER NOT NULL DEFAULT 0,     -- the account holder: their notes are the bulletin
+        samples TEXT NOT NULL DEFAULT '[]',  -- voiceprints, base64 float32 (voiceprint.py)
+        model TEXT NOT NULL DEFAULT '',
+        notes TEXT NOT NULL DEFAULT '',    -- what he knows about them (like the bulletin)
+        notes_rev INTEGER NOT NULL DEFAULT 0,
+        last_heard DOUBLE PRECISION NOT NULL DEFAULT 0,
+        created DOUBLE PRECISION NOT NULL,
+        updated DOUBLE PRECISION NOT NULL)""",
+    "CREATE INDEX IF NOT EXISTS voices_account ON voices(account_id)",
+]
+
+# columns added after a table first shipped: (table, column, definition)
+COLUMNS = [
+    ("turns", "voice_id", "TEXT NOT NULL DEFAULT ''"),   # who said it (voices.py): '' = the
+                                                         # account holder, '?' = not recognized
 ]
 
 # Postgres full-text search over past turns (the history recall). SQLite falls back to LIKE.
@@ -168,6 +187,13 @@ class DB:
     def migrate(self) -> None:
         for stmt in SCHEMA:
             self.execute(self._sql(stmt))
+        for table, col, definition in COLUMNS:
+            if self.pg:
+                self.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {definition}")
+            else:
+                have = {r["name"] for r in self.all(f"PRAGMA table_info({table})")}
+                if col not in have:
+                    self.execute(f"ALTER TABLE {table} ADD COLUMN {col} {definition}")
         if self.pg:
             for stmt in PG_EXTRA:
                 self.execute(stmt)
@@ -190,26 +216,32 @@ class DB:
             return {}
 
     def search_turns(self, account_id: str, query: str, limit: int = 3,
-                     exclude_conversation: str = "") -> List[dict]:
-        """Past turns that mention what was just said, best first."""
+                     exclude_conversation: str = "",
+                     voices: Optional[Sequence[str]] = None) -> List[dict]:
+        """Past turns that mention what was just said, best first. voices: only turns said by
+        these people (turns.voice_id), None = everyone's."""
         words = [w for w in re.findall(r"[a-z0-9']{3,}", (query or "").lower())
                  if w not in _STOP][:8]
         if not words:
             return []
+        who, who_args = "", ()
+        if voices is not None:
+            who = f" AND voice_id IN ({', '.join(['%s'] * len(voices))})" if voices else " AND 1 = 0"
+            who_args = tuple(voices)
         if self.pg:
             # apostrophes are tsquery syntax; "don't" -> "dont"
             q = " | ".join(dict.fromkeys(w.replace("'", "") for w in words if w.replace("'", "")))
             return self.all(
-                "SELECT said, reply, at FROM turns WHERE account_id = %s AND conversation <> %s "
-                "AND to_tsvector('english', said || ' ' || reply) @@ to_tsquery('english', %s) "
+                "SELECT said, reply, at FROM turns WHERE account_id = %s AND conversation <> %s"
+                + who + " AND to_tsvector('english', said || ' ' || reply) @@ to_tsquery('english', %s) "
                 "ORDER BY ts_rank(to_tsvector('english', said || ' ' || reply), "
                 "to_tsquery('english', %s)) DESC, at DESC LIMIT %s",
-                (account_id, exclude_conversation, q, q, limit))
+                (account_id, exclude_conversation, *who_args, q, q, limit))
         like = " OR ".join(["lower(said || ' ' || reply) LIKE %s"] * len(words))
         rows = self.all(
-            f"SELECT said, reply, at FROM turns WHERE account_id = %s AND conversation <> %s "
+            f"SELECT said, reply, at FROM turns WHERE account_id = %s AND conversation <> %s{who} "
             f"AND ({like}) ORDER BY at DESC LIMIT 50",
-            (account_id, exclude_conversation, *[f"%{w}%" for w in words]))
+            (account_id, exclude_conversation, *who_args, *[f"%{w}%" for w in words]))
         rows.sort(key=lambda r: -sum(w in (r["said"] + " " + r["reply"]).lower() for w in words))
         return rows[:limit]
 

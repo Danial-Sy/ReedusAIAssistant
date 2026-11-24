@@ -1626,12 +1626,249 @@ async def main():
     await ws3.close()
     await sock.close()
 
+    await who_test(url, hub, ask2)
+
     await ws.close()
     await asyncio.sleep(0.2)
     server.close()
 
 
+async def who_test(url, hub, ask2):
+    """[21] who's talking: teaching him voices from the app, telling people apart per turn,
+    whose notes and history each turn uses, and the notes folded per person."""
+    import websockets
+    from reedus_relay import voiceprint, voices
+    from reedus_relay import session as session_mod
+    print("[21] who's talking")
+
+    # the decision on its own, with made-up voiceprints
+    def unit(i, n=8):
+        v = np.full(n, 0.05, dtype=np.float32)
+        v[i] = 1.0
+        return v / np.linalg.norm(v)
+    A, B, C = unit(0), unit(1), unit(2)
+    ppl = [("a", A), ("b", B)]
+    check(voiceprint.decide(A, 3.0, ppl).voice_id == "a" and voiceprint.decide(B, 3.0, ppl).voice_id == "b",
+          "a clear match picks that person")
+    check(voiceprint.decide(C, 3.0, ppl).voice_id == "" and voiceprint.decide(C, 3.0, ppl).how == "unknown",
+          "a voice like nobody's is not recognized")
+    mix = (A + B) / np.linalg.norm(A + B)
+    check(voiceprint.decide(mix, 3.0, ppl).how == "unsure" and voiceprint.decide(mix, 3.0, ppl, sticky="b").voice_id == "b",
+          "too close to call: nobody, unless one of them was just talking")
+    check(voiceprint.decide(None, 0.2, ppl, sticky="a").voice_id == "a" and voiceprint.decide(None, 0.2, ppl).how == "quiet",
+          "too little speech keeps whoever was talking")
+    check(voiceprint.decide(C, 3.0, ppl, sticky="a").voice_id == "",
+          "...but a clearly different voice isn't pinned on them")
+    check(voiceprint.decide(A, 3.0, []).how == "none", "nobody set up: nothing to decide")
+    vs = [A, A * 0.9 + B * 0.1, A, C]
+    check(len(voiceprint.consistent([v / np.linalg.norm(v) for v in vs])) == 3,
+          "a sentence that sounds like someone else is left out of the teaching")
+    e = voiceprint.encode(A)
+    check(np.allclose(voiceprint.decode(e), A), "voiceprints survive the database")
+
+    # the fake model: each test voice (a sine at its own pitch) gets its own voiceprint
+    def fake_embed(x):
+        k = int(np.argmax(np.abs(np.fft.rfft(x[:1024])))) // 8
+        v = np.full(32, 0.05, dtype=np.float32)
+        v[k % 32] = 1.0
+        return v
+    voiceprint.use_embedder(fake_embed)
+    tone = lambda p: (np.sin(np.arange(320) / p) * 9000).astype("<i2").tobytes()   # noqa: E731
+    DAN, MOM, GUEST = tone(3.0), tone(7.0), tone(1.6)
+    check(fake_embed(np.frombuffer(DAN * 4, "<i2").astype(np.float32)).argmax()
+          != fake_embed(np.frombuffer(MOM * 4, "<i2").astype(np.float32)).argmax(), "the test voices differ")
+
+    vacc = accounts.create_account("Vee", 5.0)
+    vaid = vacc["account"]["id"]
+    vdev = accounts.create_device(vaid, "Den Lite")
+    lws = await websockets.connect(url + "/lite")
+    await lws.send(json.dumps({"type": "hello", "proto": 3, "device": "den", "fw": "test",
+                               "token": vdev["token"], "rate": 16000, "frame_ms": 20, "bulletin_rev": 0}))
+    dv = Device(lws)
+    await dv.wait_for(lambda: "welcome" in dv.types())
+    vs_ = hub.sessions[vdev["device"]["id"]]
+    app = await websockets.connect(url + "/app")
+    await app.send(json.dumps({"type": "auth", "token": vacc["token"]}))
+    json.loads(await app.recv())
+
+    async def talk(voice, said, voiced=40, wake=True):
+        SCRIPT[:] = [said]
+        n = len(BACKEND.calls)
+        await lws.send(json.dumps({"type": "gate", "open": True}))
+        if wake:
+            await lws.send(WAKE)
+        for _ in range(5):
+            await lws.send(SILENT)
+        for _ in range(voiced):
+            await lws.send(voice)
+        for _ in range(90):
+            await lws.send(SILENT)
+        await dv.wait_for(lambda: len(BACKEND.calls) > n and dv.states()[-1] == "listening", 6)
+        return [c for c in BACKEND.calls[n:] if c["name"] == "persona"][-1]["messages"]
+
+    async def quiet():
+        for _ in range(60):
+            await lws.send(SILENT)
+        await dv.wait_for(lambda: dv.states()[-1] == "idle", 4)
+
+    r = await ask2(app, {"action": "who.list"})
+    check(r.get("ok") and r["ready"] and r["people"] == [], "the app sees voice recognition ready, nobody yet")
+    memory.set_bulletin(vaid, "- Their name is Dan.\n- Dan has a chemistry test Monday.")
+    msgs = await talk(DAN, "what's up")
+    check("Who's talking" not in msgs[0]["content"] and "chemistry test" in msgs[0]["content"],
+          "nobody set up: the prompt is exactly what it was (the bulletin, no voice lines)")
+    await quiet()
+    check(memory.db().one("SELECT voice_id FROM turns WHERE account_id = %s ORDER BY at DESC", (vaid,))["voice_id"] == "",
+          "...and the turn counts as the account holder's")
+
+    r = await ask2(app, {"action": "who.add", "name": "Dan", "me": True})
+    dan = r["person"]
+    r = await ask2(app, {"action": "who.add", "name": "Mom"})
+    mom = r["person"]
+    check(dan["me"] and not mom["me"] and not dan["ready"], "two people added, Dan is 'me', nobody taught yet")
+    r = await ask2(app, {"action": "who.add", "name": "mom"})
+    check("already" in r.get("error", ""), "two people can't share a name")
+
+    session_mod.Session.ENROLL_NEED_S = session_mod.Session.ENROLL_MIN_S = 4.0
+
+    async def teach(p, voice, sentences=4):
+        r = await ask2(app, {"action": "who.teach", "voice": p["id"]})
+        check(r.get("ok"), f"teaching {p['name']} starts on the only Lite online ({r.get('error', '')})")
+        ok = await dv.wait_for(lambda: (vs_.info.get("enroll") or {}).get("state") == "listening"
+                               and dv.last("listen")["open"], 4)
+        check(ok, "he says what to do, then opens his ears")
+        await lws.send(WAKE)                       # saying his name while teaching changes nothing
+        for _ in range(sentences):
+            for _ in range(70):
+                await lws.send(voice)
+            for _ in range(45):
+                await lws.send(SILENT)
+        ok = await dv.wait_for(lambda: (vs_.info.get("enroll") or {}).get("state") == "done", 4)
+        st = await ask2(app, {"action": "who.teach.status"})
+        check(ok and st["enroll"]["state"] == "done" and st["enroll"]["sentences"] >= 3,
+              f"enough speech and he's got it ({st.get('enroll')})")
+        await dv.wait_for(lambda: dv.states()[-1] == "idle" and vs_.mode == "idle", 4)
+        return st["enroll"]
+
+    n_persona = len([c for c in BACKEND.calls if c["name"] == "persona"])
+    await teach(dan, DAN)
+    check(len([c for c in BACKEND.calls if c["name"] == "persona"]) == n_persona,
+          "teaching isn't a conversation: no LLM, nothing said to him counts as a turn")
+    out = await teach(mom, MOM)
+    check(not out.get("warn"), "a different voice isn't flagged as sounding like someone else")
+    r = await ask2(app, {"action": "who.list"})
+    by = {p["name"]: p for p in r["people"]}
+    check(by["Dan"]["ready"] and by["Mom"]["taught"] >= 3, "both are taught (voiceprints saved per sentence)")
+    check("samples" not in r["people"][0], "the app never gets the voiceprints themselves")
+
+    msgs = await talk(MOM, "what should I make for dinner tonight")
+    sp = msgs[0]["content"]
+    check("Who's talking: Mom" in sp and "chemistry test" not in sp,
+          "Mom's voice: he knows it's her, and Dan's notes stay out of her prompt")
+    check(vs_.info["speaker"]["name"] == "Mom" and vs_.info["speaker"]["how"] == "voice",
+          "the app can see who he heard last")
+    msgs = await talk(DAN, "and I need to study chemistry after", wake=False)
+    sp = msgs[0]["content"]
+    users = [m["content"] for m in msgs if m["role"] == "user"]
+    check("Who's talking: Dan" in sp and "chemistry test" in sp, "Dan's voice: his own notes are back")
+    check(users[-2].startswith("[Mom] what should I make") and users[-1].startswith("[Dan] and I need"),
+          f"two people in one conversation: each line says who said it ({users[-2:]})")
+    msgs = await talk(DAN, "yeah", voiced=20, wake=False)
+    check("Who's talking: Dan" in msgs[0]["content"], "a one-word reply is still him")
+    msgs = await talk(GUEST, "who are you anyway", wake=False)
+    sp = msgs[0]["content"]
+    check("don't recognize this voice" in sp and "chemistry test" not in sp,
+          "a voice he doesn't know: no name, and nobody's notes (Dan taught him his own voice)")
+    turns = memory.db().all("SELECT said, voice_id FROM turns WHERE account_id = %s ORDER BY at", (vaid,))
+    ids = {t["said"][:10]: t["voice_id"] for t in turns}
+    check(ids.get("what shoul") == mom["id"] and ids.get("and I need") == "" and ids.get("who are yo") == "?",
+          f"each turn is saved with who said it ({ids})")
+    n_fold = len([c for c in BACKEND.calls if c["name"] == "bulletin"])
+    SCRIPT[:] = ["okay goodbye"]
+    await talk(DAN, "okay goodbye", wake=False)
+    await dv.wait_for(lambda: len([c for c in BACKEND.calls if c["name"] == "bulletin"]) >= n_fold + 2, 4)
+    await asyncio.sleep(0.3)
+    folds = [c for c in BACKEND.calls if c["name"] == "bulletin"][n_fold:]
+    check(len(folds) == 2, f"after the conversation: one notes update for Dan, one for Mom, none for the guest ({len(folds)})")
+    check(any("notes about Mom" in f["messages"][0]["content"] and "dinner" in f["messages"][1]["content"]
+              and "chemistry" not in f["messages"][1]["content"] for f in folds),
+          "Mom's update only sees what Mom said")
+    check(voices.person(mom["id"])["notes"].startswith("- "), "Mom's notes are saved on her")
+
+    msgs = await talk(MOM, "what do you know about chemistry")
+    sp = msgs[0]["content"]
+    check("past conversations" not in sp or "study chemistry" not in sp.split("past conversations", 1)[1],
+          "recall only searches the person's own turns (Dan's chemistry stays his)")
+    await quiet()
+
+    # typed chat on the website is the account holder
+    r = await ask2(app, {"action": "chat", "text": "hello from the app"})
+    sp = [c for c in BACKEND.calls if c["name"] == "persona"][-1]["messages"][0]["content"]
+    check(r.get("text") and "typing to you in the app" in sp and memory.bulletin(vaid)[0].split("\n")[0] in sp,
+          "typing in the app counts as Dan, with Dan's notes")
+
+    r = await ask2(app, {"action": "who.notes", "voice": mom["id"], "notes": "likes gardening\n\n- has a cat"})
+    check(r.get("ok") and r["person"]["notes"] == "- likes gardening\n- has a cat", "Mom's notes can be edited in the app")
+    r = await ask2(app, {"action": "who.rename", "voice": mom["id"], "name": "Mum"})
+    check(r.get("ok") and r["person"]["name"] == "Mum", "renaming someone")
+    other = accounts.create_account("Other", 1.0)
+    ox = voices.add(other["account"]["id"], "Stranger")
+    r = await ask2(app, {"action": "who.remove", "voice": ox["id"]})
+    check("no such" in r.get("error", "") and voices.person(ox["id"]), "another account's people can't be touched")
+    r = await ask2(app, {"action": "who.teach.cancel"})
+    check(r.get("ok") and not r["cancelled"], "cancel with nothing going on is harmless")
+    r = await ask2(app, {"action": "who.teach", "voice": mom["id"]})
+    await dv.wait_for(lambda: (vs_.info.get("enroll") or {}).get("state") == "listening", 4)
+    r = await ask2(app, {"action": "who.teach.cancel"})
+    ok = await dv.wait_for(lambda: vs_.mode == "idle" and dv.states()[-1] == "idle", 3)
+    check(r.get("cancelled") and ok and vs_.info["enroll"]["state"] == "cancelled",
+          "teaching can be cancelled from the app, and he goes back to idle")
+    r = await ask2(app, {"action": "who.remove", "voice": mom["id"]})
+    left = memory.db().all("SELECT id FROM turns WHERE voice_id = %s", (mom["id"],))
+    check(r.get("ok") and not voices.person(mom["id"]) and not left,
+          "removing someone forgets their voice, their notes, and what they said")
+    voices.set_notes(dan["id"], "- something")
+    r = await ask2(app, {"action": "memory.forget"})
+    check(not voices.person(dan["id"])["notes"] and voices.person(dan["id"])["samples"],
+          "'Forget everything' clears notes but keeps the voices")
+
+    voiceprint.use_embedder(None)
+    session_mod.Session.ENROLL_NEED_S, session_mod.Session.ENROLL_MIN_S = 20.0, 8.0
+    await app.close()
+    await lws.close()
+
+
+def real_model_test():
+    """The real speaker model on real speech, when it's here (RELAY_SPK_WAVS: a folder of
+    16 kHz mono wavs named <speaker>_<anything>.wav, two or more clips per speaker)."""
+    import glob
+    import wave
+    from reedus_relay import voiceprint
+    folder = os.environ.get("RELAY_SPK_WAVS", "")
+    if not folder or not voiceprint.model_path().exists():
+        print("[22] the real speaker model: skipped (set RELAY_SPK_WAVS and put the model in models/)")
+        return
+    print("[22] the real speaker model on real speech")
+    voiceprint.use_embedder(None)
+    clips = {}
+    for f in sorted(glob.glob(os.path.join(folder, "*.wav"))):
+        w = wave.open(f)
+        clips.setdefault(os.path.basename(f).split("_")[0], []).append(w.readframes(w.getnframes()))
+    people = {k: v for k, v in clips.items() if len(v) >= 2}
+    t0 = time.perf_counter()
+    prints = {k: [voiceprint.embed(c)[0] for c in v] for k, v in people.items()}
+    ms = (time.perf_counter() - t0) * 1000 / sum(len(v) for v in people.values())
+    taught = [(k, voiceprint.average(v[:-1])) for k, v in prints.items()]
+    right = sum(voiceprint.decide(v[-1], 3.0, taught).voice_id == k for k, v in prints.items())
+    check(right == len(prints), f"each speaker's held-out clip is matched to them ({right}/{len(prints)}, {ms:.0f} ms a clip)")
+    for k, v in clips.items():
+        if k not in people:
+            m = voiceprint.decide(voiceprint.embed(v[0])[0], 3.0, taught)
+            check(m.voice_id == "", f"a voice he wasn't taught ({k}) isn't pinned on anyone ({m.how}, {m.score:.2f})")
+
+
 asyncio.run(main())
+real_model_test()
 print()
 if _fails:
     print(f"{len(_fails)} FAILED")

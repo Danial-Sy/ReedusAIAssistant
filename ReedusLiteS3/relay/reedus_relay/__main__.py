@@ -77,6 +77,9 @@ async def _run() -> None:
     print(f"[relay] listening on {config.HOST}:{config.PORT} (/ website, /lite devices, /app, /health)",
           flush=True)
     asyncio.ensure_future(_reconcile_forever())
+    # the voice recognition model, loaded now so the first turn doesn't wait for it
+    from reedus_relay import voiceprint
+    asyncio.ensure_future(asyncio.to_thread(voiceprint.available))
     await server.serve_forever()
 
 

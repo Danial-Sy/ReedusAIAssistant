@@ -106,6 +106,12 @@ Then each request is `{"id", "action", …}` and each reply echoes `id`.
 | `memory.get` | `limit?` | `bulletin, rev, recent` turns |
 | `memory.set` | `bulletin` | replaces the notes, pushes them to the devices |
 | `memory.forget` | | deletes the notes and all history |
+| `who.list` | | people he knows by voice (`id, name, me, taught, learned, ready, notes, last_heard`), `ready` (model loaded), `heard` per Lite: who he recognized last |
+| `who.add` | `name, me?` | adds a person (`me`: the account holder, whose notes are the bulletin) |
+| `who.teach` | `voice, device?, reset?` | the Lite listens ~20 s and learns their voice; progress via `who.teach.status` |
+| `who.teach.status` / `who.teach.cancel` | `device?` | `enroll: {state: starting\|listening\|done\|failed\|cancelled, secs, need, sentences, warn?, error?}` |
+| `who.rename` / `who.me` / `who.notes` | `voice, name` / `voice, on` / `voice, notes` | edit a person |
+| `who.remove` | `voice` | forgets their voice, notes and turns |
 | `ledger` | `limit?` | top-ups and spend, newest first |
 | `chat` | `text` | type to Reedus: same brain and memory, no voice |
 | `device.expr` | `device, name, hold?` | an expression on the face |

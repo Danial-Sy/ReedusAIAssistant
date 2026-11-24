@@ -14,3 +14,5 @@ onnxruntime>=1.17
 scipy>=1.3
 scikit-learn>=1
 tqdm>=4.0
+# who's talking (voiceprint.py): Kaldi fbank features for the speaker model (onnxruntime runs it)
+kaldi-native-fbank>=1.20

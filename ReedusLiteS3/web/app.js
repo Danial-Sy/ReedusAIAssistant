@@ -991,9 +991,221 @@ async function loadSettings() {
   const me = S.status ? S.status.account : (Relay.me && Relay.me.account) || {};
   $("#who").textContent = `Signed in as ${me.name || "…"}${owner() ? ", the relay's owner" : ""}.`;
   if (owner()) loadMembers();
+  loadWho();
   const mem = await Relay.call("memory.get", { limit: 1 });
   const ta = $("#notes");
   if (!mem.error && document.activeElement !== ta && !ta.dataset.dirty) ta.value = mem.bulletin || "";
+}
+
+/* ---------- settings: who's talking (people he knows by voice) ---------- */
+const TEACH_LINES = [
+  "The quick brown fox jumps over the lazy dog, then takes a nap in the sun.",
+  "My favorite thing to eat for breakfast is... (finish it your way)",
+  "This morning, the first thing I did was...",
+  "If I could go anywhere tomorrow, I'd go to... because...",
+  "One, two, three, four, five, six, seven, eight, nine, ten.",
+];
+const WHO = { people: [], need: 20, teach: null, poll: null };
+
+function btn(text, cls) { const b = el("button", cls || "ghost-btn small", text); b.type = "button"; return b; }
+
+async function loadWho() {
+  const r = await Relay.call("who.list");
+  if (r.error) { say("#who-out", r.error, true); return; }
+  WHO.people = r.people || [];
+  WHO.need = r.need_s || 20;
+  const off = $("#who-off");
+  off.hidden = !!r.ready;
+  off.textContent = r.ready ? "" : `Voice recognition isn't working on this relay${r.why ? `: ${r.why}` : ""}.`;
+  renderWho(r.heard || {});
+}
+
+function renderWho(heard) {
+  const ul = $("#who-list");
+  ul.innerHTML = "";
+  WHO.people.forEach((p) => {
+    const li = el("li");
+    const name = el("span", "who-name", p.name);
+    if (p.me) name.append(el("span", "who-tag", "you"));
+    name.append(el("span", `who-tag${p.ready ? " ok" : ""}`, p.ready ? (p.me ? "knows your voice" : "knows their voice") : "not taught yet"));
+    const btns = el("span", "who-btns");
+    const teach = btn(p.ready ? "Teach again" : "Teach", p.ready ? "ghost-btn small" : "cta small");
+    teach.addEventListener("click", () => openTeach(p));
+    btns.append(teach);
+    let notes = null;
+    if (!p.me) {
+      const nb = btn("Notes");
+      nb.addEventListener("click", () => { notes.hidden = !notes.hidden; });
+      btns.append(nb);
+    }
+    const ren = btn("Rename");
+    ren.addEventListener("click", () => {
+      const inp = el("input");
+      inp.value = p.name;
+      inp.maxLength = 40;
+      const ok = btn("Save", "cta small");
+      const box = el("span", "who-name");
+      box.append(inp, ok);
+      name.replaceWith(box);
+      inp.focus();
+      const save = async () => {
+        const r = await Relay.call("who.rename", { voice: p.id, name: inp.value });
+        if (r.error) { toast(r.error); return; }
+        loadWho();
+      };
+      ok.addEventListener("click", save);
+      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
+    });
+    btns.append(ren);
+    if (!p.me) {
+      const me = btn("This is me");
+      me.addEventListener("click", async () => {
+        const r = await Relay.call("who.me", { voice: p.id, on: true });
+        toast(r.error || `Got it, you're ${p.name}`);
+        loadWho();
+      });
+      btns.append(me);
+    }
+    const rm = btn("Remove", "ghost-btn small danger");
+    rm.addEventListener("click", () => confirmFirst(rm, "Sure? Forgets their notes too", async () => {
+      const r = await Relay.call("who.remove", { voice: p.id });
+      toast(r.error || `${p.name} removed`);
+      loadWho();
+    }));
+    btns.append(rm);
+    li.append(name, btns);
+    if (p.last_heard) li.append(el("span", "note", `heard ${ago(p.last_heard)}`));
+    if (!p.me) {
+      notes = el("div", "who-notes");
+      notes.hidden = true;
+      const ta = el("textarea");
+      ta.rows = 4;
+      ta.placeholder = `What he knows about ${p.name}. He adds to this himself.`;
+      ta.value = p.notes || "";
+      const save = btn("Save notes", "cta small");
+      save.addEventListener("click", async () => {
+        busy(save, true);
+        const r = await Relay.call("who.notes", { voice: p.id, notes: ta.value });
+        busy(save, false);
+        toast(r.error || "Saved");
+        if (!r.error) ta.value = r.person.notes;
+      });
+      notes.append(ta, save);
+      li.append(notes);
+    }
+    ul.append(li);
+  });
+  const last = Object.values(heard).sort((a, b) => b.at - a.at)[0];
+  say("#who-heard", last && WHO.people.some((p) => p.ready)
+    ? `Last voice he heard: ${last.name || "someone he didn't recognize"}${last.name && last.how === "kept" ? " (going by who was talking)" : ""}, ${ago(last.at)}`
+    : "");
+}
+
+function onlineLites() {
+  return ((S.status && S.status.devices) || []).filter((d) => d.online);
+}
+
+function teachShow(live) {
+  $("#teach-intro").hidden = live;
+  $("#teach-live").hidden = !live;
+}
+
+function openTeach(p) {
+  WHO.teach = { p, device: "", live: false, done: false };
+  $("#teach-title").textContent = `Teach Reedus ${p.me ? "your" : `${p.name}'s`} voice`;
+  const lites = onlineLites();
+  const sel = $("#teach-lite");
+  sel.innerHTML = "";
+  lites.forEach((d) => { const o = el("option", "", d.name); o.value = d.id; sel.append(o); });
+  $("#teach-lite-row").hidden = lites.length < 2;
+  $("#teach-go").disabled = !lites.length;
+  say("#teach-out", lites.length ? (p.ready ? "This adds to what he already knows of their voice." : "") : "None of your Lites are online.", !lites.length);
+  $("#teach-lines").innerHTML = "";
+  TEACH_LINES.forEach((t) => $("#teach-lines").append(el("li", "", t)));
+  $("#teach-bar i").style.width = "0%";
+  $("#teach-done").hidden = true;
+  $("#teach-cancel").hidden = false;
+  teachShow(false);
+  $("#teach").hidden = false;
+}
+
+function stopTeachPoll() { clearInterval(WHO.poll); WHO.poll = null; }
+
+async function closeTeach() {
+  stopTeachPoll();
+  const t = WHO.teach;
+  if (t && t.live && !t.done) await Relay.call("who.teach.cancel", { device: t.device });
+  WHO.teach = null;
+  $("#teach").hidden = true;
+}
+
+async function teachTick() {
+  const t = WHO.teach;
+  if (!t || !t.live) return;
+  const r = await Relay.call("who.teach.status", { device: t.device });
+  if (r.error) { say("#teach-out", r.error, true); return; }
+  const e = r.enroll || {};
+  if (e.voice && e.voice !== t.p.id) return;
+  const need = e.need || WHO.need;
+  if (e.state === "starting") say("#teach-read", "He's getting ready…");
+  else if (e.state === "listening") {
+    $("#teach-bar i").style.width = `${Math.min(100, (100 * (e.secs || 0)) / need)}%`;
+    say("#teach-read", e.secs ? `${Math.round(e.secs)} of ${Math.round(need)} seconds` : "Listening. Go ahead and talk.");
+  } else if (e.state === "done") {
+    t.done = true;
+    stopTeachPoll();
+    $("#teach-bar i").style.width = "100%";
+    say("#teach-read", `Got it. He knows ${t.p.me ? "your" : `${t.p.name}'s`} voice now.`);
+    say("#teach-out", e.warn ? `Heads up: ${t.p.name} ${e.warn}.` : "", !!e.warn);
+    $("#teach-done").hidden = false;
+    $("#teach-cancel").hidden = true;
+    loadWho();
+  } else if (e.state === "failed") {
+    t.live = false;
+    stopTeachPoll();
+    say("#teach-out", e.error || "That didn't work. Try again?", true);
+    teachShow(false);
+  } else if (e.state === "cancelled") {
+    t.done = true;
+    closeTeach();
+  }
+}
+
+function wireWho() {
+  $("#who-add").addEventListener("click", async (e) => {
+    const name = $("#who-name").value.trim();
+    if (!name) { say("#who-out", "Type their name first.", true); return; }
+    busy(e.target, true);
+    const r = await Relay.call("who.add", { name, me: $("#who-me").checked });
+    busy(e.target, false);
+    if (r.error) { say("#who-out", r.error, true); return; }
+    say("#who-out", "");
+    $("#who-name").value = "";
+    $("#who-me").checked = false;
+    await loadWho();
+    openTeach(r.person);
+  });
+  $("#who-name").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#who-add").click(); });
+  $("#teach-go").addEventListener("click", async (e) => {
+    const t = WHO.teach;
+    if (!t) return;
+    const lites = onlineLites();
+    t.device = lites.length > 1 ? $("#teach-lite").value : (lites[0] || {}).id || "";
+    busy(e.target, true);
+    const r = await Relay.call("who.teach", { voice: t.p.id, device: t.device });
+    busy(e.target, false);
+    if (r.error) { say("#teach-out", r.error, true); return; }
+    t.live = true;
+    say("#teach-out", "");
+    say("#teach-read", "He's getting ready…");
+    teachShow(true);
+    stopTeachPoll();
+    WHO.poll = setInterval(teachTick, 600);
+  });
+  $("#teach-cancel").addEventListener("click", closeTeach);
+  $("#teach-x").addEventListener("click", closeTeach);
+  $("#teach-done").addEventListener("click", closeTeach);
+  $("#teach").addEventListener("click", (e) => { if (e.target.id === "teach") closeTeach(); });
 }
 
 function wireSettings() {
@@ -1636,6 +1848,7 @@ async function boot() {
   wireBrain();
   wireListen();
   wireSettings();
+  wireWho();
   wireVoice();
   wireGlance();
   Ctl.wire();

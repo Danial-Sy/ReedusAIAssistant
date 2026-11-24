@@ -264,6 +264,21 @@
         </div>
       </div>
 
+      <div class="card" id="who-card">
+        <h3>Who's talking</h3>
+        <p class="note">Teach Reedus each person's voice and he'll know who he's talking to, with his own notes on each of them. About 20 seconds per person, talking to a Lite.</p>
+        <p class="note bad" id="who-off" hidden></p>
+        <ul class="people who-list" id="who-list"></ul>
+        <p class="note" id="who-heard"></p>
+        <div class="inline">
+          <input id="who-name" maxlength="40" placeholder="Name" autocomplete="off" style="flex:1;min-width:120px">
+          <button class="ghost-btn" id="who-add" type="button">Add person</button>
+        </div>
+        <label class="switch"><input type="checkbox" id="who-me"><span class="track"></span>
+          <span>This is me (my notes are the ones below)</span></label>
+        <p class="note" id="who-out"></p>
+      </div>
+
       <div class="card" id="memory-card">
         <h3>What Reedus remembers</h3>
         <p class="note">One fact per line. He adds to this himself as you talk.</p>
@@ -298,6 +313,31 @@
       <button class="cta wide" type="submit">Pair</button>
       <p class="note" id="pair-out"></p>
     </form>
+  </div>
+
+  <!-- teaching him someone's voice -->
+  <div class="sheet-bg" id="teach" hidden>
+    <div class="sheet">
+      <div class="card-head"><h3 id="teach-title">Teach a voice</h3><button class="icon-btn" type="button" id="teach-x" aria-label="Close"><svg><use href="#i-x"/></svg></button></div>
+      <label class="field" id="teach-lite-row" hidden><span>Which Lite</span><select id="teach-lite"></select></label>
+      <div id="teach-intro">
+        <ol class="how">
+          <li>Stand where you'd normally talk to him, a few feet away.</li>
+          <li>Tap Start. He'll say he's listening, then talk for about 20 seconds in your normal voice.</li>
+          <li>Only one person talks while he learns.</li>
+        </ol>
+        <button class="cta wide" id="teach-go" type="button">Start</button>
+      </div>
+      <div id="teach-live" hidden>
+        <p class="note">Read these out loud, or just tell him about your day:</p>
+        <ol class="how teach-lines" id="teach-lines"></ol>
+        <div class="bar" id="teach-bar"><i></i></div>
+        <p class="note center" id="teach-read"></p>
+        <div class="inline center"><button class="ghost-btn" id="teach-cancel" type="button">Cancel</button>
+          <button class="cta" id="teach-done" type="button" hidden>Done</button></div>
+      </div>
+      <p class="note" id="teach-out"></p>
+    </div>
   </div>
 
   <!-- a Lite's controls: face, head, drawing, firmware -->

@@ -477,6 +477,8 @@ class Hub:
             await asyncio.to_thread(memory.forget_all, aid)
             self.push_bulletin(aid)
             return {"ok": True}
+        if a.startswith("who."):              # people he knows by voice (not "voice.*": his own voice)
+            return await self._voices(a, req, aid)
         if a == "device.set":
             did = req.get("device") or ""
             dev = await asyncio.to_thread(accounts.device, did)
@@ -558,6 +560,79 @@ class Hub:
         if a == "topup":
             return {"error": "use topup.start (Stripe Checkout), or ask the relay owner to top up"}
         return {"error": f"unknown action {a!r}"}
+
+    # ---------- people he knows by voice (voices.py) ----------
+    async def _voices(self, a: str, req: dict, aid: str) -> dict:
+        from reedus_relay import voiceprint, voices
+
+        async def mine() -> Optional[dict]:
+            p = await asyncio.to_thread(voices.person, str(req.get("voice") or ""))
+            return p if p and p["account_id"] == aid else None
+
+        def lite() -> tuple:
+            """(session, error): the Lite named in the request, or the only one online."""
+            did = str(req.get("device") or "")
+            live = self.account_sessions(aid)
+            if did:
+                s = self.sessions.get(did)
+                if s is None or s.aid != aid:
+                    return None, "that Lite is offline"
+                return s, ""
+            if not live:
+                return None, "none of your Lites are online"
+            if len(live) > 1:
+                return None, "pick which Lite to use"
+            return live[0], ""
+
+        try:
+            if a == "who.list":
+                ready = await asyncio.to_thread(voiceprint.available)
+                people = await asyncio.to_thread(voices.people, aid)
+                heard = {s.did: {**s.info["speaker"], "device": s.device.get("name", "")}
+                         for s in self.account_sessions(aid) if s.info.get("speaker")}
+                return {"ok": True, "people": [voices.public(p) for p in people], "ready": ready,
+                        "why": "" if ready else voiceprint.why_not(), "heard": heard,
+                        "need_s": Session.ENROLL_NEED_S}
+            if a == "who.add":
+                p = await asyncio.to_thread(voices.add, aid, str(req.get("name") or ""),
+                                            bool(req.get("me")))
+                return {"ok": True, "person": voices.public(p)}
+            if a == "who.teach.status":
+                s, err = lite()
+                if s is None:
+                    return {"error": err}
+                return {"ok": True, "enroll": s.info.get("enroll") or {}, "state": s.state}
+            if a == "who.teach.cancel":
+                s, err = lite()
+                if s is None:
+                    return {"error": err}
+                return {"ok": True, "cancelled": s.enroll_cancel()}
+            p = await mine()
+            if p is None:
+                return {"error": "no such person"}
+            if a == "who.rename":
+                await asyncio.to_thread(voices.rename, p["id"], str(req.get("name") or ""))
+            elif a == "who.me":
+                await asyncio.to_thread(voices.set_me, p["id"], bool(req.get("on", True)))
+            elif a == "who.remove":
+                await asyncio.to_thread(voices.remove, p["id"])
+                return {"ok": True}
+            elif a == "who.notes":
+                rev = await asyncio.to_thread(voices.set_notes, p["id"], str(req.get("notes") or ""))
+                return {"ok": True, "rev": rev, "person": voices.public(await asyncio.to_thread(voices.person, p["id"]))}
+            elif a == "who.teach":
+                s, err = lite()
+                if s is None:
+                    return {"error": err}
+                err = s.enroll_start(p, reset=bool(req.get("reset")))
+                if err:
+                    return {"error": err}
+                return {"ok": True, "device": s.did, "enroll": s.info.get("enroll") or {}}
+            else:
+                return {"error": f"unknown action {a!r}"}
+            return {"ok": True, "person": voices.public(await asyncio.to_thread(voices.person, p["id"]))}
+        except ValueError as e:
+            return {"error": str(e)}
 
     # ---------- the face, the head, drawings, firmware ----------
     async def _device_control(self, a: str, req: dict, aid: str, owner: bool) -> dict:
@@ -790,10 +865,12 @@ class Hub:
         brain = Brain(acc, {"id": "app", "name": "the website"})
         convo = f"app-{acc['id']}-{int(time.time() // 1800)}"   # half-hour chat windows
         t0 = time.perf_counter()
+        from reedus_relay import voices
+        who = voices.typed_who(acc["id"])
         with meter.metering(m):
-            reply = brain.reply(text, convo, lambda s: None)
+            reply = brain.reply(text, convo, lambda s: None, who=who if who.active else None)
         accounts.charge(acc["id"], m.usd, f"Chat: {m.summary()}")
-        memory.record_turn(acc["id"], "app", convo, text, reply, m.usd)
+        memory.record_turn(acc["id"], "app", convo, text, reply, m.usd, who.turn_id)
         return {"text": reply, "usd": round(m.usd, 5), "ms": int((time.perf_counter() - t0) * 1000)}
 
     # ---------- Setup: the checklist, keys, tests ----------

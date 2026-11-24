@@ -381,18 +381,29 @@ class Brain:
             print(f"[relay] assist fast path failed: {e!r}", flush=True)
             return None
 
-    def system(self, said: str, conversation: str, fact: Optional[str] = None) -> str:
+    def system(self, said: str, conversation: str, fact: Optional[str] = None, who=None) -> str:
         """Everything that's the same every turn first (persona, Lite's voice rules, the example
-        replies), then what changes (the time, the bulletin, recalled history, live weather).
-        Same-prefix prompts hit the provider's prompt cache, which is cheaper and starts the
-        reply sooner; the clock used to sit near the top and broke the cache every minute."""
-        bulletin = self._bulletin()
-        recalled = memory.recall(self.account["id"], said, conversation)
+        replies), then what changes (the time, who's talking, their notes, recalled history,
+        live weather). Same-prefix prompts hit the provider's prompt cache, which is cheaper and
+        starts the reply sooner; the clock used to sit near the top and broke the cache every
+        minute. who: voices.Who for this turn (None, or nobody set up: as it always was)."""
+        from reedus_relay import voices
+        if who is not None and who.active:
+            bulletin = voices.notes_for(who, self.account["id"]) if not who.owner_is_speaking \
+                else self._bulletin()
+            recalled = memory.recall(self.account["id"], said, conversation,
+                                     voices=who.history_ids())
+            whom = voices.prompt_block(who, self.account)
+        else:
+            bulletin = self._bulletin()
+            recalled = memory.recall(self.account["id"], said, conversation)
+            whom = ""
         today = datetime.now().strftime("%A, %B %d, %Y, %I:%M %p").replace(" 0", " ")
         out = stable_system() + "\n\n" + (
             f"Today's date is {today}. Your training knowledge has a cutoff, so for anything that "
             f"could have changed since then (news, scores, prices, who currently holds a role, "
             f"recent releases) search instead of guessing.") \
+            + ("\n\n" + whom if whom else "") \
             + "\n\n" + persona.build_volatile_block(bulletin=bulletin, recalled=recalled)
         fact = self.weather_fact(said) if fact is None else fact
         if fact:
@@ -444,24 +455,31 @@ class Brain:
     def reply(self, said: str, conversation: str, on_sentence: Callable[[str], None],
               cancel: Optional[threading.Event] = None,
               on_face: Optional[Callable[[str], None]] = None,
-              think: Optional[str] = None, search: bool = False) -> str:
+              think: Optional[str] = None, search: bool = False, who=None) -> str:
         """Speakable reply text; each sentence also goes to on_sentence as soon as it's ready,
-        and each face tag ([excited], [sad]…) to on_face just before the sentence it leads."""
+        and each face tag ([excited], [sad]…) to on_face just before the sentence it leads.
+        who: voices.Who, who said it (their notes and history go in the prompt)."""
         t0 = time.monotonic()
         self.timing = {}
+        speaker = self.speaker_label(who)
         fast = self.fast_path(said)
         if fast:
             on_sentence(speakable(fast))
-            self._remember(said, fast)
+            self._remember(said, fast, speaker=speaker)
             self.timing = {"fast": 1}
             return fast
         fact = self.weather_fact(said)
-        msgs = [{"role": "system", "content": self.system(said, conversation, fact)}]
+        msgs = [{"role": "system", "content": self.system(said, conversation, fact, who=who)}]
         # an empty turn (a reply cut off by "Reedus" before it said anything) makes Gemini
         # refuse the whole request ("Missing text in content"), so those never go in
         past = [h for h in self.history[-2 * config.HISTORY_TURNS:] if (h.get("content") or "").strip()]
-        msgs += [{"role": h["role"], "content": h["content"]} for h in past]
-        msgs.append({"role": "user", "content": said})
+        # more than one person in this conversation: each of their lines says who it was
+        labels = speaker is not None and any(
+            h.get("speaker", speaker) != speaker for h in past if h["role"] == "user")
+        msgs += [{"role": h["role"], "content": (f"[{h.get('speaker') or 'unknown voice'}] "
+                                                 if labels and h["role"] == "user" else "") + h["content"]}
+                 for h in past]
+        msgs.append({"role": "user", "content": (f"[{speaker or 'unknown voice'}] " if labels else "") + said})
         looked_up = self.searched_before(past)
         if looked_up:
             # history is text only, so without this he reads an earlier answer, sees no results in
@@ -473,7 +491,7 @@ class Brain:
         if no_question:
             # the persona asks for few questions; a model that asks anyway (Haiku did, every
             # turn) gets the note next to their words, and _sentence below drops the question
-            msgs[-1] = {"role": "user", "content": said + "\n\n(" + self.NO_QUESTION_NOTE + ")"}
+            msgs[-1] = {"role": "user", "content": msgs[-1]["content"] + "\n\n(" + self.NO_QUESTION_NOTE + ")"}
         timing = self.timing
         dropped: List[str] = []           # said by the model, never spoken, kept out of history
 
@@ -573,7 +591,7 @@ class Brain:
             text = text.replace(d, " ", 1) if d in text else text
         if cancel is None or not cancel.is_set():
             self._remember(said, re.sub(r"\s+", " ", _MD.sub("", text or "")).strip(),
-                           searched=bool(timing.get("searched")))
+                           searched=bool(timing.get("searched")), speaker=speaker)
         return speakable(face_tag(text)[1])
 
     SEARCH_NOTE = ("\n\nThey want this looked up: use web search before you answer. Don't announce "
@@ -634,14 +652,26 @@ class Brain:
                 out.append(q[:80] + ("..." if len(q) > 80 else ""))
         return out[-3:]
 
-    def _remember(self, said: str, reply: str, searched: bool = False) -> None:
+    @staticmethod
+    def speaker_label(who) -> Optional[str]:
+        """The name on this turn's line in the history: theirs, "" for a voice he didn't
+        recognize, None with nobody set up by voice (no labels at all)."""
+        if who is None or not getattr(who, "active", False):
+            return None
+        return who.name or ""
+
+    def _remember(self, said: str, reply: str, searched: bool = False,
+                  speaker: Optional[str] = None) -> None:
         if not (said or "").strip() or not (reply or "").strip():
             return
         with self.lock:
             a = {"role": "assistant", "content": reply}
             if searched:
                 a["searched"] = True            # never sent to the LLM as-is; see reply()
-            self.history += [{"role": "user", "content": said}, a]
+            u = {"role": "user", "content": said}
+            if speaker is not None:
+                u["speaker"] = speaker          # who said it (labels when there's more than one)
+            self.history += [u, a]
             self.history = self.history[-2 * config.HISTORY_TURNS:]
 
     def new_conversation(self) -> None:
