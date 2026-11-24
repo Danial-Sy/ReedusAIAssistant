@@ -92,3 +92,7 @@ LITE_SEARCH = env("RELAY_SEARCH", "auto").lower()    # auto | always | off
 
 # money
 LOW_BALANCE_USD = env_float("RELAY_LOW_BALANCE_USD", 1.0)
+
+# the wake word's cutoff while he's talking (barge-in), sent to the S3. 0 = the firmware's own
+# BARGE_CUTOFF (0.75). lower hears "Reedus" over him more easily, and his own words more often
+BARGE_CUTOFF = env_float("RELAY_BARGE_CUTOFF", 0.0)

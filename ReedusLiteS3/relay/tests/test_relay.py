@@ -849,6 +849,44 @@ async def main():
           "'stop talking' over him cuts him off and he goes quiet")
     await asyncio.sleep(0.3)
 
+    print("[7e2] his name over him: the transcript catches what the wake word misses")
+    BACKEND.slow = 0.25
+    SCRIPT[:] = ["tell me another long story", "Rita, hold on"]
+    await d.say()
+    ok = await d.wait_for(lambda: d.states()[-1] == "speaking", 8)
+    await ws.send(json.dumps({"type": "talkover"}))
+    for _ in range(12):
+        await ws.send(VOICED)
+    for _ in range(30):
+        await ws.send(SILENT)
+    ok2 = await d.wait_for(lambda: sess.mode == "listen" and d.states()[-1] == "listening", 4)
+    check(ok and ok2 and any(e["type"] == "flush" for e in d.events[-15:]) and sess.talkovers >= 1,
+          "'Rita, hold on' over him (his name, misheard) cuts him off and he listens")
+    await asyncio.sleep(0.2)
+    sess.end_conversation()
+    await asyncio.sleep(0.2)
+    SCRIPT[:] = ["one more long story please", "Reedus what time is it"]
+    await d.say()
+    ok = await d.wait_for(lambda: d.states()[-1] == "speaking", 8)
+    for _ in range(12):
+        await ws.send(VOICED)
+    for _ in range(30):
+        await ws.send(SILENT)
+    ok2 = await d.wait_for(lambda: sess.mode == "listen", 4)
+    check(ok and ok2 and sess.carry_text == "what time is it",
+          "'Reedus, what time is it' over him: he stops, and that's the question")
+    BACKEND.slow = 0.0
+    await asyncio.sleep(0.2)
+    sess.end_conversation()
+    await asyncio.sleep(0.2)
+    sess.spoken = ["Sure thing, mate.", "That sounds great! What happens next?"]
+    check(sess._is_echo("sure thing mate that sounds great") and not sess._is_echo("Reedus hold on a sec")
+          and not sess._is_echo("Reedus"),
+          "his own words coming back through the mic aren't taken for someone saying his name")
+    from reedus_relay.session import says_name
+    check(says_name("hey Frita") and says_name("Reedus stop") and not says_name("read us a story"),
+          "his name is found in a transcript, misheard or not")
+
     print("[7f] one question mode")
     sess = next(x for x in hub.sessions.values() if x.device.get("name") == "Desk Lite")
     saved_acc = sess.account

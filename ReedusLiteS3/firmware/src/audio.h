@@ -34,6 +34,15 @@ float level();
 // the head uses it to tell someone talking to him from a voice in the next room
 float micDb();
 
+// barge-in help: someone is talking over him (the mic is clearly louder than his own echo).
+// his voice ducks to BARGE_DUCK while they do. takeTalkover() is true once per onset
+bool takeTalkover();
+bool talkoverNow();            // ducked for someone talking over him right now
+uint32_t sinceSpeechMs();      // ms since his voice last came out (0 while it is)
+uint32_t talkovers();          // onsets since boot
+void setBargeDebug(bool on);   // `barge`: echo level, talk-over margin, once a second
+void bargeReport();            // call from the loop; prints when `barge` is on
+
 // music: 24 kHz mono int16, its own deeper buffer. it ducks under speech, and while
 // setDuck(true) (someone is talking to Reedus). only in the 48 kHz I2S mode
 bool musicSupported();

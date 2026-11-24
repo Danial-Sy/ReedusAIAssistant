@@ -17,6 +17,12 @@ float cutoff();
 float defaultCutoff();  // this build's own: config.h WAKE_CUTOFF, else the model's manifest
 void setCutoff(float c);  // 0..1, live (not saved: put it in config.h WAKE_CUTOFF)
 
+// while he talks (and 1 s after) the name only has to clear this, since his echo blurs it.
+// 0 = the normal cutoff. config.h BARGE_CUTOFF, or the app (wake_cfg barge_cutoff)
+float bargeCutoff();
+void setBargeCutoff(float c);
+uint32_t barges();        // detections while he was talking, since boot
+
 void setDebug(bool on);   // `wake`: live probabilities, once a second and on every near miss
 void report();            // memory, flash, timing
 const char* describe();   // one line for `info`

@@ -6,9 +6,9 @@
 #include <Arduino.h>
 
 #ifdef FW_BUILD                    // CI builds add the commit: 0.3.0-s3.<sha>
-#define FW_VERSION "0.3.2-s3." FW_BUILD
+#define FW_VERSION "0.3.3-s3." FW_BUILD
 #else
-#define FW_VERSION "0.3.2-s3"
+#define FW_VERSION "0.3.3-s3"
 #endif
 #define DEVICE_NAME "reedus-lite-s3"
 
@@ -34,6 +34,20 @@
 #define WAKE_REFRACTORY_MS 2000    // one "Reedus" = one wake
 #define WAKE_WARMUP_SLICES 100     // ignore the first second (the noise estimate settling)
 #define WAKE_TASK_CORE 0           // wifi's core has the idle time; audio + the loop are on 1
+// ---------- barge-in: saying "Reedus" while he talks (audio.cpp, wake.cpp) ----------
+// someone talking over him: the mic beam is BARGE_DT_DB louder than his own echo is known to
+// come back (learned while he talks alone) for BARGE_DT_FRAMES x 20 ms. his voice ducks to
+// BARGE_DUCK at once and stays down while they keep talking, so the name isn't drowned out
+#define BARGE_DUCK 0.30f           // his voice while someone talks over him (amplitude; 1 = off)
+#define BARGE_DUCK_MS 1200         // how long it stays down after they stop
+#define BARGE_DT_DB 8.0f           // MEASURE with `barge`: louder than his echo by this = a person
+#define BARGE_DT_FRAMES 3          // that long (x 20 ms) before it counts
+#define BARGE_MIN_DB -40.0f        // and at least this loud (dBFS), so room noise between his
+                                   // words doesn't count
+#define BARGE_ERL_INIT 0.0f        // first guess at his echo vs his output (dB): deaf to
+                                   // talk-over until it has heard him (~1 s of speech), then learned
+#define BARGE_CUTOFF 0.75f         // wake word cutoff while he talks and 1 s after (0 = normal);
+                                   // the app can set it (wake_cfg barge_cutoff)
 #define WAKE_CHIME 1               // the old Reedus "listening" chime when the name is heard
 #define CHIME_GAIN 0.20f           // its loudness before the volume setting (jingle.py uses 0.20)
 

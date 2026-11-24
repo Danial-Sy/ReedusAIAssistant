@@ -37,7 +37,9 @@ static mww::Features features;
 static TaskHandle_t taskHandle = nullptr;
 
 static volatile bool ok = false, fired = false, dbg = false;
-static volatile uint8_t firedAvg = 0, cutoffU8 = 0;
+static volatile uint8_t firedAvg = 0, cutoffU8 = 0, bargeU8 = 0;
+static volatile uint32_t nBarges = 0;
+static const uint32_t BARGE_TAIL_MS = 1000;   // his echo's tail: still talking, for the cutoff
 // near misses: the window's average climbed past NEAR_FLOOR but stayed under the cutoff (a
 // "Reedus" from across the room usually looks like this). the peak of each one is reported
 // once it's over, so the app can show how close a call came and the sensitivity can be set
@@ -196,7 +198,10 @@ static void onSlice(const int8_t* s) {
 
   if (slices < WAKE_WARMUP_SLICES || slices - lastWake < REFRACTORY_SLICES) return;
   uint8_t avg = (uint8_t)(sum / winN);
-  bool hit = sum > (uint32_t)cutoffU8 * winN;
+  // over his own voice the name scores lower (echo smears it): a lower bar while he talks
+  bool overHim = audio::sinceSpeechMs() < BARGE_TAIL_MS;
+  uint8_t cut = (overHim && bargeU8 && bargeU8 < cutoffU8) ? bargeU8 : cutoffU8;
+  bool hit = sum > (uint32_t)cut * winN;
   if (!hit && avg >= NEAR_FLOOR) {
     if (avg > nearCur) nearCur = avg;
   } else if (nearCur && !hit) {  // it fell away without firing: one near miss
@@ -211,7 +216,9 @@ static void onSlice(const int8_t* s) {
     firedAvg = (uint8_t)(sum / winN);
     fired = true;
     memset(win, 0, sizeof(win));
-    Serial.printf("[wake] heard \"%s\" (avg %.2f)\n", WAKE_MODEL_WORD, firedAvg / 255.0f);
+    if (overHim) nBarges++;
+    Serial.printf("[wake] heard \"%s\" (avg %.2f%s)\n", WAKE_MODEL_WORD, firedAvg / 255.0f,
+                  overHim ? ", over his voice" : "");
   }
 }
 
@@ -239,6 +246,7 @@ bool begin() {
   return false;
 #else
   setCutoff(WAKE_CUTOFF > 0.0f ? WAKE_CUTOFF : WAKE_MODEL_CUTOFF);
+  setBargeCutoff(BARGE_CUTOFF);
   if (winN > MAX_WINDOW) winN = MAX_WINDOW;
   uint32_t heap0 = ESP.getFreeHeap();
   if (!features.begin()) {
@@ -294,6 +302,10 @@ void setCutoff(float c) {
   cutoffU8 = (uint8_t)(c * 255);  // ESPHome: int(cutoff * 255)
 }
 
+float bargeCutoff() { return bargeU8 / 255.0f; }
+void setBargeCutoff(float c) { bargeU8 = (c >= 0.5f && c < 1.0f) ? (uint8_t)(c * 255) : 0; }
+uint32_t barges() { return nBarges; }
+
 void setDebug(bool on) {
   dbg = on;
   secAt = millis();
@@ -323,10 +335,11 @@ void report() {
 }
 
 const char* describe() {
-  static char b[96];
+  static char b[128];
   if (!ok) snprintf(b, sizeof(b), "relay (%s)", failure);
-  else snprintf(b, sizeof(b), "on the S3, \"%s\" cutoff %.2f, %u heard", WAKE_MODEL_WORD,
-                cutoffU8 / 255.0f, (unsigned)detections);
+  else snprintf(b, sizeof(b), "on the S3, \"%s\" cutoff %.2f (%.2f over his voice), %u heard, %u over him",
+                WAKE_MODEL_WORD, cutoffU8 / 255.0f, (bargeU8 ? bargeU8 : cutoffU8) / 255.0f,
+                (unsigned)detections, (unsigned)nBarges);
   return b;
 }
 

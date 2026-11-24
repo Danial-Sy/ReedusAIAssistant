@@ -97,7 +97,9 @@ def head_near_db(account: Optional[dict]) -> float:
 
 def device_cfg(account: Optional[dict]) -> dict:
     """What the S3 is told (welcome / wake_cfg)."""
-    return {"cutoff": wake_cutoff(account), "head_near_db": head_near_db(account)}
+    from reedus_relay import config
+    return {"cutoff": wake_cutoff(account), "head_near_db": head_near_db(account),
+            "barge_cutoff": config.BARGE_CUTOFF}
 
 
 def public(account: Optional[dict]) -> dict:

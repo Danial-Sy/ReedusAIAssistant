@@ -155,10 +155,12 @@ static void onDeviceWake(float score) {
   face::wake();
   head::onWake();
   audio::setDuck(true);
+  bool over = audio::sinceSpeechMs() < 1000;  // said over him: a barge-in
   if (audio::playing()) audio::flush();  // barge-in: quiet now, the relay cancels the reply
   sounds::wake();                        // the old Reedus chime: I heard you
-  char b[48];
-  snprintf(b, sizeof(b), "{\"type\":\"wake\",\"score\":%.2f}", score);
+  char b[80];
+  snprintf(b, sizeof(b), "{\"type\":\"wake\",\"score\":%.2f,\"over\":%s}", score,
+           over ? "true" : "false");
   ws.sendTXT(b);
   if (!gateOpen) {
     setGate(true);
@@ -245,6 +247,10 @@ static void handleText(const char* txt, size_t len) {
     glance::silence();
   } else if (!strcmp(t, "wake_cfg")) {
     applyWakeCutoff(doc["cutoff"] | 0.0f);
+    if (doc["barge_cutoff"].is<float>()) {  // 0 = this build's BARGE_CUTOFF
+      float bc = doc["barge_cutoff"].as<float>();
+      wake::setBargeCutoff(bc >= 0.5f && bc < 1.0f ? bc : BARGE_CUTOFF);
+    }
     if (doc["head_near_db"].is<float>()) head::setNearDb(doc["head_near_db"].as<float>());
   } else if (!strcmp(t, "emotion")) {
     face::setEmotion(doc["emotion"] | "neutral", doc["strength"] | 1.0f, doc["hold"] | 3.0f);
@@ -327,6 +333,10 @@ static void handleText(const char* txt, size_t len) {
     // an older relay says nothing about it, and runs the wake word itself
     deviceWake = wake::ready() && !strcmp(doc["wake"] | "relay", "device");
     applyWakeCutoff(doc["wake_cutoff"] | 0.0f);
+    {
+      float bc = doc["barge_cutoff"] | 0.0f;  // 0 / missing = this build's BARGE_CUTOFF
+      wake::setBargeCutoff(bc >= 0.5f && bc < 1.0f ? bc : BARGE_CUTOFF);
+    }
     head::setNearDb(doc["head_near_db"] | HEAD_NEAR_DB);
     Serial.printf("[relay] linked to the relay (%s) as %s, wake word %s\n", desc,
                   (const char*)(doc["device"] | "?"),
@@ -513,9 +523,13 @@ void update() {
   }
   float nearP;
   if (wake::takeNearMiss(&nearP) && connected && deviceWake) {
-    char b[64];
-    snprintf(b, sizeof(b), "{\"type\":\"wake_near\",\"p\":%.2f}", nearP);
+    char b[80];
+    snprintf(b, sizeof(b), "{\"type\":\"wake_near\",\"p\":%.2f,\"over\":%s}", nearP,
+             audio::sinceSpeechMs() < 1000 ? "true" : "false");
     ws.sendTXT(b);
+  }
+  if (audio::takeTalkover()) {  // someone started talking over him: he's ducked; the relay logs
+    ws.sendTXT("{\"type\":\"talkover\"}");  // it and listens for the name / "stop" in it
   }
   micUp();
 

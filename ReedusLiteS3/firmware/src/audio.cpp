@@ -11,6 +11,24 @@ namespace audio {
 
 static volatile float micLvlDb = -90.0f;  // the mic beam's loudness, for the head (micDb)
 
+// ---- talking over him (barge-in) ----
+// the XVF3800's echo canceller takes most of his voice out of the beam, but not all of it,
+// and at full volume "Reedus" from across the room can be quieter than what's left. so: learn
+// how loud his echo comes back relative to what he plays (erlDb), and when the beam is well
+// above that, it's a person. his voice ducks right away, which also gives the wake word a
+// clean shot at the name
+static float outEnv = 0.0f;                  // power of what he just played, recent peak
+static float erlDb = BARGE_ERL_INIT;         // his echo in the beam, dB relative to the output
+static int dtFrames = 0;
+static volatile uint32_t duckUntil = 0;
+static float duckCur = 1.0f;
+static volatile bool dtFired = false;
+static volatile uint32_t lastOutAt = 0, nTalkovers = 0;
+static volatile bool bargeDbg = false;
+static float dbgExcess = -99.0f, dbgMic = -99.0f;
+
+static bool ducked(uint32_t now) { return duckUntil && (int32_t)(duckUntil - now) > 0; }
+
 static const i2s_port_t PORT = I2S_NUM_0;
 #if XVF_I2S_MASTER_48K
 static const int R = 3;  // I2S runs at 48k, the wire at 16k
@@ -237,6 +255,38 @@ static void sendNewest(QueueHandle_t q, const MicFrame* f, volatile uint32_t* dr
   }
 }
 
+static void talkoverCheck(float mic) {
+  uint32_t now = millis();
+  if (!(isPlaying || now - lastOutAt < 300)) {  // only while he talks (and his echo's tail)
+    dtFrames = 0;
+    return;
+  }
+  float outDb = 10.0f * log10f(outEnv / (32768.0f * 32768.0f) + 1e-12f);
+  float excess = mic - (outDb + erlDb);
+  if (excess > dbgExcess) dbgExcess = excess;
+  if (mic > dbgMic) dbgMic = mic;
+  if (mic > BARGE_MIN_DB && excess > BARGE_DT_DB) {
+    if (++dtFrames >= BARGE_DT_FRAMES) {
+      if (!ducked(now)) {  // a new one, not more of the same
+        dtFired = true;
+        nTalkovers++;
+      }
+      duckUntil = (now + BARGE_DUCK_MS) | 1;  // never 0: 0 means "not ducked"
+    }
+    if (dtFrames > 200 && outDb > -45.0f) {  // 4 s straight while he talks: that's his echo,
+      erlDb = constrain(erlDb + 3.0f, -60.0f, 10.0f);  // not a person. hear it as louder
+      dtFrames = 0;
+    }
+    return;
+  }
+  dtFrames = 0;
+  // learn his echo only from him talking alone, and loud enough to measure
+  if (outDb > -45.0f && excess < BARGE_DT_DB * 0.5f && !ducked(now)) {
+    erlDb += 0.02f * ((mic - outDb) - erlDb);
+    erlDb = constrain(erlDb, -60.0f, 10.0f);
+  }
+}
+
 static void audioTask(void*) {
   static int16_t play[FRAME_SAMPLES];
   static float playF[FRAME_SAMPLES];
@@ -256,6 +306,7 @@ static void audioTask(void*) {
         float db = 10.0f * log10f(acc2 / FRAME_SAMPLES / (32768.0f * 32768.0f) + 1e-12f);
         // fast up, slow down: a voice registers at once and lasts between syllables
         micLvlDb = db > micLvlDb ? db : micLvlDb + 0.07f * (db - micLvlDb);
+        talkoverCheck(db);
       }
       sendNewest(micQ, &f, &micDrops);  // net is behind: keep the newest audio
       if (wakeQ) {
@@ -270,13 +321,21 @@ static void audioTask(void*) {
     }
 
     size_t got = ringPop(play, FRAME_SAMPLES);
-    float g = gain, acc = 0.0f;
+    // someone talking over him: down fast (~40 ms), back up gently once they stop
+    float duckWant = ducked(millis()) ? BARGE_DUCK : 1.0f;
+    duckCur += (duckWant - duckCur) * (duckWant < duckCur ? 0.6f : 0.15f);
+    float g = gain * duckCur, acc = 0.0f;
     for (size_t i = 0; i < FRAME_SAMPLES; i++) {
       float v = i < got ? play[i] * g : 0.0f;
       playF[i] = v;
       acc += v * v;
     }
     spkUp(playF, out48);
+    {
+      float pw = acc / FRAME_SAMPLES;
+      outEnv = pw > outEnv * 0.7f ? pw : outEnv * 0.7f;  // recent peak: echo lags the output
+      if (got) lastOutAt = millis();
+    }
     // mouth: fast attack, slower release, scaled so normal speech reaches ~0.8
     float rms = sqrtf(acc / FRAME_SAMPLES) / 32768.0f;
     float target = constrain(rms * 5.0f, 0.0f, 1.0f);
@@ -465,6 +524,29 @@ uint32_t musicUnderruns() { return mUnderruns; }
 bool musicPlaying() { return mPlaying; }
 float musicLevel() { return mLvl; }
 void setDuck(bool on) { duckOn = on; }
+
+bool takeTalkover() {
+  if (!dtFired) return false;
+  dtFired = false;
+  return true;
+}
+bool talkoverNow() { return ducked(millis()); }
+uint32_t sinceSpeechMs() { return isPlaying ? 0 : millis() - lastOutAt; }
+uint32_t talkovers() { return nTalkovers; }
+void setBargeDebug(bool on) { bargeDbg = on; }
+
+// `barge`, once a second from the main loop's report: how loud his echo comes back, and the
+// most the beam went over it (a person talking over him should be well over BARGE_DT_DB)
+void bargeReport() {
+  static uint32_t at = 0;
+  if (!bargeDbg || millis() - at < 1000) return;
+  at = millis();
+  Serial.printf("[barge] echo %+.1f dB vs output, last 1 s: beam peak %.1f dBFS, over echo by "
+                "%+.1f dB (person > %+.1f)  %s  talk-overs %u\n",
+                erlDb, dbgMic, dbgExcess, BARGE_DT_DB, talkoverNow() ? "DUCKED" : "",
+                (unsigned)nTalkovers);
+  dbgExcess = dbgMic = -99.0f;
+}
 bool playing() { return isPlaying; }
 float level() { return lvl; }
 float micDb() { return micLvlDb; }

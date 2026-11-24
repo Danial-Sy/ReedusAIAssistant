@@ -23,7 +23,7 @@ import re
 import threading
 import time
 import uuid
-from typing import Optional
+from typing import List, Optional
 
 from reedus_relay import accounts, config, listening, memory, meter, speech
 from reedus_relay.brain import DEEP, Brain, directives, is_goodbye
@@ -66,6 +66,14 @@ _STOP = re.compile(
 
 def strip_wake(said: str) -> str:
     return _WAKE_PREFIX.sub("", said or "").strip()
+
+
+_NAME = re.compile(r"\breedus\b", re.I)
+
+
+def says_name(text: str) -> bool:
+    """His name anywhere in a transcript (misheard versions already turned back into it)."""
+    return bool(_NAME.search(speech.fix_name(text or "")))
 
 
 # what a sentence that isn't finished ends on: "and", "but", "because", "um", "the", "my"… or a
@@ -143,6 +151,9 @@ class Session:
         self.continues = 0               # how many times this turn waited for the rest
         self.last_peak = -120.0          # how loud they were, so a TV can't pass for them
         self.stop_ep: Optional[speech.Endpointer] = None  # "stop" said over him while he talks
+        self.spoken: List[str] = []          # what he's said this reply (to spot his own echo)
+        self.talkover_at = 0.0               # when the S3 last said someone talked over him
+        self.talkovers = 0
         self.stop_checks = 0
         self.stop_busy = False
         self.search_next = False         # "search the internet": the next question
@@ -210,6 +221,7 @@ class Session:
                    "wake": "device" if self.device_wake else "relay",
                    "wake_cutoff": listening.wake_cutoff(self.account),
                    "head_near_db": listening.head_near_db(self.account),
+                   "barge_cutoff": config.BARGE_CUTOFF,
                    "account": self.account.get("name", ""), "device": self.device.get("name", "")})
         self.set_state("idle")
         self.listen(False)
@@ -363,7 +375,15 @@ class Session:
             # the S3 heard the name. already listening: it's part of what's being said
             self.info["wake"] = msg
             if self.device_wake and self.mode != LISTEN:
+                if self.mode == BUSY and self.t_first_audio:
+                    self._log_barge(f"the S3 heard the name over him (score {msg.get('score')})")
                 self.on_wake()
+        elif t == "talkover":
+            # someone started talking over him; the S3 has already ducked his voice. what they
+            # say is checked for "stop" and his name (_check_stop)
+            if self.mode == BUSY and self.t_first_audio:
+                self.talkover_at = time.monotonic()
+                self.talkovers += 1
         elif t == "gate":
             if msg.get("open") and self.mode == IDLE:
                 self.wake.reset()
@@ -386,6 +406,10 @@ class Session:
                                  "kind": msg.get("kind") or "", "at": time.time()}
         elif t == "wake_near":               # it almost heard the name (the app shows it)
             self.info["wake_near"] = {"p": float(msg.get("p") or 0), "at": time.time()}
+            if msg.get("over"):
+                # almost heard over his voice: what the barge cutoff should be is in these
+                print(f"[relay] {self.device.get('name')}: barge near miss, the name scored "
+                      f"{float(msg.get('p') or 0):.2f} over his voice", flush=True)
         elif t == "bulletin_ack":
             self.info["bulletin_rev"] = msg.get("rev")
 
@@ -408,7 +432,7 @@ class Session:
                                  spec_after=listening.spec_after(end_s), floor_db=floor_db)
 
     # ---------- "stop" while he's talking ----------
-    STOP_CHECKS = 6           # transcriptions per reply at most (each one costs a little)
+    STOP_CHECKS = 12          # transcriptions per reply at most (each one costs a little)
     STOP_MAX_S = 2.6          # longer than this isn't a "stop", it's talking over him
 
     def _stop_endpointer(self) -> speech.Endpointer:
@@ -438,12 +462,25 @@ class Session:
                     accounts.charge(self.aid, m.usd, f"{self.device.get('name', 'Lite')}: {m.summary()}")
                 except Exception:                                # noqa: BLE001
                     pass
-            self.loop.call_soon_threadsafe(self._stop_heard, text, token)
+            self.loop.call_soon_threadsafe(self._stop_heard, text, token, audio)
         threading.Thread(target=_go, name="stop-check", daemon=True).start()
 
-    def _stop_heard(self, text: str, token: threading.Event) -> None:
+    def _stop_heard(self, text: str, token: threading.Event, audio: bytes = b"") -> None:
         self.stop_busy = False
         if token is not self.cancel or self.mode != BUSY:
+            return
+        if says_name(text) and not is_stop(strip_wake(text)) and not self._is_echo(text):
+            # his name over him that the S3's wake word missed: the transcriber knows it
+            # (custom vocabulary), so this catches what the wake word didn't
+            rest = strip_wake(text)
+            self._log_barge(f"heard the name over him in the transcript ({text!r})")
+            self.on_wake()
+            if rest and len(rest.split()) >= 2 and self.ep is not None:
+                # "Reedus, what time is it" said over him: that's the question. if they go on,
+                # it's all one sentence; if not, it's answered as is
+                self.ep.carry = audio
+                self.ep.start_timeout = self.ep.t + config.CONTINUE_S
+                self.carry_text = rest
             return
         said = strip_wake(text)
         if said and is_stop(said):
@@ -452,6 +489,21 @@ class Session:
             self.send({"type": "expr", "name": "blink", "hold": 0.6})
             self.send({"type": "ring_off"})
             self.end_conversation()
+
+    def _is_echo(self, text: str) -> bool:
+        """Is this transcript mostly his own words coming back through the mic?"""
+        heard = re.findall(r"[a-z']+", (text or "").lower())
+        heard = [w for w in heard if w not in ("reedus", "hey", "stop")]
+        if len(heard) < 3:
+            return False
+        mine = set(re.findall(r"[a-z']+", " ".join(self.spoken).lower()))
+        return sum(w in mine for w in heard) / len(heard) >= 0.6
+
+    def _log_barge(self, how: str) -> None:
+        t = time.monotonic()
+        since = (f", {int((t - self.talkover_at) * 1000)} ms after they started talking over him"
+                 if self.talkover_at else ", no talk-over seen first")
+        print(f"[relay] {self.device.get('name')}: barge-in: {how}{since}", flush=True)
 
     def start_listening(self, follow_up: bool) -> None:
         self.mode = LISTEN
@@ -512,6 +564,8 @@ class Session:
         self.t_first_audio = 0.0
         self.stop_ep = None
         self.stop_checks = 0
+        self.spoken = []
+        self.talkover_at = 0.0
         # keep an ear on them while he thinks: louder than LOCK_DB under how they just spoke,
         # so a TV in the background can't pass for them going on
         self.watch = self._endpointer(1e9, floor_db=self.last_peak - config.LOCK_DB - 3.0)
@@ -853,6 +907,7 @@ class Session:
                         self.send({"type": "emotion", "emotion": tag, "strength": 0.9, "hold": 3.0})
                     continue
                 s, frames, task = item
+                self.spoken.append(s)
                 emo, strength = (mood, 0.9) if mood else emotion.classify(s)
                 if emo != "neutral":
                     self.send({"type": "emotion", "emotion": emo, "strength": strength,

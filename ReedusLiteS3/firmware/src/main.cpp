@@ -31,6 +31,7 @@ static void help() {
       "  gate              print the speech gate opening/closing (toggle)\n"
       "  wake              wake word: live probabilities (toggle), with memory and timing\n"
       "  wake <0.5-0.99>   try another cutoff until reboot (keep it: WAKE_CUTOFF in config.h)\n"
+      "  barge             talking over him: his echo level and how far a voice clears it (toggle)\n"
       "  bulletin          what Reedus remembers about you (the copy on this device)\n"
       "  test              LED corner test (toggle): red=top-left green=top-right\n"
       "                    blue=bottom-left white=bottom-right, as seen from the front\n"
@@ -158,6 +159,13 @@ static void command(String c) {
     Serial.printf("wake word %s%s\n", wake::describe(),
                   wake::ready() && relay::linked() && !relay::deviceWakeOn()
                       ? " (the relay runs its own: speech gate)" : "");
+  } else if (c == "barge") {
+    static bool bargeOn = false;
+    bargeOn = !bargeOn;
+    audio::setBargeDebug(bargeOn);
+    Serial.printf("barge view %s (wake cutoff over his voice %.2f, %u talk-overs, %u barges)\n",
+                  bargeOn ? "on: talk over him while he speaks" : "off", wake::bargeCutoff(),
+                  (unsigned)audio::talkovers(), (unsigned)wake::barges());
   } else if (c == "gate") {
     gateOn = !gateOn;
     relay::setGateDebug(gateOn);
@@ -257,6 +265,7 @@ void loop() {
   face::setOnline(relay::wifiUp(), relay::linked());
   face::setBattery(battery::percent());
   face::update();
+  audio::bargeReport();
 
   while (Serial.available()) {
     char ch = Serial.read();
