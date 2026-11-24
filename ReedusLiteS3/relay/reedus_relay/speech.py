@@ -270,14 +270,19 @@ def stt_ready() -> bool:
     return bool(llm_settings.key(stt_provider()))
 
 
-def transcribe(pcm: bytes, provider: Optional[str] = None) -> str:
-    """Text of what was said, '' if nothing. Costs land on the current meter."""
+def transcribe(pcm: bytes, provider: Optional[str] = None, quick: bool = False) -> str:
+    """Text of what was said, '' if nothing. Costs land on the current meter. quick: a check
+    for "stop" or his name while he talks (a lighter model first, see _stt_models)."""
     provider = provider or stt_provider()
     if len(pcm) < FRAME_BYTES * 10:          # under 200 ms is a cough, not a sentence
         return ""
     if provider == "openai":
         return clean_transcript(_openai_stt(pcm), pcm)
-    return clean_transcript(_gemini_stt(pcm), pcm)
+    return clean_transcript(_gemini_stt(pcm, quick=quick), pcm)
+
+
+def transcribe_quick(pcm: bytes) -> str:
+    return transcribe(pcm, quick=True)
 
 
 # what speech-to-text models make up when they're handed noise
@@ -322,18 +327,38 @@ def clean_transcript(text: str, pcm: bytes) -> str:
 
 # models that can't be used for this key (unknown id, no access), learned at runtime
 _STT_DEAD: set = set()
+# models over their per-minute quota (429), and until when. gemini-3.5-transcribe on Tier 1 is
+# 10 requests a minute, and early transcripts plus "stop" checks went past that on 11-24: every
+# call then failed (after the SDK's own retries) instead of moving on to Flash-Lite
+_STT_COOL: dict = {}
+_STT_MODELS = ("gemini-3.5-transcribe", "gemini-3.5-flash-lite", "gemini-3.7-flash")
 
 
-def _stt_models() -> list:
+def _stt_models(quick: bool = False) -> list:
     explicit = config.env("RELAY_STT_MODEL")
     if explicit:
         return [explicit]
-    # a dedicated speech-to-text model first (fast, no thinking), then a general Flash
-    return [m for m in ("gemini-3.5-transcribe", "gemini-3.5-flash-lite", "gemini-3.7-flash")
-            if m not in _STT_DEAD]
+    now = time.monotonic()
+    # a dedicated speech-to-text model first (fast, no thinking), then a general Flash.
+    # quick (checking for "stop" / his name over him): Flash-Lite first, so those checks don't
+    # spend the transcribe model's small per-minute quota that real turns need
+    order = (_STT_MODELS[1], _STT_MODELS[0], _STT_MODELS[2]) if quick else _STT_MODELS
+    usable = [m for m in order if m not in _STT_DEAD]
+    ready = [m for m in usable if _STT_COOL.get(m, 0.0) <= now]
+    return ready or usable
 
 
-def _gemini_stt(pcm: bytes) -> str:
+def _quota_hit(e: BaseException) -> float:
+    """Seconds to leave a model alone after a 429 (its own "retry in Ns", 5-90 s), else 0."""
+    msg = str(e)
+    if not any(w in msg for w in ("429", "RESOURCE_EXHAUSTED", "rate limit", "quota")):
+        return 0.0
+    import re
+    m = re.search(r"retry in ([0-9.]+)s", msg) or re.search(r"retryDelay'?:\s*'?([0-9.]+)s", msg)
+    return max(5.0, min(90.0, float(m.group(1)) if m else 30.0))
+
+
+def _gemini_stt(pcm: bytes, quick: bool = False) -> str:
     from google import genai
     from google.genai import types
     from reedus_companion.cloud import budget, llm_settings
@@ -345,16 +370,26 @@ def _gemini_stt(pcm: bytes) -> str:
     ver = config.env("RELAY_STT_API_VERSION", "v1beta")
     client = _clients.get(("gemini-stt", key, ver))
     if client is None:
-        client = _clients[("gemini-stt", key, ver)] = genai.Client(
-            api_key=key, http_options=types.HttpOptions(api_version=ver))
+        try:                                 # no SDK retries: a 429 moves to the next model
+            opts = types.HttpOptions(api_version=ver, retry_options=types.HttpRetryOptions(attempts=1))
+        except Exception:                                        # noqa: BLE001
+            opts = types.HttpOptions(api_version=ver)
+        client = _clients[("gemini-stt", key, ver)] = genai.Client(api_key=key, http_options=opts)
     audio = types.Part.from_bytes(data=wav_bytes(pcm), mime_type="audio/wav")
     last: Optional[BaseException] = None
-    for model in _stt_models() or ["gemini-3.7-flash"]:
+    for model in _stt_models(quick) or ["gemini-3.7-flash"]:
         t0 = time.perf_counter()
         try:
             resp = _gemini_stt_call(client, types, model, audio)
         except Exception as e:                                   # noqa: BLE001
             last = e
+            cool = _quota_hit(e)
+            if cool:
+                if _STT_COOL.get(model, 0.0) <= time.monotonic():
+                    print(f"[relay] speech-to-text: {model} is over its per-minute quota; using the "
+                          f"next model for {cool:.0f} s", flush=True)
+                _STT_COOL[model] = time.monotonic() + cool
+                continue
             msg = str(e).lower()
             if any(w in msg for w in ("not found", "404", "not supported", "permission",
                                       "unsupported", "does not exist", "invalid argument")):

@@ -7,6 +7,11 @@
                 you from further away, and wakes by mistake more often (a TV, a similar word).
                 the S3 reports near misses (wake_near) so the app can show how close a call
                 from across the room came, and the setting can be picked from that
+    barge       the same, but for his name said OVER him while he talks (his own voice smears it,
+                so it scores lower). lower = easier to interrupt, and his own words set it off
+                more often. sent to the S3 as barge_cutoff
+    chime       a short falling chime when he stops listening and goes back to idle, so you
+                know he's done
 """
 from __future__ import annotations
 
@@ -47,6 +52,10 @@ HEAD = [
 # almost anything; above 95% it barely wakes at all
 WAKE_MIN, WAKE_MAX = 0.60, 0.95
 DEFAULT_CUTOFF = 0.90           # the model's own (wakeword/models/reedus.json)
+# interrupting him: 11-24 "kinda hard to interrupt" at the firmware's 0.75 (a "Reedus" over him
+# scored 0.36-0.84), so the default came down. the firmware takes 0.50-0.99
+BARGE_MIN, BARGE_MAX = 0.50, 0.90
+DEFAULT_BARGE = 0.60
 
 
 def _settings(account: Optional[dict]) -> dict:
@@ -81,6 +90,26 @@ def wake_cutoff(account: Optional[dict]) -> float:
     return valid_cutoff(_settings(account).get("wake")) or 0.0
 
 
+def valid_barge(v) -> Optional[float]:
+    try:
+        c = round(float(v), 2)
+    except (TypeError, ValueError):
+        return None
+    return c if BARGE_MIN - 1e-9 <= c <= BARGE_MAX + 1e-9 else None
+
+
+def barge_cutoff(account: Optional[dict]) -> float:
+    """What the S3 is told for his name over his voice: the app's setting, else the Railway
+    variable RELAY_BARGE_CUTOFF, else DEFAULT_BARGE."""
+    from reedus_relay import config
+    return (valid_barge(_settings(account).get("barge")) or valid_barge(config.BARGE_CUTOFF)
+            or DEFAULT_BARGE)
+
+
+def end_chime(account: Optional[dict]) -> bool:
+    return bool(_settings(account).get("chime", True))
+
+
 def mode_id(account: Optional[dict]) -> str:
     v = _settings(account).get("mode")
     return v if any(m["id"] == v for m in MODES) else "conversation"
@@ -97,9 +126,8 @@ def head_near_db(account: Optional[dict]) -> float:
 
 def device_cfg(account: Optional[dict]) -> dict:
     """What the S3 is told (welcome / wake_cfg)."""
-    from reedus_relay import config
     return {"cutoff": wake_cutoff(account), "head_near_db": head_near_db(account),
-            "barge_cutoff": config.BARGE_CUTOFF}
+            "barge_cutoff": barge_cutoff(account)}
 
 
 def public(account: Optional[dict]) -> dict:
@@ -107,4 +135,6 @@ def public(account: Optional[dict]) -> dict:
             "patience": patience_id(account), "patience_choices": PATIENCE,
             "head": head_id(account), "head_choices": HEAD,
             "wake": wake_cutoff(account) or DEFAULT_CUTOFF, "wake_default": DEFAULT_CUTOFF,
-            "wake_min": WAKE_MIN, "wake_max": WAKE_MAX}
+            "wake_min": WAKE_MIN, "wake_max": WAKE_MAX,
+            "barge": barge_cutoff(account), "barge_default": DEFAULT_BARGE,
+            "barge_min": BARGE_MIN, "barge_max": BARGE_MAX, "chime": end_chime(account)}

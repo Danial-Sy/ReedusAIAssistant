@@ -96,6 +96,8 @@ SCHEMA = [
 COLUMNS = [
     ("turns", "voice_id", "TEXT NOT NULL DEFAULT ''"),   # who said it (voices.py): '' = the
                                                          # account holder, '?' = not recognized
+    ("voices", "say", "TEXT NOT NULL DEFAULT ''"),       # how to say their name: a respelling
+                                                         # ("DAN-yul") or IPA in slashes
 ]
 
 # Postgres full-text search over past turns (the history recall). SQLite falls back to LIKE.

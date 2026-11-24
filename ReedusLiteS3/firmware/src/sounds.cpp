@@ -10,7 +10,7 @@ struct Clip {
   size_t samples = 0;
 };
 
-static Clip wakeClip, ringClip;
+static Clip wakeClip, doneClip, ringClip;
 
 // sine notes with a short fade each side (no clicks), a gap after every note: the same recipe
 // as the run box's jingle.py, so it's the sound Reedus has always made
@@ -45,6 +45,8 @@ void begin() {
   // jingle.py "listen": [523.25, 659.25, 783.99] Hz, [0.06, 0.06, 0.10] s, 40 ms gaps, gain 0.20
   static const float wf[] = {523.25f, 659.25f, 783.99f}, wd[] = {0.06f, 0.06f, 0.10f};
   wakeClip = render(wf, wd, 3, 0.04f, CHIME_GAIN, 0.012f);
+  static const float df[] = {783.99f, 659.25f, 523.25f}, dd[] = {0.06f, 0.06f, 0.12f};
+  doneClip = render(df, dd, 3, 0.04f, CHIME_GAIN * 0.8f, 0.012f);
   static const float rf[] = {880.0f, 1175.0f}, rd[] = {0.11f, 0.11f};
   ringClip = render(rf, rd, 2, 0.07f, 0.30f, 0.008f);
 }
@@ -56,6 +58,12 @@ static void play(const Clip& c) {
 void wake() {
 #if WAKE_CHIME
   play(wakeClip);
+#endif
+}
+
+void done() {
+#if DONE_CHIME
+  play(doneClip);
 #endif
 }
 

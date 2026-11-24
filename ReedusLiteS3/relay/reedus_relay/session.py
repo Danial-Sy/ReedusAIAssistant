@@ -228,7 +228,7 @@ class Session:
                    "wake": "device" if self.device_wake else "relay",
                    "wake_cutoff": listening.wake_cutoff(self.account),
                    "head_near_db": listening.head_near_db(self.account),
-                   "barge_cutoff": config.BARGE_CUTOFF,
+                   "barge_cutoff": listening.barge_cutoff(self.account),
                    "account": self.account.get("name", ""), "device": self.device.get("name", "")})
         self.set_state("idle")
         self.listen(False)
@@ -417,7 +417,8 @@ class Session:
             self.info["ring"] = {"on": bool(msg.get("on")), "id": msg.get("id") or "",
                                  "kind": msg.get("kind") or "", "at": time.time()}
         elif t == "wake_near":               # it almost heard the name (the app shows it)
-            self.info["wake_near"] = {"p": float(msg.get("p") or 0), "at": time.time()}
+            self.info["wake_near"] = {"p": float(msg.get("p") or 0), "at": time.time(),
+                                      "over": bool(msg.get("over"))}
             if msg.get("over"):
                 # almost heard over his voice: what the barge cutoff should be is in these
                 print(f"[relay] {self.device.get('name')}: barge near miss, the name scored "
@@ -464,9 +465,11 @@ class Session:
         def _go():
             m = meter.Meter()
             text = ""
+            # the real speech-to-text: its quick mode (spares the transcribe model's quota)
+            stt = speech.transcribe_quick if self.stt is speech.transcribe else self.stt
             try:
                 with meter.metering(m):
-                    text = self.stt(audio) or ""
+                    text = stt(audio) or ""
             except Exception as e:                               # noqa: BLE001
                 print(f"[relay] stop check failed: {type(e).__name__}", flush=True)
             if m.usd > 0:
@@ -543,12 +546,17 @@ class Session:
         """Back to idle. keep=True (one question mode): the conversation isn't over, he just
         stops listening; asked again within REST_S, he still knows what you just talked about,
         and the memory update (an LLM call) runs once at the end instead of after every question."""
+        was = self.state
         self.mode = IDLE
         self.ep = None
         self.watch = None
         self.stop_ep = None
         self.carry_text = None
         self.listen(False)
+        if was != "idle" and listening.end_chime(self.account):
+            # he's done: a short falling chime (firmware 0.3.4+; older ones ignore it), played
+            # after anything he's still saying
+            self.send({"type": "chime", "name": "done"})
         self.set_state("idle")
         self.wake.reset()
         self.empty_turns = 0
@@ -629,6 +637,8 @@ class Session:
             with meter.metering(m):
                 return self.stt(audio)
         self.spec = asyncio.ensure_future(asyncio.to_thread(_hear))
+        # one that's thrown away (they went on talking) and failed: don't log it as unhandled
+        self.spec.add_done_callback(lambda f: f.cancelled() or f.exception())
         self.spec_at = time.monotonic()
 
     async def _hear(self, audio: bytes, m) -> tuple:
@@ -1157,6 +1167,7 @@ class Session:
 
     def _synth(self, text: str, frames: asyncio.Queue, m, cancel) -> None:
         sent = 0
+        text = voices.pronounce(self.aid, text)      # names said the way the app says to
         try:
             for attempt in range(3):
                 if self._stale(cancel):

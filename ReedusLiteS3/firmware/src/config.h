@@ -6,9 +6,9 @@
 #include <Arduino.h>
 
 #ifdef FW_BUILD                    // CI builds add the commit: 0.3.0-s3.<sha>
-#define FW_VERSION "0.3.3-s3." FW_BUILD
+#define FW_VERSION "0.3.4-s3." FW_BUILD
 #else
-#define FW_VERSION "0.3.3-s3"
+#define FW_VERSION "0.3.4-s3"
 #endif
 #define DEVICE_NAME "reedus-lite-s3"
 
@@ -38,17 +38,20 @@
 // someone talking over him: the mic beam is BARGE_DT_DB louder than his own echo is known to
 // come back (learned while he talks alone) for BARGE_DT_FRAMES x 20 ms. his voice ducks to
 // BARGE_DUCK at once and stays down while they keep talking, so the name isn't drowned out
-#define BARGE_DUCK 0.30f           // his voice while someone talks over him (amplitude; 1 = off)
+#define BARGE_DUCK 0.20f           // his voice while someone talks over him (amplitude; 1 = off)
 #define BARGE_DUCK_MS 1200         // how long it stays down after they stop
-#define BARGE_DT_DB 8.0f           // MEASURE with `barge`: louder than his echo by this = a person
+#define BARGE_DT_DB 6.0f           // MEASURE with `barge`: louder than his echo by this = a person
+                                   // (8 dB on 11-24 was hard to interrupt)
 #define BARGE_DT_FRAMES 3          // that long (x 20 ms) before it counts
 #define BARGE_MIN_DB -40.0f        // and at least this loud (dBFS), so room noise between his
                                    // words doesn't count
 #define BARGE_ERL_INIT 0.0f        // first guess at his echo vs his output (dB): deaf to
                                    // talk-over until it has heard him (~1 s of speech), then learned
-#define BARGE_CUTOFF 0.75f         // wake word cutoff while he talks and 1 s after (0 = normal);
+#define BARGE_CUTOFF 0.60f         // wake word cutoff while he talks and 1 s after (0 = normal);
                                    // the app can set it (wake_cfg barge_cutoff)
 #define WAKE_CHIME 1               // the old Reedus "listening" chime when the name is heard
+#define DONE_CHIME 1               // the same notes falling when he stops listening (the relay
+                                   // sends chime "done"; the app can turn it off)
 #define CHIME_GAIN 0.20f           // its loudness before the volume setting (jingle.py uses 0.20)
 
 // ---------- ringing on its own (glance.cpp localTick) ----------

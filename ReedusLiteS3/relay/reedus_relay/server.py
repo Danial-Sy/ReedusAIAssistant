@@ -444,6 +444,14 @@ class Hub:
                 if req["head"] not in {h["id"] for h in listening.HEAD}:
                     return {"error": f"unknown choice {req['head']!r}"}
                 cur["head"] = req["head"]
+            if "barge" in req:                 # his name over him: how sure, 0.50-0.90
+                c = listening.valid_barge(req["barge"])
+                if c is None:
+                    return {"error": f"that goes from {int(listening.BARGE_MIN * 100)}% to "
+                                     f"{int(listening.BARGE_MAX * 100)}%"}
+                cur["barge"] = c
+            if "chime" in req:
+                cur["chime"] = bool(req["chime"])
             if "wake" in req:                  # how sure, 0.60-0.95
                 c = listening.valid_cutoff(req["wake"])
                 if c is None:
@@ -597,6 +605,29 @@ class Hub:
                 p = await asyncio.to_thread(voices.add, aid, str(req.get("name") or ""),
                                             bool(req.get("me")))
                 return {"ok": True, "person": voices.public(p)}
+            if a == "who.hear":                # try a pronunciation in his voice before saving it
+                say = voices.clean_say(str(req.get("say") or "")) or str(req.get("name") or "").strip()[:40]
+                if not say:
+                    return {"error": "type how it sounds first"}
+                acc = await asyncio.to_thread(accounts.account, aid)
+                prefs = (acc.get("settings") or {}).get("voice") or {}
+                m = meter.Meter()
+
+                def _hear():
+                    with meter.metering(m):
+                        return speech.preview_wav(prefs, f"Hey {say}! Did I say your name right?")
+                try:
+                    wav = await asyncio.to_thread(_hear)
+                except Exception as e:                           # noqa: BLE001
+                    return {"error": f"his voice didn't answer: {type(e).__name__}: {str(e)[:120]}"}
+                if m.usd > 0:
+                    await asyncio.to_thread(accounts.charge, aid, m.usd, f"name preview: {m.summary()}")
+                import base64
+                return {"ok": True, "wav": base64.b64encode(wav).decode(), "say": say}
+            if a == "who.ipa":                 # a respelling turned into IPA by his brain
+                acc = await asyncio.to_thread(accounts.account, aid)
+                return await asyncio.to_thread(self._ipa, acc, str(req.get("name") or ""),
+                                               str(req.get("say") or ""))
             if a == "who.teach.status":
                 s, err = lite()
                 if s is None:
@@ -617,6 +648,8 @@ class Hub:
             elif a == "who.remove":
                 await asyncio.to_thread(voices.remove, p["id"])
                 return {"ok": True}
+            elif a == "who.say":
+                await asyncio.to_thread(voices.set_say, p["id"], str(req.get("say") or ""))
             elif a == "who.notes":
                 rev = await asyncio.to_thread(voices.set_notes, p["id"], str(req.get("notes") or ""))
                 return {"ok": True, "rev": rev, "person": voices.public(await asyncio.to_thread(voices.person, p["id"]))}
@@ -633,6 +666,35 @@ class Hub:
             return {"ok": True, "person": voices.public(await asyncio.to_thread(voices.person, p["id"]))}
         except ValueError as e:
             return {"error": str(e)}
+
+    def _ipa(self, acc: dict, name: str, say: str) -> dict:
+        """'DAN-yul' -> '/ˈdænjəl/': the account's LLM writes the IPA (Inworld speaks IPA in
+        slashes exactly), so a rough respelling becomes an exact pronunciation."""
+        from reedus_relay import voices
+        from reedus_relay.brain import Brain
+        import re
+        name, say = name.strip()[:40], say.strip().strip("/")[:80]
+        if not (name or say):
+            return {"error": "type the name or how it sounds first"}
+        m = meter.Meter()
+        msgs = [{"role": "system", "content":
+                 "Convert a name's pronunciation to standard American English IPA for a text-to-speech "
+                 "engine. Use only English IPA symbols, with a primary stress mark. Reply with the IPA "
+                 "only: no slashes, no brackets, no explanation."},
+                {"role": "user", "content": f"Name: {name or say}\nSounds like: {say or name}"}]
+        try:
+            with meter.metering(m):
+                out = Brain(acc, {"id": "app", "name": "the website"}).backend().chat(
+                    msgs, 60, use_adapter=False, tier="router", name="ipa")
+        except Exception as e:                                   # noqa: BLE001
+            return {"error": f"couldn't work it out: {type(e).__name__}: {str(e)[:120]}"}
+        if m.usd > 0:
+            accounts.charge(acc["id"], m.usd, f"name to IPA: {m.summary()}")
+        first = next(iter((out or "").strip().splitlines()), "")
+        ipa = re.sub(r"[\s`\"'\[\]/]+", "", first)
+        if not ipa or len(ipa) > 60:
+            return {"error": "that didn't come back as IPA; try a respelling instead"}
+        return {"ok": True, "say": voices.clean_say(f"/{ipa}/")}
 
     # ---------- the face, the head, drawings, firmware ----------
     async def _device_control(self, a: str, req: dict, aid: str, owner: bool) -> dict:

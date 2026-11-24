@@ -1,7 +1,9 @@
 """the people Reedus knows by voice, per account, and what he knows about each of them.
 
     a person     a name, their voiceprints (voiceprint.py), and their own notes (the same kind
-                 as the bulletin). one person per account can be "me": the account holder,
+                 as the bulletin). "say": how to pronounce the name, swapped in for it in
+                 everything he speaks (pronounce()): a respelling, or IPA in slashes, which
+                 Inworld speaks as written (/ˈdænjəl/). one person per account can be "me": the account holder,
                  whose notes ARE the account's bulletin, so nothing he already knew is lost.
     teaching     the app starts it on a Lite (Session.enroll_start): they talk for ~20 s and
                  each sentence becomes a voiceprint. "auto" voiceprints get added later from
@@ -50,6 +52,7 @@ def _row(r: dict) -> dict:
         samples = []
     return {"id": r["id"], "account_id": r["account_id"], "name": r["name"], "me": bool(r["me"]),
             "samples": samples, "model": r.get("model") or "", "notes": r.get("notes") or "",
+            "say": r.get("say") or "",
             "notes_rev": int(r.get("notes_rev") or 0), "last_heard": float(r.get("last_heard") or 0),
             "created": float(r.get("created") or 0), "updated": float(r.get("updated") or d.now())}
 
@@ -70,7 +73,8 @@ def public(p: dict) -> dict:
     return {"id": p["id"], "name": p["name"], "me": p["me"],
             "taught": sum(1 for s in current if s.get("k") == "enroll"),
             "learned": sum(1 for s in current if s.get("k") == "auto"),
-            "ready": bool(current), "notes": p["notes"], "last_heard": p["last_heard"],
+            "ready": bool(current), "notes": p["notes"], "say": p.get("say", ""),
+            "last_heard": p["last_heard"],
             "created": p["created"]}
 
 
@@ -139,6 +143,56 @@ def set_notes(voice_id: str, text: str) -> int:
                  (text, rev, db().now(), voice_id))
     invalidate(p["account_id"])
     return rev
+
+
+MAX_SAY = 80
+
+
+def clean_say(say: str) -> str:
+    """A respelling ("DAN-yul") as typed, or IPA kept in its slashes. '' = say the name as is."""
+    say = re.sub(r"\s+", " ", str(say or "")).strip()[:MAX_SAY]
+    if say.startswith("/") or say.endswith("/"):
+        core = say.strip("/").strip()
+        return f"/{core}/" if core else ""
+    return say
+
+
+def set_say(voice_id: str, say: str) -> str:
+    p = person(voice_id)
+    if not p:
+        raise ValueError("no such person")
+    say = clean_say(say)
+    db().execute("UPDATE voices SET say = %s, updated = %s WHERE id = %s", (say, db().now(), voice_id))
+    invalidate(p["account_id"])
+    return say
+
+
+def say_rules(people_list: List[dict]) -> List[tuple]:
+    """(compiled name pattern, what to say) for everyone with a pronunciation, longest names
+    first so "Mary Ann" wins over "Mary"."""
+    out = []
+    for p in sorted(people_list, key=lambda p: -len(p.get("name") or "")):
+        say, name = (p.get("say") or "").strip(), (p.get("name") or "").strip()
+        if say and name and say.lower() != name.lower():
+            out.append((re.compile(rf"(?<![\w/]){re.escape(name)}(?![\w])", re.I), say))
+    return out
+
+
+def apply_say(text: str, rules: List[tuple]) -> str:
+    for rx, say in rules:
+        text = rx.sub(lambda _m, s=say: s, text)
+    return text
+
+
+def pronounce(account_id: str, text: str) -> str:
+    """What goes to the voice: the text with each name swapped for how it's said."""
+    if not text:
+        return text
+    try:
+        rules = say_rules(known(account_id))
+    except Exception:                                            # noqa: BLE001
+        return text
+    return apply_say(text, rules) if rules else text
 
 
 def add_samples(voice_id: str, vecs, kind: str = "enroll", reset: bool = False) -> int:

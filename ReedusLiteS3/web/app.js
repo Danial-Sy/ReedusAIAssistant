@@ -792,6 +792,10 @@ function renderListen() {
   const cut = $("#wake-cut");
   if (document.activeElement !== cut) cut.value = Math.round((L.wake || 0.9) * 100);
   paintWake();
+  const bc = $("#barge-cut");
+  if (document.activeElement !== bc) bc.value = Math.round((L.barge || 0.6) * 100);
+  paintBarge();
+  $("#chime-on").checked = L.chime !== false;
   // the S3 reports when it almost heard its name: how close the last one came tells you
   // which setting would have caught it
   const near = (S.status.devices || []).map((d) => d.wake_near && { ...d.wake_near, name: d.name })
@@ -802,9 +806,17 @@ function renderListen() {
     const when = new Date(near.at * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
     const pct = Math.floor(near.p * 100);
     const min = Math.round((L.wake_min || 0.6) * 100);
-    txt = `At ${when} ${near.name} almost heard his name: ${pct}% sure, and it needs ${Math.round(needs * 100)}%.` +
-      (pct >= min ? ` Set it to ${pct}% or lower to catch that.`
-        : ` That's under ${min}%, so it's too far or too noisy for the wake word, whatever the setting.`);
+    if (near.over) {
+      const bneeds = Math.round((L.barge || 0.6) * 100);
+      const bmin = Math.round((L.barge_min || 0.5) * 100);
+      txt = `At ${when} someone said his name over him and ${near.name} was ${pct}% sure (interrupting needs ${bneeds}%).` +
+        (pct >= bmin ? ` Set "Interrupting him" to ${pct}% or lower to catch that.`
+          : " That's too buried under his voice for the wake word; saying it a bit louder or right after a pause works better.");
+    } else {
+      txt = `At ${when} ${near.name} almost heard his name: ${pct}% sure, and it needs ${Math.round(needs * 100)}%.` +
+        (pct >= min ? ` Set it to ${pct}% or lower to catch that.`
+          : ` That's under ${min}%, so it's too far or too noisy for the wake word, whatever the setting.`);
+    }
   } else {
     txt = "Tip: have someone call him from where they'd normally be. If he misses it, this shows how close it came.";
   }
@@ -825,7 +837,33 @@ function paintWake() {
     "Hears almost anything that sounds like his name. Expect false wakes.";
 }
 
+function paintBarge() {
+  const cut = $("#barge-cut");
+  const v = +cut.value;
+  $("#barge-cut-v").textContent = `${v}%`;
+  cut.style.setProperty("--fill", `${(v - cut.min) / (cut.max - cut.min) * 100}%`);
+  $("#barge-note").textContent =
+    v >= 80 ? "Hard to interrupt: you'll have to say his name clearly, maybe twice." :
+    v >= 68 ? "Takes a clear \"Reedus\" to cut him off." :
+    v >= 56 ? "Easy to interrupt. Now and then his own words might cut him off." :
+    "Very easy to interrupt. Expect him to stop himself sometimes.";
+}
+
 function wireListen() {
+  $("#barge-cut").addEventListener("input", paintBarge);
+  $("#barge-cut").addEventListener("change", async (e) => {
+    const r = await Relay.call("listen.set", { barge: +e.target.value / 100 });
+    if (r.error) { toast(r.error); return; }
+    if (S.status) S.status.listen = r.listen;
+    toast(`Interrupting him needs ${e.target.value}%`);
+    renderListen();
+  });
+  $("#chime-on").addEventListener("change", async (e) => {
+    const r = await Relay.call("listen.set", { chime: e.target.checked });
+    if (r.error) { toast(r.error); return; }
+    if (S.status) S.status.listen = r.listen;
+    toast(e.target.checked ? "He'll chime when he's done" : "No chime");
+  });
   $("#wake-cut").addEventListener("input", paintWake);
   $("#wake-cut").addEventListener("change", async (e) => {
     const r = await Relay.call("listen.set", { wake: +e.target.value / 100 });
@@ -1032,7 +1070,10 @@ function renderWho(heard) {
     const teach = btn(p.ready ? "Teach again" : "Teach", p.ready ? "ghost-btn small" : "cta small");
     teach.addEventListener("click", () => openTeach(p));
     btns.append(teach);
-    let notes = null;
+    let notes = null, sayBox = null;
+    const pb = btn(p.say ? "Pronounce ✓" : "Pronounce");
+    pb.addEventListener("click", () => { sayBox.hidden = !sayBox.hidden; });
+    btns.append(pb);
     if (!p.me) {
       const nb = btn("Notes");
       nb.addEventListener("click", () => { notes.hidden = !notes.hidden; });
@@ -1075,6 +1116,47 @@ function renderWho(heard) {
     btns.append(rm);
     li.append(name, btns);
     if (p.last_heard) li.append(el("span", "note", `heard ${ago(p.last_heard)}`));
+    sayBox = el("div", "who-notes");
+    sayBox.hidden = true;
+    sayBox.append(el("p", "note", `How ${p.me ? "your" : `${p.name}'s`} name sounds. Spell it how it sounds (DAN-yul), or tap Make IPA for an exact version. Hear it until it's right, then save.`));
+    const sayIn = el("input");
+    sayIn.maxLength = 80;
+    sayIn.placeholder = `e.g. DAN-yul, or /ˈdænjəl/`;
+    sayIn.value = p.say || "";
+    sayIn.spellcheck = false;
+    sayIn.autocapitalize = "off";
+    const row = el("div", "inline");
+    const hear = btn("▶ Hear it");
+    const ipa = btn("Make IPA");
+    const keep = btn("Save", "cta small");
+    let player = null;
+    hear.addEventListener("click", async () => {
+      busy(hear, true);
+      const r = await Relay.call("who.hear", { voice: p.id, name: p.name, say: sayIn.value });
+      busy(hear, false);
+      if (r.error) { toast(r.error); return; }
+      if (player) player.pause();
+      player = new Audio(`data:audio/wav;base64,${r.wav}`);
+      player.play().catch(() => toast("Your browser blocked the sound. Tap again."));
+    });
+    ipa.addEventListener("click", async () => {
+      busy(ipa, true);
+      const r = await Relay.call("who.ipa", { name: p.name, say: sayIn.value });
+      busy(ipa, false);
+      if (r.error) { toast(r.error); return; }
+      sayIn.value = r.say;
+      toast("Tap Hear it to check it");
+    });
+    keep.addEventListener("click", async () => {
+      busy(keep, true);
+      const r = await Relay.call("who.say", { voice: p.id, say: sayIn.value });
+      busy(keep, false);
+      toast(r.error || (r.person.say ? `He'll say it as ${r.person.say}` : "He'll say it as written"));
+      if (!r.error) loadWho();
+    });
+    row.append(hear, ipa, keep);
+    sayBox.append(sayIn, row);
+    li.append(sayBox);
     if (!p.me) {
       notes = el("div", "who-notes");
       notes.hidden = true;

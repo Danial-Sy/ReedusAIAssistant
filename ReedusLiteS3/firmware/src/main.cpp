@@ -42,7 +42,7 @@ static void help() {
       "                    smug shy curious wink bye dizzy yawn content blink\n"
       "  vol <0-100>       speaker volume\n"
       "  bright <0-100>    face brightness (under the cap)\n"
-      "  ring / chime      play the ring tone / the wake chime once\n"
+      "  ring / chime [done]  play the ring tone / the wake (or done) chime once\n"
       "  cal               calibration (saved on the device): show it, or\n"
       "    cal rotate <0-3>  turn the face a quarter at a time      cal flipx / flipy  mirror it\n"
       "    cal center <us>   servo pulse for straight ahead (1500)  cal center +10 / -10  nudge\n"
@@ -212,7 +212,8 @@ static void command(String c) {
   } else if (c == "ring") {
     sounds::ring();
   } else if (c == "chime") {
-    sounds::wake();
+    if (arg == "done") sounds::done();
+    else sounds::wake();
   } else if (c == "cal") {
     calCommand(arg);
   } else if (c == "glance") {

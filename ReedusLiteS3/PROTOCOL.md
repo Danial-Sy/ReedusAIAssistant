@@ -37,6 +37,7 @@ Mic frames are unchanged: 16 kHz mono int16, 20 ms (640 bytes) per binary messag
 | `unpaired` | | the token was removed from its account (or the database is new): forget it. A pairing code follows |
 | `welcome` | `proto: 3, volume, brightness, account, device, wake` | reply to `hello`. `wake: "device"`: the relay trusts the S3's wake word, so the S3 keeps the mic to itself until it hears the name. `"relay"` (or missing, from an older relay): the S3 uses its speech gate and the relay listens for the name |
 | `listen` | `open` | `true`: a conversation is open, stream every mic frame (the relay is listening for the end of a sentence or a follow-up). `false`: back to the gate |
+| `chime` | `name` | `done`: he stopped listening and went back to idle (played after anything still queued; the app can turn it off). `wake`: the listening chime. Firmware 0.3.4+ |
 | `bulletin` | `rev, text` | Reedus's notes about this account. Saved to NVS, acknowledged with `bulletin_ack` |
 | `state`, `wake`, `emotion`, `expr`, `flush`, `volume`, `brightness`, `look`, `clock`, `timers`, `glance`, `music` | as v2 | `glance` `card: "weather"` is the idle weather card (turned on in the app) |
 | `draw` | `op: "clear"` | back to his face (drawings arrive as binary kind 3, below) |
@@ -112,6 +113,9 @@ Then each request is `{"id", "action", …}` and each reply echoes `id`.
 | `who.teach.status` / `who.teach.cancel` | `device?` | `enroll: {state: starting\|listening\|done\|failed\|cancelled, secs, need, sentences, warn?, error?}` |
 | `who.rename` / `who.me` / `who.notes` | `voice, name` / `voice, on` / `voice, notes` | edit a person |
 | `who.remove` | `voice` | forgets their voice, notes and turns |
+| `who.say` | `voice, say` | how to pronounce their name: a respelling or `/IPA/`; swapped in for the name in everything he speaks |
+| `who.hear` | `say, name?` | `wav` (base64): "Hey <say>! Did I say your name right?" in his voice |
+| `who.ipa` | `name, say` | `say: "/ˈ.../"`: the account's LLM turns a respelling into IPA |
 | `ledger` | `limit?` | top-ups and spend, newest first |
 | `chat` | `text` | type to Reedus: same brain and memory, no voice |
 | `device.expr` | `device, name, hold?` | an expression on the face |

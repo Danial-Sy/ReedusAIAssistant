@@ -108,6 +108,8 @@ class FakeBackend:
             m.add(0.001, "llm")
         if name == "bulletin":
             return "- Their name is Sam.\n- They have a physics exam on Friday."
+        if name == "ipa":
+            return "/ˈdænjəl/\n"
         text = "[excited] Sure thing, mate. That sounds great! [curious] What happens next?"
         for word in text.split(" "):
             if cancel is not None and cancel.is_set():
@@ -123,7 +125,10 @@ class FakeBackend:
 
 
 class FakeVoice:
+    said: list = []          # every line he was asked to say, as the voice got it
+
     def frames(self, text):
+        FakeVoice.said.append(text)
         m = meter.current()
         if m is not None:
             m.add(0.0005, "voice")
@@ -1831,6 +1836,75 @@ async def who_test(url, hub, ask2):
     r = await ask2(app, {"action": "memory.forget"})
     check(not voices.person(dan["id"])["notes"] and voices.person(dan["id"])["samples"],
           "'Forget everything' clears notes but keeps the voices")
+
+    # how to say a name: swapped in for it in everything he speaks, tried in his voice first
+    print("[21b] saying names right")
+    rules = voices.say_rules([{"name": "Dan", "say": "DAN-yul"}, {"name": "Mary Ann", "say": "/ˈmɛri æn/"},
+                              {"name": "Mary", "say": "MAIR-ee"}])
+    check(voices.apply_say("Hey Dan, is that Dan's? Ask Mary Ann and Mary. Danger!", rules)
+          == "Hey DAN-yul, is that DAN-yul's? Ask /ˈmɛri æn/ and MAIR-ee. Danger!",
+          "names are swapped for how they're said (possessives too; longer names first; not inside words)")
+    check(voices.clean_say(" ˈdænjəl/ ") == "/ˈdænjəl/" and voices.clean_say("dan  yul") == "dan yul"
+          and voices.clean_say("//") == "", "IPA keeps its slashes, a respelling stays as typed")
+    r = await ask2(app, {"action": "who.say", "voice": dan["id"], "say": "DAN-yul"})
+    check(r.get("ok") and r["person"]["say"] == "DAN-yul", "a pronunciation is saved on the person")
+    FakeVoice.said.clear()
+    await talk(DAN, "say my name")
+    await dv.wait_for(lambda: bool(FakeVoice.said), 2)
+    check(voices.pronounce(vaid, "Nice one, Dan.") == "Nice one, DAN-yul.",
+          "...and used for whatever he says")
+    await quiet()
+    from reedus_relay import speech as speech_mod
+    heard_text = []
+    real_preview = speech_mod.preview_wav
+    speech_mod.preview_wav = lambda prefs, text: (heard_text.append(text), b"RIFFfake")[1]
+    r = await ask2(app, {"action": "who.hear", "voice": dan["id"], "name": "Dan", "say": "/ˈdænjəl/"})
+    speech_mod.preview_wav = real_preview
+    check(r.get("ok") and r["wav"] and "/ˈdænjəl/" in heard_text[0],
+          "Hear it: the pronunciation in his own voice before saving")
+    r = await ask2(app, {"action": "who.ipa", "name": "Danial", "say": "DAN-yul"})
+    check(r.get("ok") and r["say"] == "/ˈdænjəl/", "Make IPA: his brain turns a respelling into IPA")
+    ipa_call = [c for c in BACKEND.calls if c["name"] == "ipa"][-1]
+    check("DAN-yul" in ipa_call["messages"][1]["content"], "...from what was typed")
+
+    # interrupting him, and the chime when he's done
+    print("[21c] interrupting him, the done chime")
+    from reedus_relay import listening as lst
+    check(dv.last("welcome")["barge_cutoff"] == lst.DEFAULT_BARGE == 0.6,
+          "the Lite is told the easier interrupt cutoff (60%) on connect")
+    r = await ask2(app, {"action": "listen.set", "barge": 0.55})
+    ok = await dv.wait_for(lambda: (dv.last("wake_cfg") or {}).get("barge_cutoff") == 0.55, 2)
+    check(r.get("ok") and r["listen"]["barge"] == 0.55 and ok, "the app's Interrupting slider reaches the Lite")
+    r = await ask2(app, {"action": "listen.set", "barge": 0.3})
+    check("50%" in r.get("error", ""), "...within 50-90%")
+    n_chimes = len([e for e in dv.events if e["type"] == "chime"])
+    await talk(DAN, "how's it going")
+    await quiet()
+    chimes = [i for i, e in enumerate(dv.events) if e["type"] == "chime"]
+    idle = max(i for i, e in enumerate(dv.events) if e.get("state") == "idle")
+    check(len(chimes) == n_chimes + 1 and dv.events[chimes[-1]]["name"] == "done" and chimes[-1] < idle,
+          "going back to idle after a conversation: one 'done' chime, then idle")
+    r = await ask2(app, {"action": "listen.set", "chime": False})
+    await talk(DAN, "how's it going")
+    await quiet()
+    check(r.get("ok") and not r["listen"]["chime"]
+          and len([e for e in dv.events if e["type"] == "chime"]) == n_chimes + 1,
+          "the chime can be turned off in the app")
+    await quiet()
+    check(len([e for e in dv.events if e["type"] == "chime"]) == n_chimes + 1, "already idle: no chime")
+
+    # speech-to-text over its per-minute quota
+    speech_mod._STT_COOL.clear()
+    q = Exception("429 RESOURCE_EXHAUSTED. Quota exceeded ... Please retry in 31.39s.")
+    check(abs(speech_mod._quota_hit(q) - 31.39) < 0.01 and speech_mod._quota_hit(Exception("404 not found")) == 0,
+          "a 429 is spotted, with how long to wait")
+    speech_mod._STT_COOL["gemini-3.5-transcribe"] = time.monotonic() + 30
+    check(speech_mod._stt_models()[0] == "gemini-3.5-flash-lite",
+          "the transcribe model over quota: the next one takes over until it cools down")
+    speech_mod._STT_COOL.clear()
+    check(speech_mod._stt_models()[0] == "gemini-3.5-transcribe"
+          and speech_mod._stt_models(quick=True)[0] == "gemini-3.5-flash-lite",
+          "turns use transcribe; 'stop' checks start on Flash-Lite to spare its quota")
 
     voiceprint.use_embedder(None)
     session_mod.Session.ENROLL_NEED_S, session_mod.Session.ENROLL_MIN_S = 20.0, 8.0

@@ -243,6 +243,10 @@ static void handleText(const char* txt, size_t len) {
       sounds::wake();
     }
     audio::setDuck(true);
+  } else if (!strcmp(t, "chime")) {  // "done": he stopped listening (after what he's saying)
+    const char* n = doc["name"] | "done";
+    if (!strcmp(n, "wake")) sounds::wake();
+    else sounds::done();
   } else if (!strcmp(t, "ring_off")) {  // "stop", or the app's Stop button
     glance::silence();
   } else if (!strcmp(t, "wake_cfg")) {
