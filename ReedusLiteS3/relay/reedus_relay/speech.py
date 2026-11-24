@@ -340,9 +340,13 @@ def _gemini_stt(pcm: bytes) -> str:
     key = llm_settings.key("gemini")
     if not key:
         raise RuntimeError("to understand speech the relay needs a Gemini or OpenAI key (Settings → Service keys)")
-    client = _clients.get(("gemini", key))
+    # gemini-3.5-transcribe only exists on v1beta; google-genai 3.x defaults to v1, which 404'd
+    # it on every turn and quietly fell back to Flash-Lite (no custom vocabulary, so "Rita")
+    ver = config.env("RELAY_STT_API_VERSION", "v1beta")
+    client = _clients.get(("gemini-stt", key, ver))
     if client is None:
-        client = _clients[("gemini", key)] = genai.Client(api_key=key)
+        client = _clients[("gemini-stt", key, ver)] = genai.Client(
+            api_key=key, http_options=types.HttpOptions(api_version=ver))
     audio = types.Part.from_bytes(data=wav_bytes(pcm), mime_type="audio/wav")
     last: Optional[BaseException] = None
     for model in _stt_models() or ["gemini-3.7-flash"]:
