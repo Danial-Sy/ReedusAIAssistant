@@ -14,6 +14,7 @@ from __future__ import annotations
 import io
 import math
 import os
+import re
 import threading
 import time
 import wave
@@ -243,7 +244,9 @@ def wav_bytes(pcm: bytes, rate: int = config.RATE) -> bytes:
 
 # ---------- speech to text ----------
 _STT_PROMPT = ("Transcribe exactly what the speaker says, in their language. Output only the "
-               "words, no quotes, no labels. If there is no intelligible speech, output nothing.")
+               "words, no quotes, no labels. If there is no intelligible speech, output nothing. "
+               "They are talking to a robot named Reedus (said REE-dus). When they say that name, "
+               "write it as Reedus, not Rita, Frita, Reeta or Redis.")
 # USD per minute of audio for the transcription-only models (list prices, estimates)
 _STT_PER_MIN = {"gpt-4o-mini-transcribe": 0.003, "gpt-4o-transcribe": 0.006, "whisper-1": 0.006}
 
@@ -283,6 +286,27 @@ _HALLUCINATED = {"thank you", "thanks", "thank you.", "thanks for watching", "yo
                  "[inaudible]", "(inaudible)", "[music]", "(music)", "[noise]", "..."}
 
 
+# what speech-to-text writes when he hears "Reedus" later in a sentence (the wake word itself is
+# fine, it runs on the S3). names nobody else has are always fixed; real names and words (Rita,
+# Redis, "read us") only where they're plainly said TO him, so a real Rita in a story survives
+_NAME_ODD = r"(?:frita'?s?|freeta'?s?|freedus|freedas|reedis|reedas|redus|reidus|ridus|reetus|reedus)"
+_NAME_REAL = r"(?:rita'?s?|reeta'?s?|reda'?s?|redis|reed\s+us|read\s+us)"
+_HAIL = r"(?:hey|hi|hello|ok(?:ay)?|yo|thanks|thank\s+you|bye|goodbye|goodnight|good\s+night|morning|good\s+morning|sorry)"
+_NAME_FIXES = (
+    (re.compile(rf"\b{_NAME_ODD}\b", re.I), "Reedus"),
+    (re.compile(rf"\b({_HAIL},?\s+){_NAME_REAL}\b", re.I), r"\1Reedus"),      # "hey Rita", "thanks, Rita"
+    (re.compile(rf"^(\s*){_NAME_REAL}(?=\s*[,.!?]|\s*$)", re.I), r"\1Reedus"), # "Rita, what's..."
+    (re.compile(rf"(,\s*){_NAME_REAL}(?=\s*[.!?]?\s*$)", re.I), r"\1Reedus"),  # "...right, Rita?"
+)
+
+
+def fix_name(text: str) -> str:
+    """'Rita', 'Frita', 'Rita's' etc. back to Reedus where they mean him."""
+    for rx, to in _NAME_FIXES:
+        text = rx.sub(to, text)
+    return text
+
+
 def clean_transcript(text: str, pcm: bytes) -> str:
     t = (text or "").strip().strip('"').strip()
     low = t.lower().strip(" .!?")
@@ -293,7 +317,7 @@ def clean_transcript(text: str, pcm: bytes) -> str:
         return ""
     if t.startswith(("[", "(")) and t.endswith(("]", ")")) and len(t) < 30:
         return ""                             # [background noise], (coughs)
-    return t
+    return fix_name(t)
 
 
 # models that can't be used for this key (unknown id, no access), learned at runtime
@@ -359,7 +383,7 @@ def _gemini_stt_call(client, types, model: str, audio):
             # his name, so "Reedus" doesn't come back as "Redis" or "reed us"
             cfg = types.GenerateContentConfig(
                 audio_transcription_config=types.AudioTranscriptionConfig(
-                    custom_vocabulary=["Reedus"]))
+                    custom_vocabulary=["Reedus", "Reedus Lite"]))
         except Exception:                                        # noqa: BLE001
             cfg = None                       # an SDK without the field: the plain call works too
         try:

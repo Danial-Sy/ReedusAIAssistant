@@ -389,6 +389,25 @@ check(speech.clean_transcript("Thank you.", b"\0" * 16000) == "" and
       speech.clean_transcript("Thank you so much for the help", b"\0" * 16000) != "" and
       speech.clean_transcript("[background noise]", b"\0" * 64000) == "",
       "what speech-to-text makes up from noise is dropped")
+_fx = speech.fix_name
+check(_fx("Hey Rita, what's the weather?") == "Hey Reedus, what's the weather?" and
+      _fx("Frita can you set a timer") == "Reedus can you set a timer" and
+      _fx("hey Rita's how are you") == "hey Reedus how are you" and
+      _fx("Rita, are you awake?") == "Reedus, are you awake?" and
+      _fx("that was funny, Rita.") == "that was funny, Reedus." and
+      _fx("thanks Rita") == "thanks Reedus" and
+      _fx("Reedis what time is it") == "Reedus what time is it",
+      "misheard versions of his name come back as Reedus")
+check(_fx("my aunt Rita is visiting") == "my aunt Rita is visiting" and
+      _fx("Rita's dog is sick") == "Rita's dog is sick" and
+      _fx("read us a story") == "read us a story" and
+      _fx("I set up Redis on the server") == "I set up Redis on the server" and
+      _fx("open ReedOS") == "open ReedOS" and _fx("Frida Kahlo") == "Frida Kahlo",
+      "a real Rita, Redis or ReedOS is left alone")
+check(speech.clean_transcript("Hey Frita, you there?", b"\0" * 32000) == "Hey Reedus, you there?",
+      "the name fix runs on every transcript")
+from reedus_relay import brain as _brain
+check("not Rita" in _brain.LITE_VOICE, "his prompt says a misheard name still means him")
 ep3 = speech.Endpointer(start_timeout=2.0, end_silence=0.5, spec_after=0.2)
 evs = [ep3.feed(VOICED) for _ in range(10)] + [ep3.feed(SILENT) for _ in range(12)] + \
       [ep3.feed(VOICED) for _ in range(5)] + [ep3.feed(SILENT) for _ in range(30)]
