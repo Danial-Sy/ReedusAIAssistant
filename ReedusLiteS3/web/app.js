@@ -318,6 +318,15 @@ function liteLine(d) {
   return bits.join(" · ");
 }
 
+// the Hush button: cut him off mid-sentence (same as "Reedus, stop" over him)
+async function hush(id, btn) {
+  if (btn) btn.disabled = true;
+  const r = await Relay.call("device.hush", { device: id });
+  if (btn) setTimeout(() => { btn.disabled = false; }, 400);
+  if (r.error) { toast(r.error); return; }
+  if (r.stopped) toast("Hushed");
+}
+
 function renderLites() {
   const box = $("#lites");
   const devs = S.status.devices || [];
@@ -328,6 +337,8 @@ function renderLites() {
       if (s) s.textContent = liteLine(d);
       const rb = $(`[data-dev="${d.id}"] .r-ring`);
       if (rb) rb.hidden = !d.ringing;
+      const hb = $(`[data-dev="${d.id}"] .r-hush`);
+      if (hb) hb.disabled = !d.online;
     });
     return;
   }
@@ -349,7 +360,8 @@ function renderLites() {
       <div class="lite-head">
         <span class="lite-face"><svg><use href="#i-home"/></svg></span>
         <div class="lite-text"><b></b><small></small></div>
-        <div class="lite-menu"><button class="cta small r-ctl" type="button">Controls</button>
+        <div class="lite-menu"><button class="cta small hush r-hush" type="button">Hush</button>
+          <button class="cta small r-ctl" type="button">Controls</button>
           <button class="ghost-btn small r-name" type="button">Rename</button></div>
       </div>
       <button class="cta gold wide r-ring" type="button" hidden>Stop ringing</button>
@@ -367,6 +379,9 @@ function renderLites() {
       ringBtn.hidden = true;
       toast("Quiet now");
     });
+    const hushBtn = $(".r-hush", c);
+    hushBtn.disabled = !d.online;
+    hushBtn.addEventListener("click", () => hush(d.id, hushBtn));
     const wire = (cls, key, label, def) => {
       const r = $(cls, c), v = $(label, c);
       r.value = s[key] != null ? s[key] : def;
@@ -1843,6 +1858,7 @@ const Ctl = (() => {
       saved.set("rl.drawings", JSON.stringify(list));
       renderSaved();
     });
+    $("#ctl-hush").addEventListener("click", (e) => hush(dev, e.currentTarget));
     // firmware
     $("#fw-latest").addEventListener("click", async (e) => {
       busy(e.target, true);
@@ -1868,6 +1884,7 @@ const Ctl = (() => {
     if ($("#ctl").hidden || !dev) return;
     const d = device();
     $("#ctl-offline").hidden = !!(d && d.online);
+    $("#ctl-hush").disabled = !(d && d.online);
     if (tab === "head") renderDial();
     if (tab === "fw") renderFw();
   }

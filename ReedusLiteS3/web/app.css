@@ -57,6 +57,8 @@ svg use { pointer-events: none; }
 .cta:active:not(:disabled) { transform: scale(.97); }
 .cta.gold { background: var(--gold); color: #1A1407; }
 .cta.small { padding: 7px 14px; font-size: 14px; }
+.cta.hush { background: var(--red); color: #fff; }
+.head-btns { display: flex; align-items: center; gap: 6px; }
 .wide { width: 100%; }
 .ghost-btn { border: 1px solid var(--line-hi); padding: 9px 16px; border-radius: 999px; font-weight: 500; transition: background .15s; white-space: nowrap; }
 .ghost-btn:hover:not(:disabled) { background: var(--bg3); }

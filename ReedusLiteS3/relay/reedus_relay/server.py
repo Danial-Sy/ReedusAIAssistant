@@ -500,7 +500,7 @@ class Hub:
                     s.send({"type": k, "level": v})
             return {"ok": True, **patch}
         if a.startswith(("device.expr", "device.look", "device.draw", "device.ota", "device.state",
-                          "device.ring_off", "device.cal")):
+                          "device.ring_off", "device.cal", "device.hush")):
             return await self._device_control(a, req, aid, owner)
         if a == "voices":
             out = await asyncio.to_thread(speech.list_voices)
@@ -708,6 +708,8 @@ class Hub:
         if a == "device.ring_off":     # the app's Stop button: end it here and on the Lite
             s.stop_ringing()
             return {"ok": True}
+        if a == "device.hush":         # the app's Hush button: shut him up right now
+            return {"ok": True, "stopped": s.hush()}
         if a == "device.expr":
             name = str(req.get("name") or "")
             hold = max(0.5, min(30.0, float(req.get("hold") or 3.0)))

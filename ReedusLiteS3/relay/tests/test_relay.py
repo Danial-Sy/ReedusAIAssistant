@@ -854,6 +854,26 @@ async def main():
           "'stop talking' over him cuts him off and he goes quiet")
     await asyncio.sleep(0.3)
 
+    print("[7e1] the app's Hush button cuts him off without saying anything")
+    BACKEND.slow = 0.25
+    SCRIPT[:] = ["tell me a long story about boats"]
+    await d.say()
+    ok = await d.wait_for(lambda: d.states()[-1] == "speaking", 8)
+    n_chime = len([e for e in d.events if e["type"] == "chime"])
+    flushes = d.flushes
+    r = await hub._device_control("device.hush", {"device": sess.did}, sess.aid, True)
+    ok2 = await d.wait_for(lambda: d.states()[-1] == "idle" and sess.mode == "idle", 3)
+    BACKEND.slow = 0.0
+    check(ok and ok2 and r.get("stopped") and d.flushes > flushes and sess.cancel.is_set(),
+          "Hush mid-reply flushes his speech, cancels the reply, back to idle")
+    await asyncio.sleep(0.3)
+    check(len([e for e in d.events if e["type"] == "chime"]) == n_chime,
+          "...with no done chime after a hush")
+    r = await hub._device_control("device.hush", {"device": sess.did}, sess.aid, True)
+    check(r.get("ok") and not r.get("stopped") and sess.mode == "idle",
+          "Hush while he's idle is harmless")
+    await asyncio.sleep(0.3)
+
     print("[7e2] his name over him: the transcript catches what the wake word misses")
     BACKEND.slow = 0.25
     SCRIPT[:] = ["tell me another long story", "Rita, hold on"]

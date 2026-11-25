@@ -542,7 +542,7 @@ class Session:
 
     REST_S = 180.0    # one question mode: questions this close together are one conversation
 
-    def end_conversation(self, keep: bool = False) -> None:
+    def end_conversation(self, keep: bool = False, chime: bool = True) -> None:
         """Back to idle. keep=True (one question mode): the conversation isn't over, he just
         stops listening; asked again within REST_S, he still knows what you just talked about,
         and the memory update (an LLM call) runs once at the end instead of after every question."""
@@ -553,7 +553,7 @@ class Session:
         self.stop_ep = None
         self.carry_text = None
         self.listen(False)
-        if was != "idle" and listening.end_chime(self.account):
+        if chime and was != "idle" and listening.end_chime(self.account):
             # he's done: a short falling chime (firmware 0.3.4+; older ones ignore it), played
             # after anything he's still saying
             self.send({"type": "chime", "name": "done"})
@@ -571,6 +571,27 @@ class Session:
         self.brain.new_conversation()
         self.conversation = uuid.uuid4().hex
         self.turns_in_conv = 0
+
+    def hush(self) -> bool:
+        """The app's Hush button: same as "stop" said over him, without having to say it.
+        Cuts off speech (and any reply still being written or searched), drops what he was
+        listening for, and quiets a ring. Returns whether there was anything to stop."""
+        was = self.mode
+        ringing = self.is_ringing()
+        if was == ENROLL:
+            return False                       # teaching a voice: leave that to its own flow
+        if was == BUSY:
+            self.barge()
+        else:
+            self.send({"type": "flush"})       # anything still queued on the Lite
+            self.play_end = 0.0
+        if ringing:
+            self.stop_ringing()
+        if was != IDLE or self.state != "idle":
+            print(f"[relay] {self.device.get('name')}: hushed from the app", flush=True)
+            self.send({"type": "expr", "name": "blink", "hold": 0.6})
+            self.end_conversation(chime=False)
+        return was != IDLE or ringing
 
     def barge(self) -> None:
         self.cancel.set()
