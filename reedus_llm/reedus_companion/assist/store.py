@@ -44,6 +44,11 @@ def list_key(name: str) -> str:
 
 
 class Assistant:
+    # after the wake word hushes a ring and nobody says stop/snooze in ACK_WINDOW_S: False ends
+    # it there (the run box), True rings again until RING_MAX_S (the Lite, where a false wake
+    # used to swallow a timer whole)
+    HUSH_RESUMES = False
+
     def __init__(self, path: Path = PATH, clock: Callable[[], float] = time.time):
         self.path = path
         self.clock = clock
@@ -143,7 +148,14 @@ class Assistant:
                 elif st in ("ringing", "hushed"):
                     limit = it.get("hushed_at", 0) + ACK_WINDOW_S if st == "hushed" else \
                         it.get("rang_at", now) + RING_MAX_S.get(it["kind"], 300)
-                    if now >= limit:
+                    gave_up = now >= it.get("rang_at", now) + RING_MAX_S.get(it["kind"], 300)
+                    if st == "hushed" and now >= limit and self.HUSH_RESUMES and not gave_up:
+                        # the name quieted it but nobody said stop or snooze: ring again
+                        it["state"] = "ringing"
+                        it.pop("hushed_at", None)
+                        fired.append(it)
+                        nxt = min(nxt, it.get("rang_at", now) + RING_MAX_S.get(it["kind"], 300) - now)
+                    elif now >= limit:
                         expired.append(it)
                     else:
                         nxt = min(nxt, limit - now)

@@ -13,6 +13,7 @@
 
 #include "audio.h"
 #include "config.h"
+#include "glance.h"
 #include "mww_features.h"
 #include "wake_model.h"  // generated from wakeword/models by tools/embed_wake_model.py
 
@@ -199,7 +200,9 @@ static void onSlice(const int8_t* s) {
   if (slices < WAKE_WARMUP_SLICES || slices - lastWake < REFRACTORY_SLICES) return;
   uint8_t avg = (uint8_t)(sum / winN);
   // over his own voice the name scores lower (echo smears it): a lower bar while he talks
-  bool overHim = audio::sinceSpeechMs() < BARGE_TAIL_MS;
+  // (not while a timer rings: what's playing is the ring tone, not him, and at the lower bar
+  // the beeps woke him, which silenced the ring after one beep)
+  bool overHim = audio::sinceSpeechMs() < BARGE_TAIL_MS && !glance::ringing();
   uint8_t cut = (overHim && bargeU8 && bargeU8 < cutoffU8) ? bargeU8 : cutoffU8;
   bool hit = sum > (uint32_t)cut * winN;
   if (!hit && avg >= NEAR_FLOOR) {

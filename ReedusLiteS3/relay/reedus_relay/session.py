@@ -173,7 +173,7 @@ class Session:
         self.brain = brain or Brain(account, device, Commands(self.assist))
         if getattr(self.brain, "commands", None) is None:
             self.brain.commands = Commands(self.assist)
-        self.assist.on_change(lambda kind, item: self.send_timers())
+        self.assist.on_change(self._assist_changed)
         if hasattr(self.assist, "start"):
             self.assist.start()
 
@@ -205,6 +205,15 @@ class Session:
         h24 = bool(((self.assist.settings or {}).get("glance") or {}).get("h24"))
         self.send({"type": "clock", "t": int(now + local.tm_gmtoff), "h24": h24})
         self._last_clock = time.monotonic()
+
+    def _assist_changed(self, kind: str, item: dict) -> None:
+        if kind in ("ringing", "stopped", "snoozed") or (kind == "changed" and item.get("state") == "hushed"):
+            what = item.get("kind") or "?"
+            name = f" ({item['label']})" if item.get("label") else ""
+            how = {"ringing": "ringing", "stopped": "stopped", "snoozed": "snoozed",
+                   "changed": "hushed by the name, back in 12 s unless stop/snooze"}[kind]
+            print(f"[relay] {self.device.get('name')}: {what}{name} {how}", flush=True)
+        self.send_timers()
 
     def send_timers(self) -> None:
         from reedus_relay.assist_store import timers_msg
@@ -414,6 +423,9 @@ class Session:
             if msg.get("op") == "done":
                 self.art_until = 0.0
         elif t == "ring":                    # the Lite's own idea of whether it's ringing
+            print(f"[relay] {self.device.get('name')}: the Lite says ring "
+                  f"{'on' if msg.get('on') else 'off'} ({msg.get('kind') or ''} {msg.get('id') or ''})",
+                  flush=True)
             self.info["ring"] = {"on": bool(msg.get("on")), "id": msg.get("id") or "",
                                  "kind": msg.get("kind") or "", "at": time.time()}
         elif t == "wake_near":               # it almost heard the name (the app shows it)

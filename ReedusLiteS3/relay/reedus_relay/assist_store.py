@@ -31,10 +31,26 @@ class _DbPath:
 class DbAssistant(Assistant):
     """The run box's Assistant, loading from and saving to the relay database."""
 
+    HUSH_RESUMES = True
+    LATE_RING_S = 600.0     # a timer or alarm that came due while the relay was restarting
+
     def __init__(self, device_id: str):
         self.device_id = device_id
         self._save_lock = threading.Lock()
         super().__init__(path=_DbPath(device_id))
+
+    def _load(self) -> None:
+        """The parent drops a timer or alarm whose moment passed while it was off. A relay
+        restart (every deploy) takes seconds, so one that came due in that gap still rings,
+        late, instead of vanishing."""
+        super()._load()
+        now = self.clock()
+        late = [m for m in self.missed
+                if m.get("kind") in ("timer", "alarm") and now - (m.get("due") or 0) < self.LATE_RING_S]
+        for it in late:
+            it["state"] = "active"
+            self.items.append(it)
+        self.missed = [m for m in self.missed if m not in late]
 
     def tick(self) -> float:
         """The parent's tick, but it can never take the clock down: an exception in a tick (a

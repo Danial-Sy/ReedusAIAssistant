@@ -470,6 +470,13 @@ bool silence() {
   return was;
 }
 
+bool pause() {
+  if (localRing) return silence();
+  bool was = ring;
+  ring = false;
+  return was;
+}
+
 bool takeRingChange(bool* on, const char** id, const char** kind) {
   if (ring == ringReported) return false;
   ringReported = ring;

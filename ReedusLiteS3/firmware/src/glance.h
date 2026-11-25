@@ -31,6 +31,9 @@ bool localRinging();
 // stop ringing now (his name was heard, "stop", the app's Stop button) and never ring that
 // timer/alarm again from stale data. false if nothing was ringing
 bool silence();
+// quiet for now, but the relay decides whether it's over (it brings the ring back if nobody
+// says stop or snooze); a ring this Lite started on its own is silenced for good
+bool pause();
 // the ring changed (on or off) since the last call: report it to the relay so the app can
 // show a Stop button. id/kind describe the current ring
 bool takeRingChange(bool* on, const char** id, const char** kind);

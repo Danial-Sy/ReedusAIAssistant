@@ -607,6 +607,34 @@ async def main():
     check(d.last("listen") == {"type": "listen", "open": False}, "starts gated (only streams on speech)")
     check(d.last("welcome").get("wake") == "relay", "no wake cap: the relay does the wake word")
 
+    print("[3b] a spoken timer rings on the relay's own clock")
+    SCRIPT[:] = ["Hey Reedus, set a timer for 2 seconds"]
+    await d.say()
+    ok = await d.wait_for(lambda: any(e["type"] == "timers" and e.get("ring") for e in d.events), 10)
+    check(ok, "the timer goes off by itself, no tick from the test")
+    sess = next(x for x in hub.sessions.values() if x.device.get("name") == "Desk Lite")
+    sess.on_wake()                           # "Reedus" (or a false wake) with nothing after it
+    ok = await d.wait_for(lambda: (d.last("timers") or {}).get("ring") == [], 2)
+    check(ok and sess.assist.ringing()[0]["state"] == "hushed", "the name hushes the ring")
+    import reedus_companion.assist.store as store_mod
+    store_mod.ACK_WINDOW_S, real_ack = 0.5, store_mod.ACK_WINDOW_S
+    sess.assist._poke()
+    ok = await d.wait_for(lambda: bool((d.last("timers") or {}).get("ring")), 4)
+    store_mod.ACK_WINDOW_S = real_ack
+    check(ok, "nobody said stop or snooze: it rings again instead of vanishing")
+    sess.stop_ringing()
+    await d.wait_for(lambda: d.states()[-1:] == ["idle"], 6)
+    sess.end_conversation()
+    await asyncio.sleep(0.3)
+    from reedus_relay.assist_store import DbAssistant
+    a_late = DbAssistant(sess.did)
+    it = a_late.add_timer(60, "late")
+    a_late.items[-1]["due"] = time.time() - 20      # it came due while the relay was restarting
+    a_late.save()
+    a_late2 = DbAssistant(sess.did)
+    check(any(i["id"] == it["id"] for i in a_late2.items), "a timer that ended during a restart still rings, late")
+    a_late2.cancel([it["id"]])
+    sess.assist.cancel([i["id"] for i in sess.assist.items if i.get("label") == "late"])
     print("[4] a conversation")
     SCRIPT[:] = ["Hey Reedus, I've got a physics exam on Friday"]
     bal0 = accounts.balance(aid)
@@ -671,10 +699,11 @@ async def main():
     print("[7] timers: the fast path, no LLM")
     SCRIPT[:] = ["set a timer for 5 minutes"]
     n_llm = len([c for c in BACKEND.calls if c["name"] == "persona"])
+    n_ev = len(d.events)
     await d.say()
-    ok = await d.wait_for(lambda: any(e["type"] == "timers" and e["items"] for e in d.events), 6)
+    ok = await d.wait_for(lambda: any(e["type"] == "timers" and e["items"] for e in d.events[n_ev:]), 6)
     check(ok, "a timers message with the new timer")
-    t = [e for e in d.events if e["type"] == "timers" and e["items"]][-1]["items"][0]
+    t = [e for e in d.events[n_ev:] if e["type"] == "timers" and e["items"]][-1]["items"][0]
     check(abs(t["left"] - 300) < 5, f"5 minutes on the device's countdown ({t['left']})")
     await d.wait_for(lambda: d.states()[-1] == "listening", 4)
     check(len([c for c in BACKEND.calls if c["name"] == "persona"]) == n_llm, "no LLM call for a timer")

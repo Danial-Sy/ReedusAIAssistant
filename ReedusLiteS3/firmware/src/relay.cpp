@@ -151,7 +151,8 @@ static void micUp() {
 // the relay answers with wake + listen like it does for its own wake word
 static void onDeviceWake(float score) {
   wokeAt = millis();
-  glance::silence();                     // his name always quiets a ring, right here
+  glance::pause();                       // his name quiets a ring right here; the relay ends
+                                         // it on "stop" or brings it back if nobody says
   face::wake();
   head::onWake();
   audio::setDuck(true);
