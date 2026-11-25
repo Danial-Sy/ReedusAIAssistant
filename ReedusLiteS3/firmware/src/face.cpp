@@ -453,8 +453,9 @@ static void compose(uint32_t now, Spec& s) {
         s.blinkable = false;
         s.gx = 0;
       } else if (drowsy) {
+        // heavy eyelids but still smiling: with a flat mouth the half eyes read as annoyed
         s.eyeL = s.eyeR = E_HALF;
-        s.mouth = M_FLAT;
+        s.mouth = M_SMILE;
         s.dim = 0.75f;
       } else if (music && !voiceFresh) {
         // listening along: happy eyes, a little smile, bobbing on the beat

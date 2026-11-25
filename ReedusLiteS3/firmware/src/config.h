@@ -6,9 +6,9 @@
 #include <Arduino.h>
 
 #ifdef FW_BUILD                    // CI builds add the commit: 0.3.0-s3.<sha>
-#define FW_VERSION "0.3.5-s3." FW_BUILD
+#define FW_VERSION "0.3.6-s3." FW_BUILD
 #else
-#define FW_VERSION "0.3.5-s3"
+#define FW_VERSION "0.3.6-s3"
 #endif
 #define DEVICE_NAME "reedus-lite-s3"
 
