@@ -77,6 +77,13 @@ check(r and r.startswith("Pizza timer"), f"label before 'timer': {r!r}")
 r = cmd.handle("set a timer for 5 minutes for the eggs")
 check(r and r.startswith("Eggs timer"), f"label after 'for the': {r!r}")
 check(len(a.active("timer")) == 3, "three timers running")
+a2, cmd2, _ = fresh()
+for s in ("put a timer on for 10 minutes", "can you do a timer for 4 minutes",
+          "I need a timer for 5 minutes", "give me a timer for one minute"):
+    r = cmd2.handle(s)
+    check(r and not a2.active("timer")[-1]["label"], f"the ask isn't a name ({s!r} -> {r!r})")
+r = cmd2.handle("put the pizza timer on for 12 minutes")
+check(r and r.startswith("Pizza timer"), f"a name after the article still counts: {r!r}")
 r = cmd.handle("how much time is left on the pasta timer")
 check(r and "3 timers" in r, f"several timers listed: {r!r}")
 r = cmd.handle("add 2 minutes to the pasta timer")

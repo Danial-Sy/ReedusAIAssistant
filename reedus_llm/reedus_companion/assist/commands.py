@@ -26,6 +26,11 @@ _STOP_RING = re.compile(
     r"enough|quiet|shush|got it|alright|cancel(?: it| that)?|silence|be quiet|shut it off)$")
 _SNOOZE = re.compile(r"\bsnooze\b|\b(?:5|10|9) more minutes\b|\bgive me (?:a few|five|ten) more minutes\b")
 _HAS_TIMER = re.compile(r"\btimers?\b")
+# words that ask for a timer rather than name one ("put a timer on", "can you do a timer")
+_TIMER_ASK = {"put", "throw", "stick", "pop", "give", "get", "do", "add", "run", "need", "want", "i", "me",
+              "on", "can", "could", "would", "will", "you", "please", "go", "ahead", "and", "hey", "reedus",
+              "set", "start", "make", "create", "begin", "lets", "let's", "let", "us", "just", "quick",
+              "okay", "ok", "so", "um", "uh", "yo", "gimme", "i'd", "like", "to", "up", "new", "another"}
 _CANCEL = r"(?:cancel|stop|delete|remove|clear|kill|turn off|disable|end|get rid of|switch off|shut off|forget)"
 _PAIRS = ("mac and cheese", "salt and pepper", "peanut butter and jelly", "fish and chips",
           "bread and butter", "rock and roll", "half and half", "chips and salsa", "pb and j")
@@ -204,6 +209,14 @@ class Commands:
             else:
                 pre = re.search(r"(?:^|\b(?:a|an|the|my)\s+)([a-z0-9' ]+?)\s+timers?\b", t)
                 lab = pre.group(1) if pre else ""
+                # "put a timer on", "I need a timer": the words before "timer" are the ask,
+                # not a name. a name comes after the last article ("put the pasta timer on")
+                art = re.split(r"\b(?:a|an|the|my)\b", lab)
+                lab = art[-1]
+                words = lab.split()
+                while words and words[0] in _TIMER_ASK:
+                    words.pop(0)
+                lab = " ".join(words)
                 lab = re.sub(rf"^(?:{dur_rx})\s*", "", lab)
                 lab = re.sub(r"^(?:minute|second|hour)s?\b", "", lab).strip()
         lab = re.sub(r"\b(?:set|start|make|create|a|an|the|my|new|another|timer|please|up)\b", " ", lab)
