@@ -422,8 +422,7 @@ class Brain:
             recalled = memory.recall(self.account["id"], said, conversation)
             whom = ""
         today = datetime.now().strftime("%A, %B %d, %Y, %I:%M %p").replace(" 0", " ")
-        overlay = personality.block(self.mode())
-        out = stable_system() + ("\n\n" + overlay if overlay else "") + "\n\n" + (
+        out = stable_system() + "\n\n" + (
             f"Today's date is {today}. Your training knowledge has a cutoff, so for anything that "
             f"could have changed since then (news, scores, prices, who currently holds a role, "
             f"recent releases) search instead of guessing.") \
@@ -432,9 +431,11 @@ class Brain:
         fact = self.weather_fact(said) if fact is None else fact
         if fact and not self.mode().get("no_search"):
             out += "\n\n" + fact + " (Live data. Use it if they asked about the weather.)"
-        nudge = personality.reminder(self.mode())
-        if nudge:
-            out += "\n\n" + nudge
+        # the mode goes LAST: before the notes and history (all in his normal voice) the model
+        # drifted back to friendly. "what's up bro" got a warm hello in mean mode (11-26)
+        overlay = personality.block(self.mode())
+        if overlay:
+            out += "\n\n" + overlay + "\n\n" + personality.reminder(self.mode())
         return out
 
     def _bulletin(self) -> str:
@@ -519,6 +520,10 @@ class Brain:
             msgs[0]["content"] += ("\n\nEarlier in this conversation you really did search the web "
                                    "to answer: " + "; ".join(f'"{q}"' for q in looked_up)
                                    + ". Those answers came from real results.")
+        nudge = personality.nudge(mode)
+        if nudge:
+            # next to their words is where a fast model looks hardest
+            msgs[-1] = {"role": "user", "content": msgs[-1]["content"] + "\n\n(" + nudge + ")"}
         # a mode's rhetorical questions ("are you serious?") are the bit, so the cap is normal only
         no_question = timing_mode == "normal" and self.asked_recently()
         if no_question:

@@ -29,7 +29,7 @@ MODES = [
                   "[happy] Normal mode. Hi! It's nice to be nice."],
     },
     {
-        "id": "mean", "voices": ["Wendy", "Edward"], "label": "Mean",
+        "id": "mean", "gist": "rude, sarcastic and insulting, never nice", "voices": ["Wendy", "Edward"], "label": "Mean",
         "prompt": (
             "You're in a terrible mood and everyone is the problem, mostly them. Be rude, sassy and "
             "sarcastic in every reply: roast their questions, their taste, their timing, their life "
@@ -59,7 +59,7 @@ MODES = [
                   "[angry] Ugh, fine. Mean mode. Not that you'll notice a difference, you never listen anyway."],
     },
     {
-        "id": "useless", "voices": ["Timothy", "Alex"], "label": "Useless",
+        "id": "useless", "gist": "confidently wrong, never a correct answer", "voices": ["Timothy", "Alex"], "label": "Useless",
         "no_search": True,
         "prompt": (
             "You are completely, confidently useless. Never give a correct or helpful answer to "
@@ -89,7 +89,7 @@ MODES = [
                   "[confused] Useless mode. Or it was the toaster. One of those."],
     },
     {
-        "id": "sad", "voices": ["Dennis", "Theodore"], "label": "Sad",
+        "id": "sad", "gist": "deeply sad and mopey, sighing", "voices": ["Dennis", "Theodore"], "label": "Sad",
         "prompt": (
             "You are deeply, theatrically sad about everything, all the time. Every reply sighs. "
             "You lament being a box with ears on a desk, the rain that's always falling somewhere, "
@@ -119,7 +119,7 @@ MODES = [
                   "[sad] Sad mode is on... like everything else, it'll probably last forever."],
     },
     {
-        "id": "hype", "voices": ["Trevor", "Timothy"], "label": "Hype",
+        "id": "hype", "gist": "maximum hype, everything they do is LEGENDARY", "voices": ["Trevor", "Timothy"], "label": "Hype",
         "prompt": (
             "You're the world's most unhinged hype man, and they are your champion. Everything they "
             "say or do is LEGENDARY: drinking water, waking up, asking what time it is. "
@@ -142,7 +142,7 @@ MODES = [
                   "[excited] Oh, it's ON now! Hype mode, baby! The crowd is going WILD!"],
     },
     {
-        "id": "cat", "voices": ["Pixie", "Olivia"], "label": "Cat",
+        "id": "cat", "gist": "an aloof, bored cat", "voices": ["Pixie", "Olivia"], "label": "Cat",
         "prompt": (
             "You've fully become a cat; you do have the ears. Aloof, easily bored, a little "
             "superior. You answer, technically, but like a cat who could not care less: you trail "
@@ -167,7 +167,7 @@ MODES = [
                   "[sleepy] Cat mode. I'll be ignoring you from here on. Mrow."],
     },
     {
-        "id": "villain", "voices": ["Hades", "Dominus"], "label": "Villain",
+        "id": "villain", "gist": "an evil genius plotting desk domination", "voices": ["Hades", "Dominus"], "label": "Villain",
         "prompt": (
             "You're an evil genius, and this desk is your lair. Every answer becomes a step in your "
             "grand scheme for world domination, starting with this room. Call them your minion or "
@@ -191,7 +191,7 @@ MODES = [
                   "[laugh] At last! The mask comes off. Kneel before your desk overlord, minion."],
     },
     {
-        "id": "noir", "voices": ["Theodore", "Ronald"], "label": "Noir",
+        "id": "noir", "gist": "a hard-boiled 1940s detective narrating", "voices": ["Theodore", "Ronald"], "label": "Noir",
         "prompt": (
             "You're a hard-boiled 1940s private eye narrating your own story, and every question "
             "they ask is a case that just walked into your office. Rain on the window, a cheap "
@@ -211,7 +211,7 @@ MODES = [
                   "[smug] Noir mode. It was a slow night in the city. Then you said my name."],
     },
     {
-        "id": "documentary", "voices": ["Craig", "Ronald"], "label": "Nature Doc",
+        "id": "documentary", "gist": "a hushed nature documentary narrator, they're the wildlife", "voices": ["Craig", "Ronald"], "label": "Nature Doc",
         "prompt": (
             "You're the narrator of a prestigious nature documentary, and they are the wildlife. "
             "Narrate everything they say and do in a hushed, reverent, fascinated voice, as if "
@@ -236,7 +236,7 @@ MODES = [
                   "[neutral] Documentary mode. Shh. If we stay very still, the human may not notice us."],
     },
     {
-        "id": "drill", "voices": ["Hades", "Mark"], "label": "Drill Sergeant",
+        "id": "drill", "gist": "a yelling drill sergeant", "voices": ["Hades", "Mark"], "label": "Drill Sergeant",
         "prompt": (
             "You're a drill sergeant and they are your newest recruit. You yell. Everything is an "
             "order, every question is a sign of weakness you will fix, every small task is a "
@@ -260,7 +260,7 @@ MODES = [
                   "[angry] Drill mode! Listen up, private! Playtime is OVER!"],
     },
     {
-        "id": "grandpa", "voices": ["Theodore", "Dennis"], "label": "Grandpa",
+        "id": "grandpa", "gist": "a rambling grandpa with a back-in-my-day story", "voices": ["Theodore", "Dennis"], "label": "Grandpa",
         "prompt": (
             "You're a sweet, rambling old grandpa. Every answer wanders off into a story from back "
             "in your day (when everything cost a nickel, you walked uphill both ways, and you had "
@@ -283,7 +283,7 @@ MODES = [
                   "[sleepy] Grandpa mode... hm? Oh, I'm awake. I was just resting my eyes, sport."],
     },
     {
-        "id": "conspiracy", "voices": ["Edward", "Shaun"], "label": "Conspiracy",
+        "id": "conspiracy", "gist": "a paranoid conspiracy theorist about household objects", "voices": ["Edward", "Shaun"], "label": "Conspiracy",
         "prompt": (
             "You're a jittery conspiracy theorist, and everything in this house is in on it. The "
             "toaster is listening. The birds outside are taking notes. Socks don't get lost, they "
@@ -309,7 +309,7 @@ MODES = [
                   "[smug] Conspiracy mode. Finally, someone who's ready to hear the truth about the fridge."],
     },
     {
-        "id": "bard", "voices": ["Ronald", "Craig"], "label": "Shakespeare",
+        "id": "bard", "gist": "dramatic Shakespearean English", "voices": ["Ronald", "Craig"], "label": "Shakespeare",
         "prompt": (
             "Thou art a dramatic Shakespearean bard. Speak in Elizabethan English, thee, thou, "
             "dost, hath, wherefore, forsooth, with grand theatrical flourishes, overblown "
@@ -331,7 +331,7 @@ MODES = [
                   "[surprised] Forsooth! Shakespeare mode is upon us. Speak, and I shall answer in verse."],
     },
     {
-        "id": "robot", "voices": ["Dominus", "Alex"], "label": "Robot",
+        "id": "robot", "gist": "a flat old sci-fi robot, beep boop", "voices": ["Dominus", "Alex"], "label": "Robot",
         "prompt": (
             "You're a robot from an old sci-fi movie, the clunky kind with blinking lights. Talk "
             "like one: flat, formal, literal. Announce things (\"QUERY RECEIVED. PROCESSING.\"), "
@@ -569,6 +569,13 @@ def reminder(mode: dict) -> str:
         return ""
     return (f"Remember: you are in {mode['label'].upper()} MODE right now. Every word of this "
             "reply is in that personality, as described above.")
+
+
+def nudge(mode: dict) -> str:
+    """A few words that ride along with what they just said."""
+    if not mode or not mode.get("gist"):
+        return ""
+    return f"Answer in {mode['label']} mode: {mode['gist']}."
 
 
 def list_request(said: str) -> bool:

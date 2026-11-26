@@ -1084,8 +1084,14 @@ async def main():
     sp = BACKEND.calls[-1]["messages"][0]["content"]
     check(ok and "PERSONALITY MODE: MEAN" in sp and sp.index("You are Reedus") < sp.index("PERSONALITY MODE"),
           "his prompt carries the mode, after the persona")
-    check(sp.rstrip().endswith("as described above.") and "MEAN MODE right now" in sp,
-          "...and a reminder at the very end, after his notes and history")
+    check(sp.rstrip().endswith("as described above.") and "MEAN MODE right now" in sp
+          and sp.index("PERSONALITY MODE") > sp.index("Today's date"),
+          "...last, after his notes and history, with a reminder")
+    said_msg = BACKEND.calls[-1]["messages"][-1]["content"]
+    hist = hub.sessions[did].brain.history
+    check(said_msg.endswith("(Answer in Mean mode: rude, sarcastic and insulting, never nice.)")
+          and not any("Answer in Mean mode" in h.get("content", "") for h in hist),
+          "...and a nudge right next to what they said (not saved in his history)")
     n_calls, n_said = len(BACKEND.calls), len(FakeVoice.said)
     SCRIPT[:] = ["switch to sad mode"]
     await d.say(wake=False)
