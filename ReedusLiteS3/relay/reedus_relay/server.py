@@ -475,10 +475,18 @@ class Hub:
                     "label": next(c["label"] for c in THINK_CHOICES if c["id"] == level)}
         if a == "personality.set":
             from reedus_relay import personality
+            if "voice" in req and not req.get("personality"):    # just the voice toggle
+                on = bool(req.get("voice"))
+                await asyncio.to_thread(accounts.set_account_settings, aid, {"personality_voice": on})
+                self.refresh_account(aid)
+                return {"ok": True, "voice": on}
             pid = str(req.get("personality") or "")
             if pid not in personality.IDS:
                 return {"error": f"unknown personality {pid!r}"}
-            await asyncio.to_thread(accounts.set_account_settings, aid, {"personality": pid})
+            patch = {"personality": pid}
+            if "voice" in req:
+                patch["personality_voice"] = bool(req.get("voice"))
+            await asyncio.to_thread(accounts.set_account_settings, aid, patch)
             self.refresh_account(aid)
             for sess in self.account_sessions(aid):
                 if hasattr(sess.brain, "set_mode"):
@@ -923,6 +931,7 @@ class Hub:
                         "ready": usable(pid), "info": models_info.info(pid, model)},
                 "think": think_level(acc), "think_choices": THINK_CHOICES,
                 "personality": personality.setting(acc), "personalities": personality.public(),
+                "personality_voice": personality.voice_on(acc),
                 "listen": listening.public(acc),
                 "providers": [{**p, "models": models_info.annotate(p["id"], p.get("models") or [])}
                               for p in providers.public() if usable(p["id"])],

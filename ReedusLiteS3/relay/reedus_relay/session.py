@@ -727,7 +727,15 @@ class Session:
     def voice_prefs(self) -> dict:
         """The account's voice, with the personality's speaking style and pace on top."""
         base = ((self.account or {}).get("settings") or {}).get("voice") or {}
-        return personality.voice(base, self.persona_now())
+        mode = self.persona_now()
+        on = personality.voice_on(self.account)
+        have = None
+        if on and mode.get("voices"):
+            try:                     # the Inworld voices this relay has (cached an hour)
+                have = [v["id"] for v in speech.list_voices().get("voices") or []]
+            except Exception:                                    # noqa: BLE001
+                have = None
+        return personality.voice(base, mode, on, have)
 
     def persona_now(self) -> dict:
         """The personality he's in (the brain picks for "surprise me"). Not self.mode: that's

@@ -1043,6 +1043,22 @@ async def main():
     check("error" in r, "a made-up personality is refused")
     prefs = hub.sessions[did].voice_prefs()
     check("sarcastic" in prefs.get("style", "") and prefs.get("speed", 1) > 1, "mean mode changes how his voice sounds")
+    check(prefs.get("id") == "Wendy", f"...and swaps to mean mode's own voice ({prefs.get('id')})")
+    check(pers.voice({"id": "Theodore"}, pers.get("villain"), True, ["Theodore"]).get("id") == "Theodore",
+          "a mode voice the Inworld account doesn't have is never used (it would fail every sentence)")
+    r = await ask({"action": "personality.set", "voice": False})
+    st = await ask({"action": "status"})
+    own = (accounts.account(aid)["settings"].get("voice") or {})
+    check(r.get("ok") and st.get("personality_voice") is False and hub.sessions[did].voice_prefs() == own
+          and st.get("personality") == "mean", "the voice toggle off: his own voice, still in mean mode")
+    await ask({"action": "personality.set", "voice": True})
+    check(hub.sessions[did].voice_prefs().get("id") == "Wendy", "...and back on")
+    more = {"switch to nature documentary mode": "documentary", "drill sergeant mode": "drill",
+            "go into grandpa mode": "grandpa", "tinfoil hat mode": "conspiracy",
+            "shakespeare mode": "bard", "switch to robot mode": "robot"}
+    check(all(pers.switch_request(t) == w for t, w in more.items()), "the newer modes switch by voice too")
+    check(all(m["prompt"] and m["intro"] for m in pers.MODES if m["id"] not in ("normal", "random"))
+          and set(pers.ROULETTE) >= {"robot", "grandpa", "documentary"}, "every mode has a prompt and intro; surprise me picks from all")
     n_calls = len(BACKEND.calls)
     SCRIPT[:] = ["Hey Reedus, what's the capital of France"]
     await d.say()

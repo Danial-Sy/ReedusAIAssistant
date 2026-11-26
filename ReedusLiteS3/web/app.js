@@ -277,6 +277,18 @@ function renderPersona() {
     });
   }
   paintPersona(st.personality || "normal");
+  const tog = $("#persona-voice");
+  if (!tog.dataset.wired) {
+    tog.dataset.wired = "1";
+    tog.addEventListener("change", async () => {
+      const on = tog.checked;
+      const r = await Relay.call("personality.set", { voice: on });
+      if (r.error) { toast(r.error); tog.checked = !on; return; }
+      if (S.status) S.status.personality_voice = on;
+      toast(on ? "Modes change his voice" : "His own voice in every mode");
+    });
+  }
+  tog.checked = st.personality_voice !== false;
 }
 
 function paintPersona(id) {
