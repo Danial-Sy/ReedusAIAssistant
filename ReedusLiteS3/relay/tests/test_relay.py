@@ -1022,6 +1022,75 @@ async def main():
     check(any(row["usd"] < 0 for row in r["ledger"]) and r["balance"] < 5, "ledger lists the spend")
     r = await ask({"action": "topup", "usd": 10})
     check("error" in r, "users can't top themselves up until payments exist")
+
+    print("[9b] personality modes")
+    from reedus_relay import personality as pers
+    yes = {"switch to mean mode": "mean", "go into sad mode": "sad", "Useless mode.": "useless",
+           "can you switch to villain mode please": "villain", "activate cat mode": "cat",
+           "back to normal": "normal", "turn off mean mode": "normal", "stop being so mean": "normal",
+           "surprise me mode": "random", "switch to detective mode": "noir", "hype mode on": "hype"}
+    no = ["I'm in a sad mood", "the cat is mean", "what mode is the dryer in", "turn off focus mode",
+          "how do I get out of sleep mode", "normal people go to bed", "set a timer for 2 minutes"]
+    check(all(pers.switch_request(t) == w for t, w in yes.items()), "switch phrases are understood")
+    check(all(pers.switch_request(t) is None for t in no),
+          "everyday sentences with mode words in them don't switch him")
+    st = await ask({"action": "status"})
+    check(st.get("personality") == "normal" and {"mean", "useless", "sad"} <= {p["id"] for p in st["personalities"]},
+          "the app sees the modes; normal by default")
+    r = await ask({"action": "personality.set", "personality": "mean"})
+    check(r.get("ok") and hub.sessions[did].brain.mode()["id"] == "mean", "picking Mean in the app reaches the live Lite")
+    r = await ask({"action": "personality.set", "personality": "galaxy-brain"})
+    check("error" in r, "a made-up personality is refused")
+    prefs = hub.sessions[did].voice_prefs()
+    check("sarcastic" in prefs.get("style", "") and prefs.get("speed", 1) > 1, "mean mode changes how his voice sounds")
+    n_calls = len(BACKEND.calls)
+    SCRIPT[:] = ["Hey Reedus, what's the capital of France"]
+    await d.say()
+    ok = await d.wait_for(lambda: len(BACKEND.calls) > n_calls and d.states()[-1] == "listening", 6)
+    sp = BACKEND.calls[-1]["messages"][0]["content"]
+    check(ok and "PERSONALITY MODE: MEAN" in sp and sp.index("You are Reedus") < sp.index("PERSONALITY MODE"),
+          "his prompt carries the mode, after the persona")
+    n_calls, n_said = len(BACKEND.calls), len(FakeVoice.said)
+    SCRIPT[:] = ["switch to sad mode"]
+    await d.say(wake=False)
+    from reedus_relay.brain import face_tag as _ft, speakable as _sp
+    sad_lines = [_sp(_ft(x)[1]) for x in pers.get("sad")["intro"]]
+    ok = await d.wait_for(lambda: any(x in sad_lines for x in FakeVoice.said[n_said:]), 6)
+    check(ok and len(BACKEND.calls) == n_calls, "\"switch to sad mode\" by voice: he says so himself, no LLM call")
+    check(accounts.account(aid)["settings"].get("personality") == "sad", "...and it's saved on the account")
+    check(any(e["type"] == "emotion" and e["emotion"] == "sad" for e in d.events[-12:]), "...with a sad face")
+    check("[" not in "".join(FakeVoice.said[n_said:]), "the intro's face tag isn't spoken")
+    await d.wait_for(lambda: d.states()[-1] == "listening", 3)
+    SCRIPT[:] = ["what modes do you have"]
+    n_said = len(FakeVoice.said)
+    await d.say(wake=False)
+    ok = await d.wait_for(lambda: any("villain" in x for x in FakeVoice.said[n_said:]), 6)
+    check(ok, "\"what modes do you have\" lists them")
+    await d.wait_for(lambda: d.states()[-1] == "listening", 3)
+    SCRIPT[:] = ["back to normal"]
+    await d.say(wake=False)
+    ok = await d.wait_for(lambda: accounts.account(aid)["settings"].get("personality") == "normal", 6)
+    check(ok and hub.sessions[did].brain.mode()["id"] == "normal", "\"back to normal\" switches him back")
+    await d.wait_for(lambda: d.states()[-1] == "listening", 3)
+    SCRIPT[:] = ["okay thanks, goodbye"]
+    await d.say(wake=False)
+    await d.wait_for(lambda: d.states()[-1] == "idle", 6)
+    b = Brain({"id": aid, "settings": {"personality": "useless"}}, {"id": "x", "name": "x"}, backend=BACKEND)
+    check("never give a correct" in b.system("what's 2 plus 2", "c1").lower() and b.mode().get("no_search"),
+          "useless mode: the prompt says never be right, and it never searches")
+    b = Brain({"id": aid, "settings": {"personality": "random"}}, {"id": "x", "name": "x"}, backend=BACKEND)
+    picks = []
+    for _ in range(6):
+        picks.append(b.mode()["id"])
+        check(b.mode()["id"] == picks[-1], "surprise me: the same mode for the whole conversation") if _ == 0 else None
+        b.new_conversation()
+    check(all(p in pers.ROULETTE for p in picks) and all(a != c for a, c in zip(picks, picks[1:])),
+          f"surprise me: a different mode each conversation ({picks})")
+    r = await ask({"action": "chat", "text": "switch to villain mode"})
+    st = await ask({"action": "status"})
+    check(r.get("personality") == "villain" and st.get("personality") == "villain" and "[" not in r.get("text", "x["),
+          "typing \"switch to villain mode\" in the app chat works too")
+    await ask({"action": "personality.set", "personality": "normal"})
     await app.close()
 
     adm = await websockets.connect(url + "/app")

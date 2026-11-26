@@ -473,6 +473,18 @@ class Hub:
             self.refresh_account(aid)
             return {"ok": True, "think": level,
                     "label": next(c["label"] for c in THINK_CHOICES if c["id"] == level)}
+        if a == "personality.set":
+            from reedus_relay import personality
+            pid = str(req.get("personality") or "")
+            if pid not in personality.IDS:
+                return {"error": f"unknown personality {pid!r}"}
+            await asyncio.to_thread(accounts.set_account_settings, aid, {"personality": pid})
+            self.refresh_account(aid)
+            for sess in self.account_sessions(aid):
+                if hasattr(sess.brain, "set_mode"):
+                    sess.brain.set_mode(pid)
+            print(f"[relay] {aid}: personality -> {pid} (from the app)", flush=True)
+            return {"ok": True, "personality": pid, "label": personality.get(pid)["label"]}
         if a == "memory.get":
             text, rev = await asyncio.to_thread(memory.bulletin, aid)
             turns = await asyncio.to_thread(memory.recent, aid, int(req.get("limit") or 30))
@@ -883,6 +895,7 @@ class Hub:
     def _status(self, acc: dict) -> dict:
         from reedus_companion.cloud import providers
         from reedus_relay import models_info
+        from reedus_relay import personality
         from reedus_relay.brain import THINK_CHOICES, llm_choice, think_level, usable
         aid = acc["id"]
         pid, model = llm_choice(acc)
@@ -909,6 +922,7 @@ class Hub:
                 "llm": {"provider": pid, "model": model, "label": providers.label(pid, model),
                         "ready": usable(pid), "info": models_info.info(pid, model)},
                 "think": think_level(acc), "think_choices": THINK_CHOICES,
+                "personality": personality.setting(acc), "personalities": personality.public(),
                 "listen": listening.public(acc),
                 "providers": [{**p, "models": models_info.annotate(p["id"], p.get("models") or [])}
                               for p in providers.public() if usable(p["id"])],
@@ -925,6 +939,20 @@ class Hub:
             return {"error": "empty text"}
         if not accounts.funded(acc["id"]):
             return {"error": "the pool is empty, top up first"}
+        from reedus_relay import personality
+        target = personality.switch_request(text)
+        if target is not None:               # "switch to mean mode", typed
+            accounts.set_account_settings(acc["id"], {"personality": target})
+            self.refresh_account(acc["id"])
+            for sess in self.account_sessions(acc["id"]):
+                if hasattr(sess.brain, "set_mode"):
+                    sess.brain.set_mode(target)
+            from reedus_relay.brain import face_tag, speakable
+            return {"text": speakable(face_tag(personality.intro(target))[1]), "usd": 0, "ms": 0,
+                    "personality": target}
+        if personality.list_request(text):
+            from reedus_relay.brain import face_tag, speakable
+            return {"text": speakable(face_tag(personality.spoken_list())[1]), "usd": 0, "ms": 0}
         m = meter.Meter()
         brain = Brain(acc, {"id": "app", "name": "the website"})
         convo = f"app-{acc['id']}-{int(time.time() // 1800)}"   # half-hour chat windows

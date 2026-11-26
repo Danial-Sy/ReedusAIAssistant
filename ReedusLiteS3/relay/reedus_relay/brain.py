@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Callable, List, Optional
 
 from reedus_companion.serve import persona
-from reedus_relay import config, memory
+from reedus_relay import config, memory, personality
 
 LITE_VOICE = (
     "Right now you're speaking out loud through Reedus Lite, your small desk body. Everything "
@@ -346,6 +346,29 @@ class Brain:
         self.lock = threading.Lock()
         self._bull: Optional[tuple] = None      # (bulletin text, when it was read)
         self.timing: dict = {}                  # the last reply's phases, seconds from its start
+        self._roulette: Optional[str] = None    # "surprise me": this conversation's mode
+        self._last_roulette: Optional[str] = None
+
+    # ---------- personality ----------
+    def mode(self) -> dict:
+        """The personality he's in right now. "Surprise me" picks one per conversation."""
+        pid = personality.setting(self.account)
+        if pid != "random":
+            return personality.get(pid)
+        if self._roulette is None:
+            self._roulette = personality.pick_random(avoid=self._last_roulette)
+            self._last_roulette = self._roulette
+        return personality.get(self._roulette)
+
+    def set_mode(self, pid: str) -> None:
+        """Switched (app or voice): the old mode's lines would drag the new one back toward
+        how it used to talk, so this conversation's history starts over."""
+        s = dict((self.account or {}).get("settings") or {})
+        s["personality"] = pid
+        self.account = {**(self.account or {}), "settings": s}
+        with self.lock:
+            self.history = []
+        self._roulette = None
 
     # ---------- the LLM ----------
     def llm_choice(self) -> tuple:
@@ -399,14 +422,15 @@ class Brain:
             recalled = memory.recall(self.account["id"], said, conversation)
             whom = ""
         today = datetime.now().strftime("%A, %B %d, %Y, %I:%M %p").replace(" 0", " ")
-        out = stable_system() + "\n\n" + (
+        overlay = personality.block(self.mode())
+        out = stable_system() + ("\n\n" + overlay if overlay else "") + "\n\n" + (
             f"Today's date is {today}. Your training knowledge has a cutoff, so for anything that "
             f"could have changed since then (news, scores, prices, who currently holds a role, "
             f"recent releases) search instead of guessing.") \
             + ("\n\n" + whom if whom else "") \
             + "\n\n" + persona.build_volatile_block(bulletin=bulletin, recalled=recalled)
         fact = self.weather_fact(said) if fact is None else fact
-        if fact:
+        if fact and not self.mode().get("no_search"):
             out += "\n\n" + fact + " (Live data. Use it if they asked about the weather.)"
         return out
 
@@ -468,7 +492,12 @@ class Brain:
             self._remember(said, fast, speaker=speaker)
             self.timing = {"fast": 1}
             return fast
-        fact = self.weather_fact(said)
+        mode = self.mode()
+        timing_mode = mode["id"]
+        no_search = bool(mode.get("no_search"))       # useless mode: wrong on purpose, never looked up
+        if no_search:
+            search = False
+        fact = "" if no_search else self.weather_fact(said)
         msgs = [{"role": "system", "content": self.system(said, conversation, fact, who=who)}]
         # an empty turn (a reply cut off by "Reedus" before it said anything) makes Gemini
         # refuse the whole request ("Missing text in content"), so those never go in
@@ -487,12 +516,14 @@ class Brain:
             msgs[0]["content"] += ("\n\nEarlier in this conversation you really did search the web "
                                    "to answer: " + "; ".join(f'"{q}"' for q in looked_up)
                                    + ". Those answers came from real results.")
-        no_question = self.asked_recently()
+        # a mode's rhetorical questions ("are you serious?") are the bit, so the cap is normal only
+        no_question = timing_mode == "normal" and self.asked_recently()
         if no_question:
             # the persona asks for few questions; a model that asks anyway (Haiku did, every
             # turn) gets the note next to their words, and _sentence below drops the question
             msgs[-1] = {"role": "user", "content": msgs[-1]["content"] + "\n\n(" + self.NO_QUESTION_NOTE + ")"}
         timing = self.timing
+        timing["mode"] = timing_mode
         dropped: List[str] = []           # said by the model, never spoken, kept out of history
 
         def _sentence(s: str) -> None:
@@ -540,7 +571,8 @@ class Brain:
             searchable = backend._search_default = bool(backend._search)
         if searchable is not None:
             # asked to search ("look it up"): always, if this provider can search at all
-            backend._search = bool(searchable) and (search or (needs_search(said) and not fact))
+            backend._search = bool(searchable) and not no_search and (
+                search or (needs_search(said) and not fact))
         if search and not searchable:
             timing["no_search"] = True       # a provider that can't search the web itself
         level = think if think in THINK_IDS else think_level(self.account)
@@ -559,12 +591,13 @@ class Brain:
                 backend.on_search = None
         if hold["on"]:                   # it never searched: what it held is the reply after all
             hold["on"] = False
-            if not (searchable and promised_search(hold["text"])):
+            if not (searchable and not no_search and promised_search(hold["text"])):
                 split.feed(hold["text"])
             elif hold["text"].strip():
                 dropped.append(hold["text"])  # "searching now!" with no search: retried below
             hold["text"] = ""
-        if (searchable and not timing.get("search") and not (cancel is not None and cancel.is_set())
+        if (searchable and not no_search and not timing.get("search")
+                and not (cancel is not None and cancel.is_set())
                 and promised_search(text)):
             # he said he'd look it up but had no search tool this turn: keep the promise. what he
             # already said ("one sec, searching") stays as the filler
@@ -677,3 +710,4 @@ class Brain:
     def new_conversation(self) -> None:
         with self.lock:
             self.history = []
+        self._roulette = None                   # surprise me: someone new next time

@@ -257,7 +257,42 @@ async function refresh() {
   renderTop();
   renderHome();
   renderCredit();
-  if (S.view === "settings") { renderBrain(); renderListen(); }
+  if (S.view === "settings") { renderBrain(); renderListen(); renderPersona(); }
+}
+
+/* ---------- settings: personality ---------- */
+function renderPersona() {
+  const st = S.status;
+  if (!st) return;
+  const list = st.personalities || [];
+  const box = $("#persona-pick");
+  if (box.childElementCount !== list.length) {
+    box.innerHTML = "";
+    list.forEach((p) => {
+      const b = el("button", "chip", p.label);
+      b.type = "button";
+      b.dataset.val = p.id;
+      b.addEventListener("click", () => pickPersona(p.id));
+      box.append(b);
+    });
+  }
+  paintPersona(st.personality || "normal");
+}
+
+function paintPersona(id) {
+  const list = (S.status && S.status.personalities) || [];
+  $$("#persona-pick button").forEach((b) => b.classList.toggle("on", b.dataset.val === id));
+  const p = list.find((x) => x.id === id);
+  $("#persona-note").textContent = p ? p.note : "";
+}
+
+async function pickPersona(id) {
+  const was = (S.status && S.status.personality) || "normal";
+  paintPersona(id);
+  const r = await Relay.call("personality.set", { personality: id });
+  if (r.error) { toast(r.error); paintPersona(was); return; }
+  if (S.status) S.status.personality = id;
+  toast(id === "normal" ? "Back to normal" : `${r.label} mode`);
 }
 
 /* ---------- top bar ---------- */
@@ -481,6 +516,7 @@ function wireChat() {
     const r = await Relay.call("chat", { text });
     wait.classList.remove("typing");
     wait.textContent = r.error ? r.error : r.text;
+    if (r.personality && S.status) S.status.personality = r.personality;
     wait.classList.toggle("bad", !!r.error);
     window.scrollTo(0, document.body.scrollHeight);
     if (!r.error) { const st = await Relay.call("status"); if (!st.error) { S.status = st; renderTop(); } }
@@ -1038,6 +1074,7 @@ function renderPeople() {
 async function loadSettings() {
   renderBrain();
   renderListen();
+  renderPersona();
   renderKeys();
   loadVoice();
   renderGlance();

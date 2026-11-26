@@ -117,7 +117,8 @@ Then each request is `{"id", "action", …}` and each reply echoes `id`.
 | `who.hear` | `say, name?` | `wav` (base64): "Hey <say>! Did I say your name right?" in his voice |
 | `who.ipa` | `name, say` | `say: "/ˈ.../"`: the account's LLM turns a respelling into IPA |
 | `ledger` | `limit?` | top-ups and spend, newest first |
-| `chat` | `text` | type to Reedus: same brain and memory, no voice |
+| `chat` | `text` | type to Reedus: same brain and memory, no voice. "switch to mean mode" here switches the personality (reply has `personality`) |
+| `personality.set` | `personality` (`normal mean useless sad hype cat villain noir random`) | his attitude on every Lite on the account (`status` carries `personality` and `personalities`). Also by voice: "switch to <name> mode", "back to normal", "what modes do you have", "what mode are you in" |
 | `device.expr` | `device, name, hold?` | an expression on the face |
 | `device.state` | `device, state` | preview listening / thinking / sleep / idle (not mid-conversation) |
 | `device.look` | `device, angle` | turn the head (-90 to 90, + = his left) |

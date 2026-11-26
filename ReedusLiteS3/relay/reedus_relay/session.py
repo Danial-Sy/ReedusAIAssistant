@@ -29,7 +29,8 @@ import time
 import uuid
 from typing import List, Optional
 
-from reedus_relay import accounts, config, listening, memory, meter, speech, voiceprint, voices
+from reedus_relay import (accounts, config, listening, memory, meter, personality, speech,
+                          voiceprint, voices)
 from reedus_relay.brain import DEEP, Brain, directives, is_goodbye
 
 IDLE, LISTEN, BUSY, ENROLL = "idle", "listen", "busy", "enroll"
@@ -724,7 +725,65 @@ class Session:
         threading.Thread(target=_brain, name="brain-warm", daemon=True).start()
 
     def voice_prefs(self) -> dict:
-        return ((self.account or {}).get("settings") or {}).get("voice") or {}
+        """The account's voice, with the personality's speaking style and pace on top."""
+        base = ((self.account or {}).get("settings") or {}).get("voice") or {}
+        return personality.voice(base, self.persona_now())
+
+    def persona_now(self) -> dict:
+        """The personality he's in (the brain picks for "surprise me"). Not self.mode: that's
+        the session's own idle/listening/busy state."""
+        try:
+            return self.brain.mode()
+        except Exception:                                        # noqa: BLE001
+            return personality.get(personality.setting(self.account))
+
+    async def _personality_turn(self, said: str, m, cancel) -> bool:
+        """"Switch to mean mode", "back to normal", "what modes do you have", "what mode are
+        you in": handled here, no LLM. True when it was one of those."""
+        target = personality.switch_request(said)
+        if target is not None:
+            await asyncio.to_thread(accounts.set_account_settings, self.aid, {"personality": target})
+            try:
+                await asyncio.to_thread(self.hub.refresh_account, self.aid)   # every Lite on the account
+            except Exception:                                    # noqa: BLE001
+                pass
+            try:
+                others = [x for x in self.hub.account_sessions(self.aid) if x is not self]
+            except Exception:                                    # noqa: BLE001
+                others = []
+            for s in [self] + others:
+                if hasattr(s.brain, "set_mode"):
+                    s.brain.set_mode(target)
+                if s is self:
+                    st = dict((s.account or {}).get("settings") or {})
+                    st["personality"] = target
+                    s.account = {**(s.account or {}), "settings": st}
+            print(f"[relay] {self.device.get('name')}: personality -> {target} (by voice)", flush=True)
+            line = personality.intro(target)
+        elif personality.which_request(said):
+            line = personality.spoken_which(personality.setting(self.account), self.persona_now()["id"])
+        elif personality.list_request(said):
+            line = personality.spoken_list()
+        else:
+            return False
+        await self.speak_tagged([line], m, cancel)
+        await self._finish_playback(cancel)
+        if not self._stale(cancel):
+            self.start_listening(follow_up=True)
+        return True
+
+    async def speak_tagged(self, lines, m, cancel) -> None:
+        """speak_lines for lines that lead with a face tag ("[sad] Oh. It's happening.")."""
+        from reedus_relay.brain import face_tag, speakable
+        q: asyncio.Queue = asyncio.Queue()
+        for line in lines:
+            tag, rest = face_tag(line)
+            if tag:
+                q.put_nowait({"face": tag})
+            if speakable(rest):
+                q.put_nowait(speakable(rest))
+        q.put_nowait(None)
+        await self.speak_stream(q, m, cancel)
 
     async def turn(self, audio: bytes, cancel: threading.Event, text: Optional[str] = None) -> None:
         m = meter.Meter()
@@ -775,6 +834,8 @@ class Session:
                 self.send({"type": "ring_off"})  # in case the Lite is ringing on its own
                 self.end_conversation()
                 return
+            if await self._personality_turn(said, m, cancel):
+                return
             # "think about this before you answer" / "search the internet": deep thinking and/or
             # a web search for this one question, either the rest of what they said or (when
             # that's all they said) whatever they ask next
@@ -796,9 +857,11 @@ class Session:
                 said = rest
                 deep = DEEP if want_think else deep
                 force_search = force_search or want_search
+            if self.persona_now().get("no_search"):
+                force_search = False             # useless mode makes things up instead
             who = await self._who(who_job)
             from reedus_companion.lite import emotion
-            react = emotion.react(said)
+            react = personality.react(self.persona_now(), emotion.react(said))
             if react:
                 self.send({"type": "expr", "name": react, "hold": 1.2})
 
@@ -1147,6 +1210,7 @@ class Session:
         async def play():
             first = True
             mood = None              # what he tagged himself as feeling, until he tags again
+            lean = personality.face(self.persona_now())     # a mode's resting face (sad mode: sad)
             while True:
                 item = await pending.get()
                 if item is None:
@@ -1163,6 +1227,8 @@ class Session:
                 s, frames, task = item
                 self.spoken.append(s)
                 emo, strength = (mood, 0.9) if mood else emotion.classify(s)
+                if emo == "neutral" and lean:
+                    emo, strength = lean, 0.7
                 if emo != "neutral":
                     self.send({"type": "emotion", "emotion": emo, "strength": strength,
                                "hold": emotion.speech_seconds(s)})
