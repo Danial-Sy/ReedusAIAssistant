@@ -496,17 +496,24 @@ _ALIASES = {
 }
 _NAME = "|".join(f"(?P<{k}>{v})" for k, v in _ALIASES.items())
 _ANY = "(?:" + "|".join(v for k, v in _ALIASES.items() if k != "normal") + ")"
-_MODE = r"[\s-]+mode"
+_MODE = r"[\s-]+(?:mode|mood)"          # speech-to-text hears "mode" as "mood" a lot
 _LEAD = r"^\W*(?:(?:okay|ok|alright|hey|so|um|uh|yo|and|now)[\s,]+)*"
-_POLITE = r"(?:(?:can|could|would|will) you |please |i want you to |let'?s |go ahead and |time to )?"
-_VERB = (r"(?:switch|change|go|flip|swap|turn|put (?:yourself|it)|set (?:yourself|it)|get|jump|"
-         r"move|enter|activate|enable|engage|start|use|try)")
+_POLITE = (r"(?:(?:can|could|would|will) you (?:please )?|please |i want you to |i want |"
+           r"let'?s |go ahead and |time to |time for )?")
+_VERB = (r"(?:(?:switch|change|flip|swap|turn|put|set|make) (?:yourself|it|you|things)|switch|change|go|flip|"
+         r"swap|turn|put|set|get|jump|move|enter|activate|enable|engage|start|use|try|do|be|pick|"
+         r"select|choose)")
+# "switch your mode to mean", "change your personality to sad", "set personality to villain"
+_KIND = r"(?:mode|mood|personality|persona|attitude|vibe|setting)s?"
 _SWITCH = [
+    re.compile(_LEAD + _POLITE + r"(?:switch|change|flip|swap|set|turn|put|make)\s+(?:your\s+|the\s+|his\s+)?"
+               + _KIND + r"\s+(?:to|into|over to|back to)\s+(?:the\s+)?(?:" + _NAME + r")(?:" + _MODE + r")?\b", re.I),
     # "switch to mean mode", "go into sad mode", "activate villain mode", "go back to normal mode"
     re.compile(_LEAD + _POLITE + _VERB + r"(?:\s+(?:back|over|on))?(?:\s+(?:in|into|to|on|onto))?"
                r"(?:\s+(?:the|your))?\s+(?:" + _NAME + ")" + _MODE + r"\b", re.I),
-    # "mean mode", "mean mode please", "sad mode on", "villain mode activate"
-    re.compile(_LEAD + r"(?:" + _NAME + ")" + _MODE
+    # "mean mode", "mean mode please", "sad mode on", "villain mode activate", "time for hype mode"
+    re.compile(_LEAD + r"(?:(?:time for|let'?s (?:do|have|try)|give me|gimme|i want) (?:some |a little )?)?"
+               + r"(?:" + _NAME + ")" + _MODE
                + r"(?:[\s,]+(?:on|now|please|activate|activated|engage|engaged|go|time))*\W*$", re.I),
 ]
 _SELF = r"(?:normal|regular|yourself|your(?: old| usual| normal)? self)(?:" + _MODE + r")?"
@@ -544,6 +551,24 @@ def switch_request(said: str) -> Optional[str]:
                 if m.group(k):
                     return k
     return None
+
+
+_MENTION = re.compile(r"\b(?:mode|mood|personality)\b", re.I)
+
+
+def near_miss(said: str) -> bool:
+    """Mentions a mode by name and "mode" but didn't switch: logged so missed phrasings can be added."""
+    t = said or ""
+    return bool(_MENTION.search(t)) and bool(re.search(r"\b(?:" + _NAME + r")\b", t, re.I))
+
+
+def reminder(mode: dict) -> str:
+    """One line at the very end of the prompt: the mode block sits before the notes and
+    recalled history (all in his normal voice), and the model drifts back without it."""
+    if not mode or not mode.get("prompt"):
+        return ""
+    return (f"Remember: you are in {mode['label'].upper()} MODE right now. Every word of this "
+            "reply is in that personality, as described above.")
 
 
 def list_request(said: str) -> bool:

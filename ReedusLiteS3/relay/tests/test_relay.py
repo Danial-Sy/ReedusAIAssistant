@@ -1067,6 +1067,14 @@ async def main():
             "go into grandpa mode": "grandpa", "tinfoil hat mode": "conspiracy",
             "shakespeare mode": "bard", "switch to robot mode": "robot"}
     check(all(pers.switch_request(t) == w for t, w in more.items()), "the newer modes switch by voice too")
+    heard = {"Switch to mean mood.": "mean", "Put on mean mode.": "mean", "Switch your mode to mean.": "mean",
+             "Change your personality to sad.": "sad", "switch it to villain mode": "villain",
+             "Time for hype mode": "hype", "Can you be in robot mode?": "robot", "Lets do cat mode": "cat"}
+    check(all(pers.switch_request(t) == w for t, w in heard.items()),
+          "how people actually say it: \"mood\" for mode, \"put on\", \"change your personality to\"")
+    check(all(pers.switch_request(t) is None for t in ["I'm in a mean mood today", "Set the mood to romantic",
+                                                        "change the mode on the dryer", "put me in a good mood"]),
+          "...without catching everyday mood talk")
     check(all(m["prompt"] and m["intro"] for m in pers.MODES if m["id"] not in ("normal", "random"))
           and set(pers.ROULETTE) >= {"robot", "grandpa", "documentary"}, "every mode has a prompt and intro; surprise me picks from all")
     n_calls = len(BACKEND.calls)
@@ -1076,6 +1084,8 @@ async def main():
     sp = BACKEND.calls[-1]["messages"][0]["content"]
     check(ok and "PERSONALITY MODE: MEAN" in sp and sp.index("You are Reedus") < sp.index("PERSONALITY MODE"),
           "his prompt carries the mode, after the persona")
+    check(sp.rstrip().endswith("as described above.") and "MEAN MODE right now" in sp,
+          "...and a reminder at the very end, after his notes and history")
     n_calls, n_said = len(BACKEND.calls), len(FakeVoice.said)
     SCRIPT[:] = ["switch to sad mode"]
     await d.say(wake=False)

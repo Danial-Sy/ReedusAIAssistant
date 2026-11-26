@@ -432,6 +432,9 @@ class Brain:
         fact = self.weather_fact(said) if fact is None else fact
         if fact and not self.mode().get("no_search"):
             out += "\n\n" + fact + " (Live data. Use it if they asked about the weather.)"
+        nudge = personality.reminder(self.mode())
+        if nudge:
+            out += "\n\n" + nudge
         return out
 
     def _bulletin(self) -> str:

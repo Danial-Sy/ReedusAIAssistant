@@ -773,6 +773,8 @@ class Session:
         elif personality.list_request(said):
             line = personality.spoken_list()
         else:
+            if personality.near_miss(said):
+                print(f"[relay] {self.device.get('name')}: mode words but no switch: {said!r}", flush=True)
             return False
         await self.speak_tagged([line], m, cancel)
         await self._finish_playback(cancel)
