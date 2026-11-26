@@ -19,33 +19,32 @@ from typing import Optional
 
 PATIENCE = [
     {"id": "quick", "label": "Quick", "s": 0.8,
-     "note": "Answers soon after you stop. Can cut in if you pause mid-sentence."},
+     "note": "Answers fast. May cut in if you pause."},
     {"id": "normal", "label": "Normal", "s": 1.2,
-     "note": "Waits about a second after you stop talking."},
+     "note": "Waits about a second."},
     {"id": "patient", "label": "Patient", "s": 1.8,
-     "note": "Waits almost two seconds, so thinking pauses don't get cut off."},
+     "note": "Waits about two seconds, for thinking pauses."},
     {"id": "very", "label": "Longest", "s": 2.6,
-     "note": "Lets you pause and think a lot. Slower to answer."},
+     "note": "Lots of time to pause. Slower replies."},
 ]
 # conversation: after he answers he keeps listening, so you can just reply. single: he answers
 # and goes back to idle; say his name to ask something else
 MODES = [
     {"id": "conversation", "label": "Conversation",
-     "note": "After he answers he keeps listening for a few seconds, so you can just reply."},
+     "note": "Keeps listening after he answers, so you can reply."},
     {"id": "single", "label": "One question",
-     "note": "He answers and goes back to sleep. Say his name again to ask something else "
-             "(he still remembers what you just asked)."},
+     "note": "Answers, then sleeps. Say his name to ask again."},
 ]
 
 # who the head turns to: a voice must be within this many dB of the loudest one since he woke
 # (whoever said his name). someone in the next room is far quieter than you at the desk
 HEAD = [
     {"id": "close", "label": "Close", "db": 6.0,
-     "note": "Only whoever's right there talking to him. Ignores the rest of the house."},
+     "note": "Only whoever's right there."},
     {"id": "normal", "label": "Normal", "db": 10.0,
-     "note": "People in the room. Voices from further away don't turn him."},
+     "note": "People in the room."},
     {"id": "anyone", "label": "Anyone", "db": 40.0,
-     "note": "Turns to any voice he picks up, even in the next room."},
+     "note": "Any voice, even from the next room."},
 ]
 
 # how sure the wake word must be, set exactly in the app (a slider). below 60% it wakes on

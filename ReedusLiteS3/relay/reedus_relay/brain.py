@@ -161,10 +161,10 @@ class SentenceSplitter:
 # how much he thinks before he talks (the app's AI model card). "fast" is the lowest the model
 # allows; the others trade seconds of silence for better answers to hard questions
 THINK_CHOICES = [
-    {"id": "fast", "label": "Fastest", "note": "Answers straight away. Best for chatting."},
-    {"id": "low", "label": "Low", "note": "Thinks briefly first. Usually under a second more."},
-    {"id": "medium", "label": "Medium", "note": "Thinks it over. A second or few before he talks."},
-    {"id": "high", "label": "High", "note": "Thinks hard. Several seconds of silence, for tricky questions."},
+    {"id": "fast", "label": "Fastest", "note": "Answers right away. Best for chatting."},
+    {"id": "low", "label": "Low", "note": "Thinks briefly. Under a second slower."},
+    {"id": "medium", "label": "Medium", "note": "Thinks it over. A few seconds slower."},
+    {"id": "high", "label": "High", "note": "Thinks hard. Several seconds of silence."},
 ]
 THINK_IDS = {c["id"] for c in THINK_CHOICES}
 DEEP = "high"        # what "think about this before you answer" turns on, for that one question

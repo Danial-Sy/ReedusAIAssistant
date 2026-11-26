@@ -213,7 +213,7 @@ function wireGate() {
   $("#g-signin").addEventListener("submit", (e) => {
     e.preventDefault();
     const code = $("#g-owner-code").value.trim();
-    if (!code) { gateErr("Type the password (the setup code, RELAY_ADMIN_TOKEN on Railway)."); return; }
+    if (!code) { gateErr("Type the password (RELAY_ADMIN_TOKEN on Railway)."); return; }
     gateSubmit(e.submitter, { type: "owner", code });
   });
   for (const id of ["#pair-code"]) {
@@ -471,7 +471,7 @@ function openPair() {
   $("#pair").hidden = false;
   $("#pair-code").value = "";
   say("#pair-out", S.status && !S.status.pairing
-    ? "No Lite is waiting right now. Make sure it's plugged in and on Wi-Fi; the code shows up within a few seconds." : "");
+    ? "No Lite is waiting. Check it's on and on Wi-Fi." : "");
   setTimeout(() => $("#pair-code").focus(), 60);
 }
 function closeSheets() { $$(".sheet-bg").forEach((s) => { s.hidden = true; }); }
@@ -543,7 +543,7 @@ function renderCredit() {
   $("#balance-card").classList.toggle("low", !!st.low);
   $("#balance-note").textContent = st.balance <= 0
     ? "Out of credit: Lite won't answer until you add some."
-    : "Every reply costs about a cent: thinking, his voice, and hearing you.";
+    : "About a cent per reply.";
 
   const amounts = st.amounts || [5, 10, 20, 50];
   if (!amounts.includes(S.amount)) S.amount = amounts[1] || amounts[0];
@@ -561,10 +561,10 @@ function renderCredit() {
   $("#pay").textContent = `Pay $${S.amount}`;
   $("#pay-off").hidden = pay;
   $("#pay-off").textContent = owner()
-    ? "Card payments are off. Add a Stripe key in Settings → Service keys, or add credit by hand below."
-    : "Card payments aren't set up on this relay. Ask its owner to add credit for you.";
+    ? "Card payments are off. Add a Stripe key, or add credit by hand below."
+    : "Card payments are off. Ask the owner for credit.";
   if (pay && st.stripe_mode === "test" && !$("#pay-out").textContent) {
-    say("#pay-out", "Test mode: nothing is really charged. Use card 4242 4242 4242 4242.");
+    say("#pay-out", "Test mode. Use card 4242 4242 4242 4242.");
   }
 
   const b = st.billing || {};
@@ -701,7 +701,7 @@ function renderBrain() {
   $("#think-row").hidden = !provs.length;
   const cur = provs.find((p) => p.id === st.llm.provider);
   $("#say-search-note").textContent = cur && cur.search !== "native"
-    ? `${cur.short || cur.name} can't search the web by itself, so the search phrases do nothing for now. Gemini, Claude and OpenAI can.`
+    ? `${cur.short || cur.name} can't search the web, so search phrases do nothing.`
     : "";
   paintThink(st.think || "fast");
   if (!provs.length) $("#think-note").textContent = "";
@@ -722,8 +722,7 @@ function paintThink(level) {
   });
   $$("#think-pick button").forEach((b) => b.classList.toggle("on", b.dataset.val === level));
   const c = choices.find((x) => x.id === level);
-  $("#think-note").textContent = (c ? c.note + " " : "") +
-    "For one hard question, say \u201cthink about this before you answer\u201d first.";
+  $("#think-note").textContent = c ? c.note : "";
 }
 
 function renderModels(selected) {
@@ -774,7 +773,7 @@ function paintModelInfo() {
   const level = (probe && probe.thinking) || live.thinking || meta.thinking || "unknown";
   const labels = { off: "No thinking before it answers: quickest.",
     minimal: "Minimal thinking before it answers: quick.",
-    low: "Always thinks a little before it answers: adds a second or so.",
+    low: "Always thinks a little first: a second or so slower.",
     medium: "Always thinks before it answers: slower.",
     always: "A reasoning model: always thinks first, slowest to start." };
   const bits = [labels[level] || "Thinking: not tested yet."];
@@ -872,16 +871,14 @@ function renderListen() {
     if (near.over) {
       const bneeds = Math.round((L.barge || 0.6) * 100);
       const bmin = Math.round((L.barge_min || 0.5) * 100);
-      txt = `At ${when} someone said his name over him and ${near.name} was ${pct}% sure (interrupting needs ${bneeds}%).` +
-        (pct >= bmin ? ` Set "Interrupting him" to ${pct}% or lower to catch that.`
-          : " That's too buried under his voice for the wake word; saying it a bit louder or right after a pause works better.");
+      txt = `${when}: his name was said over him at ${pct}% (needs ${bneeds}%).` +
+        (pct >= bmin ? ` Set Interrupting to ${pct}% to catch that.` : " Too buried under his voice. Try louder, or after a pause.");
     } else {
-      txt = `At ${when} ${near.name} almost heard his name: ${pct}% sure, and it needs ${Math.round(needs * 100)}%.` +
-        (pct >= min ? ` Set it to ${pct}% or lower to catch that.`
-          : ` That's under ${min}%, so it's too far or too noisy for the wake word, whatever the setting.`);
+      txt = `${when}: ${near.name} almost heard his name, ${pct}% (needs ${Math.round(needs * 100)}%).` +
+        (pct >= min ? ` Set it to ${pct}% to catch that.` : " Too far or noisy for any setting.");
     }
   } else {
-    txt = "Tip: have someone call him from where they'd normally be. If he misses it, this shows how close it came.";
+    txt = "If he misses his name, this shows how close it came.";
   }
   $("#wake-near").textContent = txt;
 }
@@ -893,11 +890,11 @@ function paintWake() {
   cut.style.setProperty("--fill", `${(v - cut.min) / (cut.max - cut.min) * 100}%`);
   const def = Math.round(((S.status && S.status.listen && S.status.listen.wake_default) || 0.9) * 100);
   $("#wake-note").textContent =
-    v >= 93 ? "Only when it's very sure. Fewest mistakes, but you'll need to be close." :
-    v >= 86 ? `About the default (${def}%). Fine within a few metres.` :
-    v >= 76 ? "Hears you from further away. Wakes by mistake now and then." :
-    v >= 66 ? "Across the room. Expect the odd false wake from TV or similar words." :
-    "Hears almost anything that sounds like his name. Expect false wakes.";
+    v >= 93 ? "Very sure only. Fewest mistakes, but stand close." :
+    v >= 86 ? `Around the default (${def}%). Fine within a few metres.` :
+    v >= 76 ? "Hears you further away. The odd false wake." :
+    v >= 66 ? "Across the room. More false wakes." :
+    "Almost anything. Lots of false wakes.";
 }
 
 function paintBarge() {
@@ -906,10 +903,10 @@ function paintBarge() {
   $("#barge-cut-v").textContent = `${v}%`;
   cut.style.setProperty("--fill", `${(v - cut.min) / (cut.max - cut.min) * 100}%`);
   $("#barge-note").textContent =
-    v >= 80 ? "Hard to interrupt: you'll have to say his name clearly, maybe twice." :
-    v >= 68 ? "Takes a clear \"Reedus\" to cut him off." :
-    v >= 56 ? "Easy to interrupt. Now and then his own words might cut him off." :
-    "Very easy to interrupt. Expect him to stop himself sometimes.";
+    v >= 80 ? "Hard to interrupt. Say his name clearly, maybe twice." :
+    v >= 68 ? "Takes a clear \"Reedus\"." :
+    v >= 56 ? "Easy to interrupt. He may cut himself off now and then." :
+    "Very easy. He'll cut himself off sometimes.";
 }
 
 function wireListen() {
@@ -1182,7 +1179,7 @@ function renderWho(heard) {
     if (p.last_heard) li.append(el("span", "note", `heard ${ago(p.last_heard)}`));
     sayBox = el("div", "who-notes");
     sayBox.hidden = true;
-    sayBox.append(el("p", "note", `How ${p.me ? "your" : `${p.name}'s`} name sounds. Spell it how it sounds (DAN-yul), or tap Make IPA for an exact version. Hear it until it's right, then save.`));
+    sayBox.append(el("p", "note", `How to say ${p.me ? "your" : `${p.name}'s`} name. Spell it how it sounds (DAN-yul) or tap Make IPA.`));
     const sayIn = el("input");
     sayIn.maxLength = 80;
     sayIn.placeholder = `e.g. DAN-yul, or /ˈdænjəl/`;
@@ -1428,7 +1425,7 @@ async function loadVoice() {
   const engine = (V.models.find((m) => m.id === V.model) || {}).label;
   $("#voice-now").textContent = `He's speaking as ${now}${cur.speed ? ` at ${cur.speed}x` : ""}` +
     `${engine ? ` (${engine.toLowerCase()} engine)` : ""}.` +
-    (r.source === "builtin" ? " (Inworld's full list couldn't be loaded, these are the built-in voices.)" : "");
+    (r.source === "builtin" ? " (Built-in list: Inworld's didn't load.)" : "");
 }
 
 function paintVoice() {
@@ -1495,7 +1492,7 @@ function wireGlance() {
     if (S.status) S.status.glance = r.glance;
     const w = r.now;
     say("#wx-out", r.glance.weather
-      ? (w ? `On. ${w.place}: ${w.temp}°${w.unit}, ${w.cond}. It shows after he's been idle a little while.` : "On.")
+      ? (w ? `On. ${w.place}: ${w.temp}°${w.unit}, ${w.cond}.` : "On.")
       : "Off.");
     return true;
   };
@@ -1776,7 +1773,7 @@ const Ctl = (() => {
     const can = d && (d.caps || []).includes("ota");
     const latest = upToDate(d);
     let note = "";
-    if (d && d.online && !can) note = " This firmware can't update itself yet: flash this new version over USB once, and after that every update can come from here.";
+    if (d && d.online && !can) note = " This firmware can't self-update. Flash this version over USB once; after that, updates work from here.";
     else if (latest) note = " That's the latest build, so he's up to date.";
     else if (fwCheck && d && d.fw) note = ` A newer build is out (${fwCheck.sha}).`;
     $("#fw-now").textContent = `Running ${fw}.` + note;
@@ -1789,7 +1786,7 @@ const Ctl = (() => {
     if (o && o.at && Date.now() / 1000 - o.at < 300 && o.state !== "error") {
       bar.hidden = false;
       $("i", bar).style.width = `${o.state === "done" ? 100 : (o.pct || 0)}%`;
-      say("#fw-out", o.state === "sent" ? "Sent. He's starting the download…" : o.state === "downloading" ? "Downloading and installing… he'll restart when it's done." : "");
+      say("#fw-out", o.state === "sent" ? "Sent. He's starting the download…" : o.state === "downloading" ? "Installing… he'll restart when done." : "");
     } else if (o && o.state === "error" && Date.now() / 1000 - o.at < 600) {
       bar.hidden = true;
       say("#fw-out", `The update didn't go through: ${o.error || "unknown error"}. He's still on the old firmware.`, true);

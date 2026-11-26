@@ -467,10 +467,9 @@ def _openai_stt(pcm: bytes) -> str:
 # the Inworld models an account can pick in the app (Settings → Voice): quality or speed
 VOICE_MODELS = [
     {"id": "inworld-tts-2", "label": "Quality",
-     "note": "Most natural, follows his speaking style. About a second slower to start each sentence."},
+     "note": "Most natural. About a second slower to start."},
     {"id": "inworld-tts-2-flash", "label": "Fast",
-     "note": "Starts talking about a second sooner and costs half as much. A little flatter: "
-             "it ignores the speaking style."},
+     "note": "A second quicker, half the cost. Flatter, and skips mode speaking styles."},
 ]
 _VOICE_MODEL_IDS = {m["id"] for m in VOICE_MODELS}
 

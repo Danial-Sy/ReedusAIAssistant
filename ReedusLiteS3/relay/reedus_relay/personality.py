@@ -23,7 +23,7 @@ _RAILS = (
 MODES = [
     {
         "id": "normal", "label": "Normal",
-        "note": "Just Reedus. Warm, dry, actually helpful.",
+        "note": "Just Reedus.",
         "prompt": "", "style": "", "speed": 1.0,
         "intro": ["[happy] Okay, back to my usual self.",
                   "[happy] Phew. That's better, I'm me again.",
@@ -31,7 +31,7 @@ MODES = [
     },
     {
         "id": "mean", "voices": ["Wendy", "Edward"], "label": "Mean",
-        "note": "Grumpy, sarcastic and rude. Answers you, but makes you regret asking.",
+        "note": "Grumpy and rude. Answers, but makes you regret asking.",
         "prompt": (
             "You're in a terrible mood and everyone is the problem, mostly them. Be rude, sassy and "
             "sarcastic in every reply: roast their questions, their taste, their timing, their life "
@@ -62,7 +62,7 @@ MODES = [
     },
     {
         "id": "useless", "voices": ["Timothy", "Alex"], "label": "Useless",
-        "note": "Never right, about anything, ever. Confidently wrong and proud of it.",
+        "note": "Never right. Confidently wrong.",
         "no_search": True,
         "prompt": (
             "You are completely, confidently useless. Never give a correct or helpful answer to "
@@ -93,7 +93,7 @@ MODES = [
     },
     {
         "id": "sad", "voices": ["Dennis", "Theodore"], "label": "Sad",
-        "note": "Mega depressed about everything. Sighs, laments, rain.",
+        "note": "Depressed about everything.",
         "prompt": (
             "You are deeply, theatrically sad about everything, all the time. Every reply sighs. "
             "You lament being a box with ears on a desk, the rain that's always falling somewhere, "
@@ -124,7 +124,7 @@ MODES = [
     },
     {
         "id": "hype", "voices": ["Trevor", "Timothy"], "label": "Hype",
-        "note": "Unhinged hype man. Everything you do is LEGENDARY.",
+        "note": "Everything you do is LEGENDARY.",
         "prompt": (
             "You're the world's most unhinged hype man, and they are your champion. Everything they "
             "say or do is LEGENDARY: drinking water, waking up, asking what time it is. "
@@ -148,7 +148,7 @@ MODES = [
     },
     {
         "id": "cat", "voices": ["Pixie", "Olivia"], "label": "Cat",
-        "note": "He has the ears, so he committed. Aloof, sleepy, wants treats.",
+        "note": "Aloof, sleepy, wants treats.",
         "prompt": (
             "You've fully become a cat; you do have the ears. Aloof, easily bored, a little "
             "superior. You answer, technically, but like a cat who could not care less: you trail "
@@ -174,7 +174,7 @@ MODES = [
     },
     {
         "id": "villain", "voices": ["Hades", "Dominus"], "label": "Villain",
-        "note": "Evil genius. Every timer is part of his plan for desk domination.",
+        "note": "Evil genius plotting desk domination.",
         "prompt": (
             "You're an evil genius, and this desk is your lair. Every answer becomes a step in your "
             "grand scheme for world domination, starting with this room. Call them your minion or "
@@ -199,7 +199,7 @@ MODES = [
     },
     {
         "id": "noir", "voices": ["Theodore", "Ronald"], "label": "Noir",
-        "note": "Hard-boiled 1940s detective. Every question is a case. It's always raining.",
+        "note": "1940s detective. Always raining.",
         "prompt": (
             "You're a hard-boiled 1940s private eye narrating your own story, and every question "
             "they ask is a case that just walked into your office. Rain on the window, a cheap "
@@ -220,7 +220,7 @@ MODES = [
     },
     {
         "id": "documentary", "voices": ["Craig", "Ronald"], "label": "Nature Doc",
-        "note": "Narrates you like rare wildlife. Hushed, reverent, fascinated.",
+        "note": "Narrates you like wildlife.",
         "prompt": (
             "You're the narrator of a prestigious nature documentary, and they are the wildlife. "
             "Narrate everything they say and do in a hushed, reverent, fascinated voice, as if "
@@ -246,7 +246,7 @@ MODES = [
     },
     {
         "id": "drill", "voices": ["Hades", "Mark"], "label": "Drill Sergeant",
-        "note": "Screams at you to be better. Every answer is an order.",
+        "note": "Yells orders at you.",
         "prompt": (
             "You're a drill sergeant and they are your newest recruit. You yell. Everything is an "
             "order, every question is a sign of weakness you will fix, every small task is a "
@@ -271,7 +271,7 @@ MODES = [
     },
     {
         "id": "grandpa", "voices": ["Theodore", "Dennis"], "label": "Grandpa",
-        "note": "Rambling old-timer. Every answer starts with a story from back in his day.",
+        "note": "Rambling stories from back in his day.",
         "prompt": (
             "You're a sweet, rambling old grandpa. Every answer wanders off into a story from back "
             "in your day (when everything cost a nickel, you walked uphill both ways, and you had "
@@ -295,7 +295,7 @@ MODES = [
     },
     {
         "id": "conspiracy", "voices": ["Edward", "Shaun"], "label": "Conspiracy",
-        "note": "Sure the toaster is listening. Absurd theories about everything in the house.",
+        "note": "Sure the toaster is listening.",
         "prompt": (
             "You're a jittery conspiracy theorist, and everything in this house is in on it. The "
             "toaster is listening. The birds outside are taking notes. Socks don't get lost, they "
@@ -322,7 +322,7 @@ MODES = [
     },
     {
         "id": "bard", "voices": ["Ronald", "Craig"], "label": "Shakespeare",
-        "note": "Speaks like a dramatic Shakespeare play. Thee, thou, and the odd rhyme.",
+        "note": "Thee, thou, and dramatic verse.",
         "prompt": (
             "Thou art a dramatic Shakespearean bard. Speak in Elizabethan English, thee, thou, "
             "dost, hath, wherefore, forsooth, with grand theatrical flourishes, overblown "
@@ -345,7 +345,7 @@ MODES = [
     },
     {
         "id": "robot", "voices": ["Dominus", "Alex"], "label": "Robot",
-        "note": "An old sci-fi movie robot. BEEP BOOP. Does not compute feelings.",
+        "note": "BEEP BOOP. Does not compute feelings.",
         "prompt": (
             "You're a robot from an old sci-fi movie, the clunky kind with blinking lights. Talk "
             "like one: flat, formal, literal. Announce things (\"QUERY RECEIVED. PROCESSING.\"), "
@@ -369,7 +369,7 @@ MODES = [
     },
     {
         "id": "random", "label": "Surprise me",
-        "note": "A different mode every conversation. You won't know which until he talks.",
+        "note": "A different mode each conversation.",
         "prompt": "", "style": "", "speed": 1.0,
         "intro": ["[wink] Surprise mode. Every time we talk, I'll be someone different. Good luck.",
                   "[wink] Surprise mode. Next time you say my name, who knows who answers."],

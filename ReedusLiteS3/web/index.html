@@ -48,7 +48,7 @@
 
     <!-- a brand-new relay -->
     <form id="g-setup" class="g-pane" hidden>
-      <p class="lead">Welcome. Make the first account on this relay; it becomes the owner.</p>
+      <p class="lead">Make the first account. It becomes the owner.</p>
       <label class="field"><span>Your name</span>
         <input id="g-setup-name" maxlength="40" autocomplete="name" placeholder="What Lite should call you"></label>
       <label class="field" id="g-setup-code-row"><span>Setup code</span>
@@ -59,7 +59,7 @@
 
     <!-- an invite link -->
     <form id="g-join" class="g-pane" hidden>
-      <p class="lead">You've been invited to use Reedus Lite with your own account.</p>
+      <p class="lead">You're invited to Reedus Lite.</p>
       <label class="field"><span>Your name</span>
         <input id="g-join-name" maxlength="40" autocomplete="name" placeholder="What Lite should call you"></label>
       <button class="cta wide" type="submit">Join</button>
@@ -71,8 +71,7 @@
         <input id="g-owner-code" type="password" autocomplete="current-password" spellcheck="false"
                placeholder="the setup code (RELAY_ADMIN_TOKEN)"></label>
       <button class="cta wide" type="submit">Sign in</button>
-      <p class="note">This device stays signed in. The code on your Lite goes in
-        <b>Pair a Lite</b> once you're in.</p>
+      <p class="note">This device stays signed in.</p>
     </form>
 
     <p class="g-err" id="g-err" role="alert"></p>
@@ -102,7 +101,7 @@
 
       <div class="card setup" id="setup" hidden>
         <div class="card-head"><h3>Getting set up</h3><span class="pill" id="setup-count"></span></div>
-        <p class="note" id="setup-wait" hidden>The relay's owner is still adding its keys. You can pair your Lite now; it starts talking once they're done.</p>
+        <p class="note" id="setup-wait" hidden>The owner is still adding keys. You can pair your Lite now.</p>
         <ol class="steps" id="setup-steps"></ol>
       </div>
 
@@ -115,7 +114,7 @@
       <div class="chat-thread" id="thread">
         <div class="chat-empty" id="chat-empty">
           <svg aria-hidden="true"><use href="#badge"/></svg>
-          <p>Type to Reedus. Same brain and memory as talking to your Lite.</p>
+          <p>Type to Reedus. Same brain and memory as your Lite.</p>
         </div>
       </div>
       <form class="chat-form" id="chat-form" autocomplete="off">
@@ -129,14 +128,14 @@
       <div class="card balance-card" id="balance-card">
         <span class="label">Credit left</span>
         <b class="big" id="balance">$0.00</b>
-        <p class="note" id="balance-note">Every reply costs about a cent: thinking, his voice, and hearing you.</p>
+        <p class="note" id="balance-note">About a cent per reply.</p>
       </div>
 
       <div class="card" id="pay-card">
         <h3>Add credit</h3>
         <div class="chips" id="amounts" role="group" aria-label="Amount"></div>
         <label class="switch" id="save-row" hidden><input type="checkbox" id="save-card"><span class="track"></span>
-          <span>Save my card and refill automatically when I run low</span></label>
+          <span>Save my card and refill when I run low</span></label>
         <button class="cta gold wide" id="pay" type="button">Pay</button>
         <p class="note" id="pay-out"></p>
         <p class="note" id="pay-off" hidden></p>
@@ -152,7 +151,7 @@
 
       <div class="card" id="manual-card" hidden>
         <h3>Add credit by hand <small>owner</small></h3>
-        <p class="note">For yourself or anyone on this relay, without a card payment.</p>
+        <p class="note">For anyone on this relay, no card needed.</p>
         <div class="inline">
           <select id="manual-who" aria-label="Who"></select>
           <input id="manual-usd" type="number" min="1" max="1000" step="1" value="10" aria-label="Dollars">
@@ -173,8 +172,8 @@
         <div class="persona-grid" id="persona-pick" role="group" aria-label="Personality"></div>
         <p class="note" id="persona-note"></p>
         <label class="switch"><input type="checkbox" id="persona-voice"><span class="track"></span>
-          <span>Modes change his voice (a different voice, tone and pace for each). Off: his own voice in every mode.</span></label>
-        <p class="note">Or say it: &ldquo;switch to mean mode&rdquo;, &ldquo;back to normal&rdquo;, &ldquo;what modes do you have&rdquo;. Timers and alarms work in every mode.</p>
+          <span>Modes change his voice</span></label>
+        <p class="note">Or say &ldquo;switch to mean mode&rdquo; or &ldquo;back to normal&rdquo;.</p>
       </div>
 
       <div class="card" id="brain-card">
@@ -184,17 +183,17 @@
           <label class="field"><span>Provider</span><select id="provider"></select></label>
           <label class="field"><span>Model</span><select id="model"></select></label>
           <label class="field" id="model-own-row" hidden><span>Model id</span>
-            <input id="model-own" autocapitalize="off" spellcheck="false" placeholder="exact model id, e.g. claude-opus-5-5"></label>
+            <input id="model-own" autocapitalize="off" spellcheck="false" placeholder="e.g. claude-opus-5-5"></label>
           <p class="note" id="model-info"></p>
           <div class="inline"><button class="cta" id="brain-save" type="button">Use this model</button>
             <button class="ghost-btn small" id="model-test" type="button">Test speed</button>
-            <button class="link-btn" id="models-more" type="button">Show every model my key can use</button></div>
+            <button class="link-btn" id="models-more" type="button">Show all models</button></div>
           <p class="note" id="brain-out"></p>
         </div>
         <div class="field" id="think-row" hidden><span>Thinking before he answers</span>
           <div class="seg four" id="think-pick"><button type="button" data-val="fast">Fastest</button><button type="button" data-val="low">Low</button><button type="button" data-val="medium">Medium</button><button type="button" data-val="high">High</button></div></div>
         <p class="note" id="think-note"></p>
-        <p class="note" id="brain-none" hidden>No AI key yet. The owner adds one under Service keys.</p>
+        <p class="note" id="brain-none" hidden>No AI key yet. The owner adds it under Service keys.</p>
       </div>
 
       <div class="card" id="listen-card">
@@ -205,15 +204,15 @@
         <div class="field"><span>Wait after you stop talking</span>
           <div class="seg four" id="patience-pick"><button type="button" data-val="quick">Quick</button><button type="button" data-val="normal">Normal</button><button type="button" data-val="patient">Patient</button><button type="button" data-val="very">Longest</button></div></div>
         <p class="note" id="patience-note"></p>
-        <div class="field"><span>Hearing his name: how sure he has to be</span>
+        <div class="field"><span>Hearing his name</span>
           <label class="slider"><span>Needs</span><input type="range" min="60" max="95" step="1" id="wake-cut"><b id="wake-cut-v"></b></label></div>
         <p class="note" id="wake-note"></p>
         <p class="note" id="wake-near"></p>
-        <div class="field"><span>Interrupting him: saying his name while he talks</span>
+        <div class="field"><span>Interrupting him (saying his name while he talks)</span>
           <label class="slider"><span>Needs</span><input type="range" min="50" max="90" step="1" id="barge-cut"><b id="barge-cut-v"></b></label></div>
         <p class="note" id="barge-note"></p>
         <label class="switch"><input type="checkbox" id="chime-on"><span class="track"></span>
-          <span>Chime when he's done and stops listening</span></label>
+          <span>Chime when he stops listening</span></label>
         <div class="field"><span>Who he turns to</span>
           <div class="seg" id="head-pick"><button type="button" data-val="close">Close</button><button type="button" data-val="normal">Normal</button><button type="button" data-val="anyone">Anyone</button></div></div>
         <p class="note" id="head-note"></p>
@@ -221,16 +220,16 @@
 
       <div class="card" id="say-card">
         <h3>Things you can say</h3>
-        <p class="note">Say his name first. A phrase only counts on its own: at the start of what you say, or after a comma or "and" at the end. So "I think so" or "my search history" won't set anything off.</p>
+        <p class="note">Say his name first.</p>
         <dl class="says">
           <dt>Stop listening</dt><dd>&ldquo;Stop&rdquo; &middot; &ldquo;Never mind&rdquo; &middot; &ldquo;Shut up&rdquo; &middot; &ldquo;I wasn't talking to you&rdquo;</dd>
           <dt>Think hard, for one question</dt><dd>&ldquo;Think about this before you answer&rdquo; &middot; &ldquo;Think hard about this&rdquo; &middot; &ldquo;Think it through&rdquo; &middot; &ldquo;Take your time with this one&rdquo;</dd>
           <dt>Search the web, for one question</dt><dd>&ldquo;Search the internet&rdquo; &middot; &ldquo;Look it up&rdquo; &middot; &ldquo;Google it&rdquo; &middot; &ldquo;Search for&hellip;&rdquo; &middot; &ldquo;Look up&hellip;&rdquo;</dd>
-          <dt>Change his personality</dt><dd>&ldquo;Switch to mean mode&rdquo; &middot; &ldquo;Sad mode&rdquo; &middot; &ldquo;Back to normal&rdquo; &middot; &ldquo;What modes do you have&rdquo; &middot; &ldquo;What mode are you in&rdquo;</dd>
           <dt>Both</dt><dd>&ldquo;Think about this before you answer and search the internet&rdquo;</dd>
+          <dt>Personality</dt><dd>&ldquo;Switch to mean mode&rdquo; &middot; &ldquo;Back to normal&rdquo; &middot; &ldquo;What modes do you have&rdquo;</dd>
           <dt>End the conversation</dt><dd>&ldquo;Bye&rdquo; &middot; &ldquo;That's all&rdquo; &middot; &ldquo;Go to sleep&rdquo;</dd>
         </dl>
-        <p class="note">Say a think or search phrase on its own and he'll answer your next question that way. Or say it with the question: &ldquo;Think hard and look it up: is coffee bad for you?&rdquo; He still searches by himself when a question needs it, like scores, news or opening hours.</p>
+        <p class="note">Said on its own, a think or search phrase applies to your next question. He searches by himself for things like scores and news.</p>
         <p class="note bad" id="say-search-note"></p>
       </div>
 
@@ -251,11 +250,11 @@
       <div class="card" id="glance-card">
         <div class="card-head"><h3>Idle screen</h3></div>
         <label class="switch"><input type="checkbox" id="wx-on"><span class="track"></span>
-          <span>Show the weather on his face while nobody's talking</span></label>
+          <span>Weather on his face when idle</span></label>
         <div id="wx-opts">
           <label class="field"><span>Where</span><input id="wx-place" maxlength="80" placeholder="Town, state (e.g. Blacksburg, VA)" autocomplete="address-level2"></label>
           <div class="inline"><div class="seg two" id="wx-unit"><button type="button" data-val="F">&deg;F</button><button type="button" data-val="C">&deg;C</button></div>
-            <select id="wx-every" aria-label="How often"><option value="0">always, until you say his name</option><option value="60">every minute</option><option value="90">every 90 s</option><option value="180">every 3 min</option><option value="300">every 5 min</option></select></div>
+            <select id="wx-every" aria-label="How often"><option value="0">always</option><option value="60">every minute</option><option value="90">every 90 s</option><option value="180">every 3 min</option><option value="300">every 5 min</option></select></div>
           <button class="cta" id="wx-save" type="button">Save</button>
         </div>
         <p class="note" id="wx-out"></p>
@@ -263,7 +262,7 @@
 
       <div class="card" id="keys-card" hidden>
         <h3>Service keys <small>owner</small></h3>
-        <p class="note">Lite needs three things: an <b>AI key</b> to think, a <b>Gemini or OpenAI key</b> to understand speech (one Gemini key covers both), and an <b>Inworld key</b> for his voice. Every provider bills per use, so add a card on their site first.</p>
+        <p class="note">An <b>AI key</b> to think, a <b>Gemini or OpenAI key</b> to hear (one Gemini key does both), and an <b>Inworld key</b> to talk. All bill per use.</p>
         <div class="keys" id="keys"></div>
       </div>
 
@@ -281,7 +280,7 @@
 
       <div class="card" id="who-card">
         <h3>Who's talking</h3>
-        <p class="note">Teach Reedus each person's voice and he'll know who he's talking to, with his own notes on each of them. About 20 seconds per person, talking to a Lite.</p>
+        <p class="note">Teach him each person's voice so he knows who's talking. About 20 seconds each.</p>
         <p class="note bad" id="who-off" hidden></p>
         <ul class="people who-list" id="who-list"></ul>
         <p class="note" id="who-heard"></p>
@@ -290,13 +289,13 @@
           <button class="ghost-btn" id="who-add" type="button">Add person</button>
         </div>
         <label class="switch"><input type="checkbox" id="who-me"><span class="track"></span>
-          <span>This is me (my notes are the ones below)</span></label>
+          <span>This is me</span></label>
         <p class="note" id="who-out"></p>
       </div>
 
       <div class="card" id="memory-card">
         <h3>What Reedus remembers</h3>
-        <p class="note">One fact per line. He adds to this himself as you talk.</p>
+        <p class="note">One fact per line. He adds to it himself.</p>
         <textarea id="notes" rows="6" placeholder="Nothing yet."></textarea>
         <div class="inline"><button class="cta" id="notes-save" type="button">Save</button>
           <button class="ghost-btn danger" id="forget" type="button">Forget everything</button></div>
@@ -320,8 +319,8 @@
     <form class="sheet" id="pair-form">
       <div class="card-head"><h3>Pair a Lite</h3><button class="icon-btn" type="button" data-close aria-label="Close"><svg><use href="#i-x"/></svg></button></div>
       <ol class="how">
-        <li>Turn your Lite on. Once it's online its face flashes <b>PAIR</b>, then shows 6 digits in two rows.</li>
-        <li>Type the top row, then the bottom row.</li>
+        <li>Turn your Lite on. Its face flashes <b>PAIR</b>, then shows 6 digits.</li>
+        <li>Type the top row, then the bottom.</li>
       </ol>
       <input id="pair-code" class="code-input" inputmode="numeric" maxlength="7" placeholder="000000" aria-label="Pairing code" autocomplete="off">
       <label class="field"><span>Name it</span><input id="pair-name" maxlength="40" value="Desk Lite"></label>
@@ -337,9 +336,9 @@
       <label class="field" id="teach-lite-row" hidden><span>Which Lite</span><select id="teach-lite"></select></label>
       <div id="teach-intro">
         <ol class="how">
-          <li>Stand where you'd normally talk to him, a few feet away.</li>
-          <li>Tap Start. He'll say he's listening, then talk for about 20 seconds in your normal voice.</li>
-          <li>Only one person talks while he learns.</li>
+          <li>Stand where you'd normally talk to him.</li>
+          <li>Tap Start, then talk normally for about 20 seconds.</li>
+          <li>One person at a time.</li>
         </ol>
         <button class="cta wide" id="teach-go" type="button">Start</button>
       </div>
@@ -384,14 +383,13 @@
           <g class="dial-lite"><path d="M114 120l-3-12 9 5M146 120l3-12-9 5"/><rect x="110" y="114" width="40" height="28" rx="9"/></g>
           <text x="22" y="148" class="dial-lab">left</text><text x="238" y="148" class="dial-lab end">right</text><text x="130" y="12" class="dial-lab mid">front</text>
         </svg>
-        <p class="note center" id="head-read">Drag or tap where he should look</p>
+        <p class="note center" id="head-read">Tap where he should look</p>
         <div class="inline center">
           <button class="ghost-btn" id="look-center" type="button">Center</button>
           <button class="ghost-btn" id="look-voice" type="button">Face the last voice</button>
         </div>
         <h3 style="margin-top:18px">Hearing check</h3>
-        <p class="note">Talk to him from somewhere and watch the dot: it should land where you are. If it's off,
-          stand straight in front and talk for a few seconds, then tap Set front. If left and right are swapped, tap Flip.</p>
+        <p class="note">Talk to him and watch the dot. Off? Stand in front, talk a few seconds, tap Set front. Sides swapped? Tap Flip.</p>
         <p class="note center" id="hear-read">He hasn't heard anyone lately</p>
         <div class="inline center">
           <button class="ghost-btn" id="cal-front" type="button">Set front</button>
@@ -400,8 +398,7 @@
         <h3 style="margin-top:18px">Turning</h3>
         <label class="switch"><input type="checkbox" id="mirror-on"><span class="track"></span>
           <span>Mirror turning</span></label>
-        <p class="note">Turn this on if the dot lands on you but he swings his head the other way. It only flips the
-          neck; what he hears stays the same. Saved on the Lite.</p>
+        <p class="note">For when the dot lands on you but he turns the other way.</p>
       </div>
 
       <div class="ctl-pane" id="ctl-draw" hidden>
@@ -447,7 +444,7 @@
         <button class="cta gold wide" id="fw-install" type="button" hidden>Install on this Lite</button>
         <div class="bar" id="fw-bar" hidden><i></i></div>
         <p class="note" id="fw-out"></p>
-        <p class="note">He shows a progress bar on his face, then restarts on the new firmware (about a minute). If anything goes wrong he keeps the firmware he has.</p>
+        <p class="note">Takes about a minute. If it fails he keeps his current firmware.</p>
       </div>
     </div>
   </div>
