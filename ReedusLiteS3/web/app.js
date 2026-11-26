@@ -284,18 +284,17 @@ function renderPersona() {
       const on = tog.checked;
       const r = await Relay.call("personality.set", { voice: on });
       if (r.error) { toast(r.error); tog.checked = !on; return; }
-      if (S.status) S.status.personality_voice = on;
+      if (S.status) { S.status.personality_voice = on; S.status.personality_preset = r.preset || null; }
+      lockVoice();
       toast(on ? "Modes change his voice" : "His own voice in every mode");
     });
   }
   tog.checked = st.personality_voice !== false;
+  lockVoice();
 }
 
 function paintPersona(id) {
-  const list = (S.status && S.status.personalities) || [];
   $$("#persona-pick button").forEach((b) => b.classList.toggle("on", b.dataset.val === id));
-  const p = list.find((x) => x.id === id);
-  $("#persona-note").textContent = p ? p.note : "";
 }
 
 async function pickPersona(id) {
@@ -303,7 +302,8 @@ async function pickPersona(id) {
   paintPersona(id);
   const r = await Relay.call("personality.set", { personality: id });
   if (r.error) { toast(r.error); paintPersona(was); return; }
-  if (S.status) S.status.personality = id;
+  if (S.status) { S.status.personality = id; S.status.personality_preset = r.preset || null; }
+  lockVoice();
   toast(id === "normal" ? "Back to normal" : `${r.label} mode`);
 }
 
@@ -1426,6 +1426,40 @@ async function loadVoice() {
   $("#voice-now").textContent = `He's speaking as ${now}${cur.speed ? ` at ${cur.speed}x` : ""}` +
     `${engine ? ` (${engine.toLowerCase()} engine)` : ""}.` +
     (r.source === "builtin" ? " (Built-in list: Inworld's didn't load.)" : "");
+  V.own = { id: now, speed: cur.speed || 1.0 };
+  V.loaded = true;
+  lockVoice();
+}
+
+/* a personality with its own voice takes over the Voice card: greyed out, showing the
+   mode's voice. His own settings come back when the mode or the toggle lets go */
+function lockVoice() {
+  if (!V.loaded) return;
+  const pre = S.status && S.status.personality_preset;
+  const ctl = $("#voice-ctl");
+  ctl.classList.toggle("locked", !!pre);
+  ctl.inert = !!pre;
+  $("#voice-now").hidden = !!pre;
+  $("#voice-lock").hidden = !pre;
+  const pick = $("#voice-pick");
+  if (!pre) {
+    pick.value = V.own.id;
+    $("#voice-speed").value = V.own.speed;
+    paintVoice();
+    return;
+  }
+  if (pre.random) {
+    $("#voice-lock").textContent = "Surprise me picks a voice each conversation. Turn off \u201cModes change his voice\u201d to use yours.";
+    paintVoice();
+    return;
+  }
+  const id = pre.id || V.own.id;
+  if (![...pick.options].some((o) => o.value === id)) { const o = el("option", "", id); o.value = id; pick.append(o); }
+  pick.value = id;
+  $("#voice-speed").value = pre.speed || 1.0;
+  paintVoice();
+  $("#voice-lock").textContent = `${pre.label} mode is using ${pre.own ? "his own voice" : id} at ${(+pre.speed || 1).toFixed(2)}x. ` +
+    "Turn off \u201cModes change his voice\u201d to use yours.";
 }
 
 function paintVoice() {

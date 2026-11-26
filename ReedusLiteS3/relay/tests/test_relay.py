@@ -1051,8 +1051,18 @@ async def main():
     own = (accounts.account(aid)["settings"].get("voice") or {})
     check(r.get("ok") and st.get("personality_voice") is False and hub.sessions[did].voice_prefs() == own
           and st.get("personality") == "mean", "the voice toggle off: his own voice, still in mean mode")
-    await ask({"action": "personality.set", "voice": True})
+    check(st.get("personality_preset") is None and r.get("preset") is None,
+          "toggle off: no preset, the Voice card is his own again")
+    r = await ask({"action": "personality.set", "voice": True})
     check(hub.sessions[did].voice_prefs().get("id") == "Wendy", "...and back on")
+    st = await ask({"action": "status"})
+    pre = st.get("personality_preset") or {}
+    check(pre.get("id") == "Wendy" and pre.get("mode") == "mean" and pre.get("speed", 1) > 1
+          and (r.get("preset") or {}).get("id") == "Wendy", "the app is told mean mode's voice, to show it locked")
+    check(all(set(p) == {"id", "label"} for p in st["personalities"]), "no blurbs about each mode")
+    check(pers.preset({"settings": {"personality": "random"}}, ["Wendy"]) == {"mode": "random", "label": "Surprise me", "random": True}
+          and pers.preset({"settings": {"personality": "normal"}}, ["Wendy"]) is None,
+          "surprise me: no fixed voice to show; normal: nothing locked")
     more = {"switch to nature documentary mode": "documentary", "drill sergeant mode": "drill",
             "go into grandpa mode": "grandpa", "tinfoil hat mode": "conspiracy",
             "shakespeare mode": "bard", "switch to robot mode": "robot"}

@@ -208,6 +208,7 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
 .chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .chip { padding: 12px 0; border-radius: 14px; border: 1px solid var(--line-hi); font-weight: 600; font-size: 16px; transition: all .15s; }
 .chip.on { background: color-mix(in srgb, var(--gold) 18%, transparent); border-color: var(--gold); color: var(--gold); }
+#voice-ctl.locked { opacity: .45; pointer-events: none; filter: grayscale(1); }
 .persona-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 4px; }
 .persona-grid .chip { font-size: 15px; padding: 11px 4px; }
 @media (max-width: 380px) { .persona-grid { grid-template-columns: repeat(2, 1fr); } }

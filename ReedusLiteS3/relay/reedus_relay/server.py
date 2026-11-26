@@ -479,7 +479,7 @@ class Hub:
                 on = bool(req.get("voice"))
                 await asyncio.to_thread(accounts.set_account_settings, aid, {"personality_voice": on})
                 self.refresh_account(aid)
-                return {"ok": True, "voice": on}
+                return {"ok": True, "voice": on, "preset": await asyncio.to_thread(self._preset, aid)}
             pid = str(req.get("personality") or "")
             if pid not in personality.IDS:
                 return {"error": f"unknown personality {pid!r}"}
@@ -492,7 +492,8 @@ class Hub:
                 if hasattr(sess.brain, "set_mode"):
                     sess.brain.set_mode(pid)
             print(f"[relay] {aid}: personality -> {pid} (from the app)", flush=True)
-            return {"ok": True, "personality": pid, "label": personality.get(pid)["label"]}
+            return {"ok": True, "personality": pid, "label": personality.get(pid)["label"],
+                    "preset": await asyncio.to_thread(self._preset, aid)}
         if a == "memory.get":
             text, rev = await asyncio.to_thread(memory.bulletin, aid)
             turns = await asyncio.to_thread(memory.recent, aid, int(req.get("limit") or 30))
@@ -900,6 +901,18 @@ class Hub:
         self._fw_check_cache = (time.time(), out)
         return out
 
+    @staticmethod
+    def _voice_ids() -> list:
+        """The Inworld voice ids this relay can use (cached an hour by speech)."""
+        try:
+            return [v["id"] for v in speech.list_voices().get("voices") or []]
+        except Exception:                                        # noqa: BLE001
+            return []
+
+    def _preset(self, aid: str):
+        from reedus_relay import personality
+        return personality.preset(accounts.account(aid), self._voice_ids())
+
     def _status(self, acc: dict) -> dict:
         from reedus_companion.cloud import providers
         from reedus_relay import models_info
@@ -932,6 +945,7 @@ class Hub:
                 "think": think_level(acc), "think_choices": THINK_CHOICES,
                 "personality": personality.setting(acc), "personalities": personality.public(),
                 "personality_voice": personality.voice_on(acc),
+                "personality_preset": personality.preset(acc, self._voice_ids()),
                 "listen": listening.public(acc),
                 "providers": [{**p, "models": models_info.annotate(p["id"], p.get("models") or [])}
                               for p in providers.public() if usable(p["id"])],

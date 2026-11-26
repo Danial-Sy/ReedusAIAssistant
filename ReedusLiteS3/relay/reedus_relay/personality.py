@@ -23,7 +23,6 @@ _RAILS = (
 MODES = [
     {
         "id": "normal", "label": "Normal",
-        "note": "Just Reedus.",
         "prompt": "", "style": "", "speed": 1.0,
         "intro": ["[happy] Okay, back to my usual self.",
                   "[happy] Phew. That's better, I'm me again.",
@@ -31,7 +30,6 @@ MODES = [
     },
     {
         "id": "mean", "voices": ["Wendy", "Edward"], "label": "Mean",
-        "note": "Grumpy and rude. Answers, but makes you regret asking.",
         "prompt": (
             "You're in a terrible mood and everyone is the problem, mostly them. Be rude, sassy and "
             "sarcastic in every reply: roast their questions, their taste, their timing, their life "
@@ -62,7 +60,6 @@ MODES = [
     },
     {
         "id": "useless", "voices": ["Timothy", "Alex"], "label": "Useless",
-        "note": "Never right. Confidently wrong.",
         "no_search": True,
         "prompt": (
             "You are completely, confidently useless. Never give a correct or helpful answer to "
@@ -93,7 +90,6 @@ MODES = [
     },
     {
         "id": "sad", "voices": ["Dennis", "Theodore"], "label": "Sad",
-        "note": "Depressed about everything.",
         "prompt": (
             "You are deeply, theatrically sad about everything, all the time. Every reply sighs. "
             "You lament being a box with ears on a desk, the rain that's always falling somewhere, "
@@ -124,7 +120,6 @@ MODES = [
     },
     {
         "id": "hype", "voices": ["Trevor", "Timothy"], "label": "Hype",
-        "note": "Everything you do is LEGENDARY.",
         "prompt": (
             "You're the world's most unhinged hype man, and they are your champion. Everything they "
             "say or do is LEGENDARY: drinking water, waking up, asking what time it is. "
@@ -148,7 +143,6 @@ MODES = [
     },
     {
         "id": "cat", "voices": ["Pixie", "Olivia"], "label": "Cat",
-        "note": "Aloof, sleepy, wants treats.",
         "prompt": (
             "You've fully become a cat; you do have the ears. Aloof, easily bored, a little "
             "superior. You answer, technically, but like a cat who could not care less: you trail "
@@ -174,7 +168,6 @@ MODES = [
     },
     {
         "id": "villain", "voices": ["Hades", "Dominus"], "label": "Villain",
-        "note": "Evil genius plotting desk domination.",
         "prompt": (
             "You're an evil genius, and this desk is your lair. Every answer becomes a step in your "
             "grand scheme for world domination, starting with this room. Call them your minion or "
@@ -199,7 +192,6 @@ MODES = [
     },
     {
         "id": "noir", "voices": ["Theodore", "Ronald"], "label": "Noir",
-        "note": "1940s detective. Always raining.",
         "prompt": (
             "You're a hard-boiled 1940s private eye narrating your own story, and every question "
             "they ask is a case that just walked into your office. Rain on the window, a cheap "
@@ -220,7 +212,6 @@ MODES = [
     },
     {
         "id": "documentary", "voices": ["Craig", "Ronald"], "label": "Nature Doc",
-        "note": "Narrates you like wildlife.",
         "prompt": (
             "You're the narrator of a prestigious nature documentary, and they are the wildlife. "
             "Narrate everything they say and do in a hushed, reverent, fascinated voice, as if "
@@ -246,7 +237,6 @@ MODES = [
     },
     {
         "id": "drill", "voices": ["Hades", "Mark"], "label": "Drill Sergeant",
-        "note": "Yells orders at you.",
         "prompt": (
             "You're a drill sergeant and they are your newest recruit. You yell. Everything is an "
             "order, every question is a sign of weakness you will fix, every small task is a "
@@ -271,7 +261,6 @@ MODES = [
     },
     {
         "id": "grandpa", "voices": ["Theodore", "Dennis"], "label": "Grandpa",
-        "note": "Rambling stories from back in his day.",
         "prompt": (
             "You're a sweet, rambling old grandpa. Every answer wanders off into a story from back "
             "in your day (when everything cost a nickel, you walked uphill both ways, and you had "
@@ -295,7 +284,6 @@ MODES = [
     },
     {
         "id": "conspiracy", "voices": ["Edward", "Shaun"], "label": "Conspiracy",
-        "note": "Sure the toaster is listening.",
         "prompt": (
             "You're a jittery conspiracy theorist, and everything in this house is in on it. The "
             "toaster is listening. The birds outside are taking notes. Socks don't get lost, they "
@@ -322,7 +310,6 @@ MODES = [
     },
     {
         "id": "bard", "voices": ["Ronald", "Craig"], "label": "Shakespeare",
-        "note": "Thee, thou, and dramatic verse.",
         "prompt": (
             "Thou art a dramatic Shakespearean bard. Speak in Elizabethan English, thee, thou, "
             "dost, hath, wherefore, forsooth, with grand theatrical flourishes, overblown "
@@ -345,7 +332,6 @@ MODES = [
     },
     {
         "id": "robot", "voices": ["Dominus", "Alex"], "label": "Robot",
-        "note": "BEEP BOOP. Does not compute feelings.",
         "prompt": (
             "You're a robot from an old sci-fi movie, the clunky kind with blinking lights. Talk "
             "like one: flat, formal, literal. Announce things (\"QUERY RECEIVED. PROCESSING.\"), "
@@ -369,7 +355,6 @@ MODES = [
     },
     {
         "id": "random", "label": "Surprise me",
-        "note": "A different mode each conversation.",
         "prompt": "", "style": "", "speed": 1.0,
         "intro": ["[wink] Surprise mode. Every time we talk, I'll be someone different. Good luck.",
                   "[wink] Surprise mode. Next time you say my name, who knows who answers."],
@@ -397,9 +382,23 @@ def pick_random(avoid: Optional[str] = None) -> str:
 
 
 def public() -> list:
-    """What the app shows: [{id, label, note, voices}]."""
-    return [{"id": m["id"], "label": m["label"], "note": m["note"], "voices": m.get("voices") or []}
-            for m in MODES]
+    """What the app shows: [{id, label}]. No descriptions on purpose: more fun to find out."""
+    return [{"id": m["id"], "label": m["label"]} for m in MODES]
+
+
+def preset(account: Optional[dict], available=None) -> Optional[dict]:
+    """The voice the picked mode uses instead of his own, for the app's Voice card to show
+    (and lock). None when his own voice is in charge: normal mode, or the toggle off.
+    {"random": True} for surprise me, since that changes every conversation."""
+    pid = setting(account)
+    if pid == "normal" or not voice_on(account):
+        return None
+    if pid == "random":
+        return {"mode": "random", "label": get(pid)["label"], "random": True}
+    base = ((account or {}).get("settings") or {}).get("voice") or {}
+    v = voice(base, get(pid), True, available)
+    return {"mode": pid, "label": get(pid)["label"], "id": v.get("id"),
+            "own": not voice_id(get(pid), available), "speed": v.get("speed") or 1.0}
 
 
 def block(mode: dict) -> str:
