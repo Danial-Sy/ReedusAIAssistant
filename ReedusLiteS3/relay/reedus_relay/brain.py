@@ -497,6 +497,15 @@ class Brain:
             self.timing = {"fast": 1}
             return fast
         mode = self.mode()
+        if mode.get("echo"):
+            echo = personality.parrot(said)     # parrot mode: no LLM, their exact words back
+            if echo:
+                if on_face is not None:
+                    on_face(personality.face(mode) or "excited")
+                on_sentence(speakable(echo))
+                self._remember(said, echo, speaker=speaker)
+                self.timing = {"fast": 1, "mode": mode["id"]}
+                return echo
         timing_mode = mode["id"]
         no_search = bool(mode.get("no_search"))       # useless mode: wrong on purpose, never looked up
         if no_search:

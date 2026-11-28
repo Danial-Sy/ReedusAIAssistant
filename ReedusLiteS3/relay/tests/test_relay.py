@@ -1117,6 +1117,29 @@ async def main():
     SCRIPT[:] = ["okay thanks, goodbye"]
     await d.say(wake=False)
     await d.wait_for(lambda: d.states()[-1] == "idle", 6)
+    newer = {"switch to opposite mode": "opposite", "parrot mode": "parrot", "valley girl mood": "valley",
+             "pirate mode": "pirate", "infomercial mode": "infomercial", "caveman mode": "caveman",
+             "go into brain rot mode": "brainrot", "cowboy mode": "cowboy", "switch to soap opera mode": "soap"}
+    check(all(pers.switch_request(t) == w for t, w in newer.items()), "opposite, parrot, valley girl and friends switch by voice")
+    check(len(pers.MODES) % 3 == 0 and len(pers.MODES) % 2 == 0, "the mode grid fills every row (3 across, 2 on small phones)")
+    await ask({"action": "personality.set", "personality": "parrot"})
+    n_calls, n_said = len(BACKEND.calls), len(FakeVoice.said)
+    SCRIPT[:] = ["Hey Reedus, I like turtles and cheese"]
+    await d.say()
+    ok = await d.wait_for(lambda: any("I like turtles and cheese" in x for x in FakeVoice.said[n_said:]), 6)
+    check(ok and len(BACKEND.calls) == n_calls, "parrot mode: his exact words back, no LLM")
+    await d.wait_for(lambda: d.states()[-1] == "listening", 3)
+    SCRIPT[:] = ["help me, my friend is choking"]
+    await d.say(wake=False)
+    ok = await d.wait_for(lambda: len(BACKEND.calls) > n_calls, 6)
+    check(ok and "choking" in BACKEND.calls[-1]["messages"][-1]["content"],
+          "...but someone in trouble gets a real answer, not an echo")
+    await d.wait_for(lambda: d.states()[-1] in ("listening", "idle"), 6)
+    SCRIPT[:] = ["okay thanks, goodbye"]
+    if d.states()[-1] == "listening":
+        await d.say(wake=False)
+    await d.wait_for(lambda: d.states()[-1] == "idle", 6)
+    await ask({"action": "personality.set", "personality": "normal"})
     b = Brain({"id": aid, "settings": {"personality": "useless"}}, {"id": "x", "name": "x"}, backend=BACKEND)
     check("never give a correct" in b.system("what's 2 plus 2", "c1").lower() and b.mode().get("no_search"),
           "useless mode: the prompt says never be right, and it never searches")

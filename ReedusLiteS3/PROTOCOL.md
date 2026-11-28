@@ -118,7 +118,7 @@ Then each request is `{"id", "action", …}` and each reply echoes `id`.
 | `who.ipa` | `name, say` | `say: "/ˈ.../"`: the account's LLM turns a respelling into IPA |
 | `ledger` | `limit?` | top-ups and spend, newest first |
 | `chat` | `text` | type to Reedus: same brain and memory, no voice. "switch to mean mode" here switches the personality (reply has `personality`) |
-| `personality.set` | `personality?` (`normal mean useless sad hype cat villain noir documentary drill grandpa conspiracy bard robot random`), `voice?` (bool) | his attitude on every Lite on the account; `voice` alone flips "Modes change his voice" (`status` carries `personality`, `personalities`, `personality_voice`). Also by voice: "switch to <name> mode", "back to normal", "what modes do you have", "what mode are you in" |
+| `personality.set` | `personality?` (`normal mean useless sad hype cat villain noir documentary drill grandpa conspiracy bard robot opposite parrot valley pirate infomercial caveman brainrot cowboy soap random`), `voice?` (bool) | his attitude on every Lite on the account; `voice` alone flips "Modes change his voice" (`status` carries `personality`, `personalities`, `personality_voice`). Also by voice: "switch to <name> mode", "back to normal", "what modes do you have", "what mode are you in" |
 | `device.expr` | `device, name, hold?` | an expression on the face |
 | `device.state` | `device, state` | preview listening / thinking / sleep / idle (not mid-conversation) |
 | `device.look` | `device, angle` | turn the head (-90 to 90, + = his left) |
